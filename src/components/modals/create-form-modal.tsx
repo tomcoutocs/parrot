@@ -232,7 +232,7 @@ export default function CreateFormModal({ isOpen, onClose, onFormCreated }: Crea
 
             {fields.length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                <p>No fields added yet. Click "Add Field" to get started.</p>
+                <p>No fields added yet. Click &quot;Add Field&quot; to get started.</p>
               </div>
             )}
 
