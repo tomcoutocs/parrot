@@ -2027,7 +2027,7 @@ export async function getInternalUserCompanies(userId: string): Promise<{ succes
         is_primary,
         assigned_at,
         assigned_by,
-        company:companies(id, name, description, industry, is_active, created_at, updated_at)
+        company:companies(id, name, description, industry, is_active, is_partner, created_at, updated_at)
       `)
       .eq('user_id', userId)
       .order('is_primary', { ascending: false })
@@ -2052,6 +2052,7 @@ export async function getInternalUserCompanies(userId: string): Promise<{ succes
         description: item.company[0].description,
         industry: item.company[0].industry,
         is_active: item.company[0].is_active,
+        is_partner: item.company[0].is_partner,
         created_at: item.company[0].created_at,
         updated_at: item.company[0].updated_at
       } : undefined
@@ -2162,7 +2163,8 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
               company_id,
               is_primary,
               assigned_at,
-              assigned_by
+              assigned_by,
+              company:companies(id, name, description, industry, is_active, is_partner, created_at, updated_at)
             `)
             .eq('user_id', user.id)
             .order('is_primary', { ascending: false })
@@ -2176,6 +2178,30 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
             (companyAssignments || []).map(async (assignment) => {
               if (!supabase) return assignment
               
+              // If company data is already included in the query result
+              if (assignment.company && Array.isArray(assignment.company) && assignment.company.length > 0) {
+                const companyData = assignment.company[0]
+                return {
+                  id: assignment.id,
+                  user_id: assignment.user_id,
+                  company_id: assignment.company_id,
+                  is_primary: assignment.is_primary,
+                  assigned_at: assignment.assigned_at,
+                  assigned_by: assignment.assigned_by,
+                  company: {
+                    id: companyData.id,
+                    name: companyData.name,
+                    description: companyData.description,
+                    industry: companyData.industry,
+                    is_active: companyData.is_active,
+                    is_partner: companyData.is_partner,
+                    created_at: companyData.created_at,
+                    updated_at: companyData.updated_at
+                  }
+                }
+              }
+              
+              // Fallback: fetch company details separately
               const { data: company } = await supabase
                 .from('companies')
                 .select('id, name, description, industry, is_active, is_partner, created_at, updated_at')
