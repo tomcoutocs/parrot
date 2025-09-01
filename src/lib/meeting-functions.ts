@@ -107,12 +107,12 @@ export const testDatabaseConnection = async (): Promise<{ connected: boolean; ta
       if (connectionError.code === '42P01') {
         return { connected: true, tablesExist: false, error: 'Tables do not exist' }
       }
-      return { connected: false, tablesExist: false, error: connectionError }
+      return { connected: false, tablesExist: false, error: connectionError.message || 'Database connection error' }
     }
 
     return { connected: true, tablesExist: true }
   } catch (error) {
-    return { connected: false, tablesExist: false, error }
+    return { connected: false, tablesExist: false, error: error instanceof Error ? error.message : 'Unknown error occurred' }
   }
 }
 
@@ -191,7 +191,7 @@ export const createMeetingRequest = async (
 
     if (testError) {
       console.error('Table access test failed:', testError)
-      return { data: null, error: testError }
+      return { data: null, error: testError.message || 'Table access test failed' }
     }
 
     console.log('Table access test successful, proceeding with insert...')
@@ -215,14 +215,9 @@ export const createMeetingRequest = async (
         message: error.message,
         details: error.details,
         hint: error.hint,
-        code: error.code,
-        schema: error.schema,
-        table: error.table,
-        column: error.column,
-        dataType: error.dataType,
-        constraint: error.constraint
+        code: error.code
       })
-      return { data: null, error }
+      return { data: null, error: error.message || 'Error creating meeting request' }
     }
 
     console.log('Meeting request created successfully:', data)
@@ -235,7 +230,7 @@ export const createMeetingRequest = async (
       console.error('Error name:', error.name)
       console.error('Error stack:', error.stack)
     }
-    return { data: null, error }
+    return { data: null, error: error instanceof Error ? error.message : 'Unknown error occurred' }
   }
 }
 
@@ -254,13 +249,13 @@ export const getPendingMeetingRequests = async (): Promise<{ data: MeetingReques
 
     if (error) {
       console.error('Error fetching pending meeting requests:', error)
-      return { data: null, error }
+      return { data: null, error: error.message || 'Error fetching pending meeting requests' }
     }
 
     return { data, error: null }
   } catch (error) {
     console.error('Error in getPendingMeetingRequests:', error)
-    return { data: null, error }
+    return { data: null, error: error instanceof Error ? error.message : 'Unknown error occurred' }
   }
 }
 
