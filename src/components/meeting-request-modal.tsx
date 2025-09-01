@@ -6,8 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createMeetingRequest, testDatabaseConnection, formatDateLocal } from '@/lib/meeting-functions'
 import { format } from 'date-fns'
-import { Calendar, Clock, User, FileText } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { Calendar, Clock, FileText } from 'lucide-react'
 
 interface MeetingRequestModalProps {
   isOpen: boolean
@@ -15,7 +14,7 @@ interface MeetingRequestModalProps {
   selectedDate: Date
   selectedTime: string
   requesterId: string
-  session: any // Add session prop
+  session: { user?: { id: string; role?: string } } | null // Add session prop with proper typing
 }
 
 export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
@@ -89,7 +88,7 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
         formattedDate: formattedDate
       })
 
-      const { data, error: submitError } = await createMeetingRequest(
+      const { error: submitError } = await createMeetingRequest(
         requesterId,
         formattedDate,
         selectedTime,
@@ -128,7 +127,7 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
       let errorMessage = 'An unexpected error occurred. Please try again.'
       
       if (err && typeof err === 'object' && 'message' in err) {
-        errorMessage += ` Details: ${(err as any).message}`
+        errorMessage += ` Details: ${(err as Error).message}`
       } else if (err && typeof err === 'string') {
         errorMessage += ` Details: ${err}`
       }
@@ -244,7 +243,7 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
 
             {/* Info Note */}
             <div className="text-xs text-gray-500 text-center">
-              Your meeting request will be reviewed by an admin. You'll be notified once it's approved or denied.
+              Your meeting request will be reviewed by an admin. You&apos;ll be notified once it&apos;s approved or denied.
             </div>
           </form>
         )}
