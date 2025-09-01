@@ -69,25 +69,6 @@ export default function DocumentsTab() {
   const isAdmin = session?.user?.role === 'admin'
   const userCompanyId = session?.user?.company_id
 
-  // Load companies for admin
-  useEffect(() => {
-    if (isAdmin) {
-      loadCompanies()
-    }
-  }, [isAdmin])
-
-  // Set initial company
-  useEffect(() => {
-    if (isAdmin && companies.length > 0 && !selectedCompany) {
-      setSelectedCompany(companies[0].id)
-    } else if (!isAdmin && userCompanyId) {
-      setSelectedCompany(userCompanyId)
-    } else if (!isAdmin && !userCompanyId) {
-      // Try to get company from user_companies table
-      loadUserCompany()
-    }
-  }, [isAdmin, companies, userCompanyId, selectedCompany, loadUserCompany])
-
   const loadUserCompany = useCallback(async () => {
     if (!session?.user?.id) return
     
@@ -106,6 +87,25 @@ export default function DocumentsTab() {
       console.error('Error loading user company:', error)
     }
   }, [session?.user?.id])
+
+  // Load companies for admin
+  useEffect(() => {
+    if (isAdmin) {
+      loadCompanies()
+    }
+  }, [isAdmin])
+
+  // Set initial company
+  useEffect(() => {
+    if (isAdmin && companies.length > 0 && !selectedCompany) {
+      setSelectedCompany(companies[0].id)
+    } else if (!isAdmin && userCompanyId) {
+      setSelectedCompany(userCompanyId)
+    } else if (!isAdmin && !userCompanyId) {
+      // Try to get company from user_companies table
+      loadUserCompany()
+    }
+  }, [isAdmin, companies, userCompanyId, selectedCompany, loadUserCompany])
 
   // Load documents and folders when company or folder changes
   useEffect(() => {
