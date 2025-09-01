@@ -81,14 +81,14 @@ export const formatDateLocal = (date: Date | string): string => {
 }
 
 // Test database connection and table existence
-export const testDatabaseConnection = async (): Promise<{ connected: boolean; tablesExist: boolean; error?: any }> => {
+export const testDatabaseConnection = async (): Promise<{ connected: boolean; tablesExist: boolean; error?: string }> => {
   try {
     if (!supabase) {
       return { connected: false, tablesExist: false, error: 'Supabase client not initialized' }
     }
 
     // Test basic connection
-    const { data: connectionTest, error: connectionError } = await supabase
+    const { error: connectionError } = await supabase
       .from('meeting_requests')
       .select('id')
       .limit(1)
@@ -159,7 +159,7 @@ export const createMeetingRequest = async (
   requestedTimeSlot: string,
   meetingTitle: string,
   meetingDescription?: string
-): Promise<{ data: MeetingRequest | null; error: any }> => {
+): Promise<{ data: MeetingRequest | null; error: string | null }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
@@ -175,7 +175,7 @@ export const createMeetingRequest = async (
 
     // Test if we can access the table at all
     console.log('Testing table access...')
-    const { data: testData, error: testError } = await supabase
+    const { error: testError } = await supabase
       .from('meeting_requests')
       .select('id')
       .limit(1)
@@ -231,7 +231,7 @@ export const createMeetingRequest = async (
 }
 
 // Get all pending meeting requests (for admins)
-export const getPendingMeetingRequests = async (): Promise<{ data: MeetingRequest[] | null; error: any }> => {
+export const getPendingMeetingRequests = async (): Promise<{ data: MeetingRequest[] | null; error: string | null }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')

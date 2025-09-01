@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, ProjectManager, ProjectMember, Company, Form, FormField, FormSubmission, Service, CompanyService, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies } from './supabase'
+import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies } from './supabase'
 import { getCurrentUser } from './auth'
 
 // Helper function to set application context for RLS
@@ -330,7 +330,7 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
   }
 }
 
-export async function updateProject(projectId: string, projectData: Partial<Project>, userId: string): Promise<{ success: boolean; data?: Project; error?: string }> {
+export async function updateProject(projectId: string, projectData: Partial<Project>): Promise<{ success: boolean; data?: Project; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
@@ -911,7 +911,7 @@ export async function createUser(userData: {
       console.log('Company IDs to assign:', userData.company_ids)
       
       // Check if the table exists first
-      const { data: tableCheck, error: tableCheckError } = await supabase
+      const { error: tableCheckError } = await supabase
         .from('internal_user_companies')
         .select('id')
         .limit(1)
@@ -1024,7 +1024,7 @@ export async function updateUser(userId: string, userData: {
       console.log('Company IDs to assign:', userData.company_ids)
       
       // Check if the table exists first
-      const { data: tableCheck, error: tableCheckError } = await supabase
+      const { error: tableCheckError } = await supabase
         .from('internal_user_companies')
         .select('id')
         .limit(1)

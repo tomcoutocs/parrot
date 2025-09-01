@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, User as UserIcon, Mail, Shield, Users, Search, Filter, Grid3X3, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,8 +14,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
-import { fetchUsers, createUser, updateUser, deleteUser, fetchCompanies, fetchUsersWithCompanies } from '@/lib/database-functions'
-import type { User, Company, UserWithCompanies } from '@/lib/supabase'
+import { createUser, updateUser, deleteUser, fetchCompanies, fetchUsersWithCompanies } from '@/lib/database-functions'
+import type { Company, UserWithCompanies } from '@/lib/supabase'
 import { Checkbox } from '@/components/ui/checkbox'
 
 // Available tabs for user permissions
@@ -92,9 +92,28 @@ export default function UsersTab() {
     }
   }, [isAdmin])
 
+  const filterUsers = useCallback(() => {
+    let filtered = users
+
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(user =>
+        user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+
+    // Filter by role
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(user => user.role === roleFilter)
+    }
+
+    setFilteredUsers(filtered)
+  }, [users, searchTerm, roleFilter])
+
   useEffect(() => {
     filterUsers()
-  }, [users, searchTerm, roleFilter])
+  }, [filterUsers])
 
   const loadUsers = async () => {
     setIsLoading(true)
@@ -113,24 +132,7 @@ export default function UsersTab() {
     }
   }
 
-  const filterUsers = () => {
-    let filtered = users
 
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(user =>
-        user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    // Filter by role
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter(user => user.role === roleFilter)
-    }
-
-    setFilteredUsers(filtered)
-  }
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
