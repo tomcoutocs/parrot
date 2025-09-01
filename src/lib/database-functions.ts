@@ -2174,9 +2174,20 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
           }
 
           // Fetch company details for each assignment
-          const companiesWithDetails = await Promise.all(
+          const companiesWithDetails: InternalUserCompany[] = await Promise.all(
             (companyAssignments || []).map(async (assignment) => {
-              if (!supabase) return assignment
+              if (!supabase) {
+                // Return a properly typed object even without company data
+                return {
+                  id: assignment.id,
+                  user_id: assignment.user_id,
+                  company_id: assignment.company_id,
+                  is_primary: assignment.is_primary,
+                  assigned_at: assignment.assigned_at,
+                  assigned_by: assignment.assigned_by,
+                  company: undefined
+                } as InternalUserCompany
+              }
               
               // If company data is already included in the query result
               if (assignment.company && Array.isArray(assignment.company) && assignment.company.length > 0) {
@@ -2198,7 +2209,7 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
                     created_at: companyData.created_at,
                     updated_at: companyData.updated_at
                   }
-                }
+                } as InternalUserCompany
               }
               
               // Fallback: fetch company details separately
@@ -2216,7 +2227,7 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
                 assigned_at: assignment.assigned_at,
                 assigned_by: assignment.assigned_by,
                 company: company || undefined
-              }
+              } as InternalUserCompany
             })
           )
 
@@ -2226,7 +2237,7 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
             ...user,
             companies: companiesWithDetails.filter(item => item.company !== undefined),
             primary_company: primaryCompany
-          }
+          } as UserWithCompanies
         } else {
           // For non-internal users, fetch their single company
           if (user.company_id && supabase) {
