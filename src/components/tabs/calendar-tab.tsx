@@ -77,7 +77,7 @@ export default function CalendarTab() {
 
   // Wrapper function to update admin settings and save to localStorage
   const updateAdminSettings = (updater: (prev: typeof adminSettings) => typeof adminSettings) => {
-    setAdminSettings(prev => {
+    setAdminSettings((prev: typeof adminSettings) => {
       const newSettings = updater(prev)
       // Save to localStorage
       localStorage.setItem('adminCalendarSettings', JSON.stringify(newSettings))
@@ -410,7 +410,7 @@ export default function CalendarTab() {
               <div className="mb-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Daily Availability</h3>
                 <div className="space-y-4">
-                  {Object.entries(adminSettings.dailySettings).map(([day, settings]) => (
+                  {Object.entries(adminSettings.dailySettings).map(([day, settings]: [string, typeof adminSettings.dailySettings[keyof typeof adminSettings.dailySettings]]) => (
                     <div key={day} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
