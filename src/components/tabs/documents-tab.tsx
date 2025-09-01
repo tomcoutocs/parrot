@@ -67,7 +67,7 @@ export default function DocumentsTab() {
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isAdmin = session?.user?.role === 'admin'
-  const userCompanyId = session?.user?.primary_company_id
+  const userCompanyId = session?.user?.company_id
 
   // Load companies for admin
   useEffect(() => {
