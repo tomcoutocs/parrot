@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
   getAllConfirmedMeetings, 
   deleteConfirmedMeeting, 
-  deleteAllConfirmedMeetings,
-  testDatabaseTables
+  deleteAllConfirmedMeetings
 } from '@/lib/meeting-functions'
 import { ConfirmedMeeting } from '@/lib/supabase'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, getDay, getDate, addMonths, subMonths, isSameDay, isWithinInterval, parseISO } from 'date-fns'
@@ -73,7 +71,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
       console.log('  - User data in first meeting:', data?.[0]?.user)
 
       setMeetings(data || [])
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred')
     } finally {
       setLoading(false)
@@ -110,7 +108,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
   const handleDeleteMeeting = async (meetingId: string) => {
     setDeleting(true)
     try {
-      const { success, error: deleteError } = await deleteConfirmedMeeting(meetingId)
+      const { success } = await deleteConfirmedMeeting(meetingId)
       
       if (success) {
         await loadMeetings()
@@ -119,7 +117,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
       } else {
         setError('Failed to delete meeting')
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred')
     } finally {
       setDeleting(false)
@@ -129,7 +127,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
   const handleDeleteAllMeetings = async () => {
     setDeleting(true)
     try {
-      const { success, error: deleteError } = await deleteAllConfirmedMeetings()
+      const { success } = await deleteAllConfirmedMeetings()
       
       if (success) {
         await loadMeetings()
@@ -138,7 +136,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
       } else {
         setError('Failed to delete all meetings')
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred')
     } finally {
       setDeleting(false)

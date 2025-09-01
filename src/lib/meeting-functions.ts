@@ -1,6 +1,15 @@
 import { supabase } from './supabase'
 import { MeetingRequest, ConfirmedMeeting } from './supabase'
 
+// Define a proper error type for database operations
+type DatabaseError = Error | { message: string; code?: string; details?: string } | null | unknown
+
+// Define update data type for meeting requests
+type MeetingRequestUpdateData = {
+  status: 'approved' | 'denied' | 'cancelled'
+  admin_notes?: string
+}
+
 // Unified time conversion utility - SIMPLIFIED VERSION
 const convertTo24Hour = (timeString: string): string => {
   // Handle any AM/PM format (case insensitive)
@@ -256,7 +265,7 @@ export const getPendingMeetingRequests = async (): Promise<{ data: MeetingReques
 }
 
 // Get meeting requests for a specific user
-export const getUserMeetingRequests = async (userId: string): Promise<{ data: MeetingRequest[] | null; error: any }> => {
+export const getUserMeetingRequests = async (userId: string): Promise<{ data: MeetingRequest[] | null; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
@@ -285,13 +294,13 @@ export const updateMeetingRequestStatus = async (
   requestId: string,
   status: 'approved' | 'denied' | 'cancelled',
   adminNotes?: string
-): Promise<{ data: MeetingRequest | null; error: any }> => {
+): Promise<{ data: MeetingRequest | null; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
     }
 
-    const updateData: any = { status }
+    const updateData: MeetingRequestUpdateData = { status }
     if (adminNotes) {
       updateData.admin_notes = adminNotes
     }
@@ -324,7 +333,7 @@ export const createConfirmedMeeting = async (
   endTime: string,
   meetingTitle: string,
   meetingDescription?: string
-): Promise<{ data: ConfirmedMeeting | null; error: any }> => {
+): Promise<{ data: ConfirmedMeeting | null; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
@@ -357,7 +366,7 @@ export const createConfirmedMeeting = async (
 }
 
 // Get confirmed meetings for a specific user
-export const getUserConfirmedMeetings = async (userId: string): Promise<{ data: ConfirmedMeeting[] | null; error: any }> => {
+export const getUserConfirmedMeetings = async (userId: string): Promise<{ data: ConfirmedMeeting[] | null; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
@@ -382,7 +391,7 @@ export const getUserConfirmedMeetings = async (userId: string): Promise<{ data: 
 }
 
 // Get all confirmed meetings (for admins)
-export const getAllConfirmedMeetings = async (): Promise<{ data: (ConfirmedMeeting & { user?: { full_name: string } })[] | null; error: any }> => {
+export const getAllConfirmedMeetings = async (): Promise<{ data: (ConfirmedMeeting & { user?: { full_name: string } })[] | null; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
@@ -447,7 +456,7 @@ export const getAllConfirmedMeetings = async (): Promise<{ data: (ConfirmedMeeti
 }
 
 // Delete a confirmed meeting (for admins)
-export const deleteConfirmedMeeting = async (meetingId: string): Promise<{ success: boolean; error: any }> => {
+export const deleteConfirmedMeeting = async (meetingId: string): Promise<{ success: boolean; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
@@ -471,7 +480,7 @@ export const deleteConfirmedMeeting = async (meetingId: string): Promise<{ succe
 }
 
 // Delete all confirmed meetings (for admins - use with caution!)
-export const deleteAllConfirmedMeetings = async (): Promise<{ success: boolean; error: any }> => {
+export const deleteAllConfirmedMeetings = async (): Promise<{ success: boolean; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
@@ -499,7 +508,7 @@ export const isTimeSlotAvailable = async (
   date: string,
   timeSlot: string,
   duration: number = 30 // Default 30 minutes
-): Promise<{ available: boolean; error: any }> => {
+): Promise<{ available: boolean; error: DatabaseError }> => {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
