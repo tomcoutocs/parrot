@@ -238,12 +238,7 @@ export default function DocumentsTab() {
         // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from('documents')
-          .upload(filePath, file, {
-            onUploadProgress: (progress) => {
-              const percent = (progress.loaded / progress.total) * 100
-              setUploadProgress(percent)
-            }
-          })
+          .upload(filePath, file)
 
         if (uploadError) {
           throw uploadError
@@ -265,6 +260,9 @@ export default function DocumentsTab() {
         if (recordError) {
           throw recordError
         }
+
+        // Update progress for each file
+        setUploadProgress(((i + 1) / files.length) * 100)
       }
 
       setSuccess('Files uploaded successfully')
