@@ -108,7 +108,7 @@ export default function EditProjectModal({
         company_id: companyId
       }
 
-      const result = await updateProject(project.id, updateData, session.user.id)
+      const result = await updateProject(project.id, updateData)
 
       if (result.success) {
         onProjectUpdated()
