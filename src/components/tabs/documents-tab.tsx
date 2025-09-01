@@ -70,7 +70,7 @@ export default function DocumentsTab() {
   const userCompanyId = session?.user?.company_id
 
   const loadUserCompany = useCallback(async () => {
-    if (!session?.user?.id) return
+    if (!session?.user?.id || !supabase) return
     
     try {
       const { data: userCompanyData, error } = await supabase
@@ -116,6 +116,8 @@ export default function DocumentsTab() {
   }, [selectedCompany, currentFolder, loadDocumentsAndFolders, loadStorageUsage])
 
   const loadCompanies = async () => {
+    if (!supabase) return
+    
     try {
       const { data, error } = await supabase
         .from('companies')
@@ -222,7 +224,7 @@ export default function DocumentsTab() {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
-    if (!files || files.length === 0 || !selectedCompany) return
+    if (!files || files.length === 0 || !selectedCompany || !supabase) return
 
     setUploading(true)
     setUploadProgress(0)
@@ -281,6 +283,8 @@ export default function DocumentsTab() {
   }
 
   const handleDownload = async (fileDocument: Document) => {
+    if (!supabase) return
+    
     try {
       const { data, error } = await supabase.storage
         .from('documents')
