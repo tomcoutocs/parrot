@@ -15,14 +15,20 @@ async function setAppContext() {
         companyId: currentUser.companyId 
       })
       
-      // Use the custom RPC function to set application context
-      await supabase.rpc('set_app_context', {
-        user_id: currentUser.id,
-        user_role: currentUser.role,
-        company_id: currentUser.companyId || null
-      })
-      
-      console.log('App context set successfully')
+      // Try to use the custom RPC function to set application context
+      // If it doesn't exist, that's okay - we'll use standard auth
+      try {
+        await supabase.rpc('set_app_context', {
+          user_id: currentUser.id,
+          user_role: currentUser.role,
+          company_id: currentUser.companyId || null
+        })
+        console.log('App context set successfully via RPC')
+      } catch (rpcError) {
+        console.log('RPC set_app_context not available, using standard auth:', rpcError)
+        // This is expected if the RPC function doesn't exist
+        // The RLS policies will use auth.uid() instead
+      }
     } catch (error) {
       console.warn('Failed to set app context:', error)
     }
@@ -680,97 +686,13 @@ export async function removeUsersFromTask(taskId: string, userIds: string[]): Pr
 }
 
 // Notification functions
-export interface Notification {
-  id: string
-  title: string
-  message: string
-  type: 'task_assignment' | 'project_assignment' | 'task_update' | 'project_update' | 'system'
-  related_id?: string
-  related_type?: string
-  is_read: boolean
-  created_at: string
-  read_at?: string
-}
 
-export async function getUserNotifications(limit: number = 50, unreadOnly: boolean = false): Promise<{ success: boolean; data?: Notification[]; error?: string }> {
-  if (!supabase) {
-    console.warn('Supabase not configured')
-    return { success: false, error: 'Supabase not configured' }
-  }
 
-  try {
-    console.log('Fetching user notifications:', { limit, unreadOnly })
-    
-    const { data, error } = await supabase
-      .rpc('get_user_notifications', { 
-        limit_count: limit,
-        unread_only: unreadOnly
-      })
 
-    if (error) {
-      console.error('Error fetching notifications:', error)
-      return { success: false, error: error.message || 'Failed to fetch notifications' }
-    }
 
-    console.log('Notifications fetched successfully:', data)
-    return { success: true, data }
-  } catch (error) {
-    console.error('Error fetching notifications:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
-  }
-}
 
-export async function getUnreadNotificationCount(): Promise<{ success: boolean; count?: number; error?: string }> {
-  if (!supabase) {
-    console.warn('Supabase not configured')
-    return { success: false, error: 'Supabase not configured' }
-  }
 
-  try {
-    console.log('Fetching unread notification count')
-    
-    const { data, error } = await supabase
-      .rpc('get_unread_notification_count')
 
-    if (error) {
-      console.error('Error fetching unread count:', error)
-      return { success: false, error: error.message || 'Failed to fetch unread count' }
-    }
-
-    console.log('Unread count fetched successfully:', data)
-    return { success: true, count: data }
-  } catch (error) {
-    console.error('Error fetching unread count:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
-  }
-}
-
-export async function markNotificationAsRead(notificationId: string): Promise<{ success: boolean; error?: string }> {
-  if (!supabase) {
-    console.warn('Supabase not configured')
-    return { success: false, error: 'Supabase not configured' }
-  }
-
-  try {
-    console.log('Marking notification as read:', notificationId)
-    
-    const { error } = await supabase
-      .rpc('mark_notification_read', { 
-        notification_id_param: notificationId
-      })
-
-    if (error) {
-      console.error('Error marking notification as read:', error)
-      return { success: false, error: error.message || 'Failed to mark notification as read' }
-    }
-
-    console.log('Notification marked as read successfully')
-    return { success: true }
-  } catch (error) {
-    console.error('Error marking notification as read:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
-  }
-}
 
 export async function markAllNotificationsAsRead(): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
@@ -985,6 +907,24 @@ export async function createUser(userData: {
 
     // If this is an internal user and company_ids are provided, create company assignments
     if (data.role === 'internal' && userData.company_ids && userData.company_ids.length > 0) {
+      console.log('Processing internal user company assignments for new user:', data.id)
+      console.log('Company IDs to assign:', userData.company_ids)
+      
+      // Check if the table exists first
+      const { data: tableCheck, error: tableCheckError } = await supabase
+        .from('internal_user_companies')
+        .select('id')
+        .limit(1)
+      
+      if (tableCheckError) {
+        console.error('Table check failed:', tableCheckError)
+        console.error('This suggests the internal_user_companies table does not exist')
+        console.error('User creation will continue, but company assignments will fail')
+        return { success: false, error: 'Internal user companies table not found. Please run the database migration first.' }
+      }
+      
+      console.log('Table exists, proceeding with company assignments')
+      
       const companyAssignments = userData.company_ids.map((companyId, index) => ({
         user_id: data.id,
         company_id: companyId,
@@ -998,6 +938,15 @@ export async function createUser(userData: {
 
       if (assignmentError) {
         console.error('Error creating company assignments:', assignmentError)
+        console.error('Assignment error details:', {
+          message: assignmentError.message,
+          details: assignmentError.details,
+          hint: assignmentError.hint,
+          code: assignmentError.code
+        })
+        console.error('Full error object:', JSON.stringify(assignmentError, null, 2))
+        console.error('Error type:', typeof assignmentError)
+        console.error('Error keys:', Object.keys(assignmentError || {}))
         // Don't fail the user creation, just log the error
       }
     }
@@ -1071,6 +1020,23 @@ export async function updateUser(userId: string, userData: {
 
     // If this is an internal user and company_ids are provided, update company assignments
     if (data.role === 'internal' && userData.company_ids) {
+      console.log('Processing internal user company assignments for user:', userId)
+      console.log('Company IDs to assign:', userData.company_ids)
+      
+      // Check if the table exists first
+      const { data: tableCheck, error: tableCheckError } = await supabase
+        .from('internal_user_companies')
+        .select('id')
+        .limit(1)
+      
+      if (tableCheckError) {
+        console.error('Table check failed:', tableCheckError)
+        console.error('This suggests the internal_user_companies table does not exist')
+        return { success: false, error: 'Internal user companies table not found. Please run the database migration first.' }
+      }
+      
+      console.log('Table exists, proceeding with company assignments')
+      
       // First, remove existing assignments
       const { error: deleteError } = await supabase
         .from('internal_user_companies')
@@ -1090,12 +1056,24 @@ export async function updateUser(userId: string, userData: {
           assigned_by: userData.assigned_manager_id || null
         }))
 
+        console.log('Attempting to insert company assignments:', companyAssignments)
+        console.log('Target table: internal_user_companies')
+        
         const { error: assignmentError } = await supabase
           .from('internal_user_companies')
           .insert(companyAssignments)
 
         if (assignmentError) {
           console.error('Error creating company assignments:', assignmentError)
+          console.error('Assignment error details:', {
+            message: assignmentError.message,
+            details: assignmentError.details,
+            hint: assignmentError.hint,
+            code: assignmentError.code
+          })
+          console.error('Full error object:', JSON.stringify(assignmentError, null, 2))
+          console.error('Error type:', typeof assignmentError)
+          console.error('Error keys:', Object.keys(assignmentError || {}))
           // Don't fail the user update, just log the error
         }
       }
@@ -1390,6 +1368,7 @@ export async function createCompany(companyData: {
   website?: string
   phone?: string
   address?: string
+  is_partner?: boolean
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1409,6 +1388,7 @@ export async function createCompany(companyData: {
         website: companyData.website,
         phone: companyData.phone,
         address: companyData.address,
+        is_partner: companyData.is_partner || false,
         is_active: true
       })
       .select()
@@ -1435,6 +1415,7 @@ export async function updateCompany(companyId: string, companyData: {
   phone?: string
   address?: string
   is_active: boolean
+  is_partner: boolean
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1454,6 +1435,7 @@ export async function updateCompany(companyId: string, companyData: {
         website: companyData.website,
         phone: companyData.phone,
         address: companyData.address,
+        is_partner: companyData.is_partner,
         is_active: companyData.is_active,
         updated_at: new Date().toISOString()
       })
@@ -2171,7 +2153,8 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
     const usersWithCompanies: UserWithCompanies[] = await Promise.all(
       (users || []).map(async (user) => {
         if (user.role === 'internal' && supabase) {
-          const { data: companyAssignments } = await supabase
+          // Fetch company assignments with company details
+          const { data: companyAssignments, error: companyError } = await supabase
             .from('internal_user_companies')
             .select(`
               id,
@@ -2179,49 +2162,51 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
               company_id,
               is_primary,
               assigned_at,
-              assigned_by,
-              company:companies(id, name, description, industry, is_active, created_at, updated_at)
+              assigned_by
             `)
             .eq('user_id', user.id)
             .order('is_primary', { ascending: false })
 
-          const primaryCompany = companyAssignments?.find(assignment => assignment.is_primary)?.company
+          if (companyError) {
+            console.error('Error fetching company assignments:', companyError)
+          }
+
+          // Fetch company details for each assignment
+          const companiesWithDetails = await Promise.all(
+            (companyAssignments || []).map(async (assignment) => {
+              if (!supabase) return assignment
+              
+              const { data: company } = await supabase
+                .from('companies')
+                .select('id, name, description, industry, is_active, is_partner, created_at, updated_at')
+                .eq('id', assignment.company_id)
+                .single()
+
+              return {
+                id: assignment.id,
+                user_id: assignment.user_id,
+                company_id: assignment.company_id,
+                is_primary: assignment.is_primary,
+                assigned_at: assignment.assigned_at,
+                assigned_by: assignment.assigned_by,
+                company: company || undefined
+              }
+            })
+          )
+
+          const primaryCompany = companiesWithDetails.find(assignment => assignment.is_primary)?.company
 
           return {
             ...user,
-            companies: (companyAssignments || []).map(item => ({
-              id: item.id,
-              user_id: item.user_id,
-              company_id: item.company_id,
-              is_primary: item.is_primary,
-              assigned_at: item.assigned_at,
-              assigned_by: item.assigned_by,
-              company: Array.isArray(item.company) && item.company.length > 0 ? {
-                id: item.company[0].id,
-                name: item.company[0].name,
-                description: item.company[0].description,
-                industry: item.company[0].industry,
-                is_active: item.company[0].is_active,
-                created_at: item.company[0].created_at,
-                updated_at: item.company[0].updated_at
-              } : undefined
-            })),
-            primary_company: Array.isArray(primaryCompany) && primaryCompany.length > 0 ? {
-              id: primaryCompany[0].id,
-              name: primaryCompany[0].name,
-              description: primaryCompany[0].description,
-              industry: primaryCompany[0].industry,
-              is_active: primaryCompany[0].is_active,
-              created_at: primaryCompany[0].created_at,
-              updated_at: primaryCompany[0].updated_at
-            } : undefined
+            companies: companiesWithDetails.filter(item => item.company !== undefined),
+            primary_company: primaryCompany
           }
         } else {
           // For non-internal users, fetch their single company
           if (user.company_id && supabase) {
             const { data: company } = await supabase
               .from('companies')
-              .select('id, name, description, industry, is_active, created_at, updated_at')
+              .select('id, name, description, industry, is_active, is_partner, created_at, updated_at')
               .eq('id', user.company_id)
               .single()
 
@@ -2241,3 +2226,484 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
     return []
   }
 } 
+
+// ============================================================================
+// DOCUMENT MANAGEMENT FUNCTIONS
+// ============================================================================
+
+export interface Document {
+  id: string
+  name: string
+  file_path: string
+  file_size: number
+  file_type: string
+  company_id: string
+  uploaded_by: string
+  folder_path: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentFolder {
+  id: string
+  name: string
+  company_id: string
+  parent_folder_id?: string
+  path: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+// Create a new document record
+export async function createDocumentRecord(
+  name: string,
+  filePath: string,
+  fileSize: number,
+  fileType: string,
+  companyId: string,
+  folderPath: string = '/',
+  userId: string
+): Promise<{ success: boolean; document?: Document; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('documents')
+      .insert({
+        name,
+        file_path: filePath,
+        file_size: fileSize,
+        file_type: fileType,
+        company_id: companyId,
+        uploaded_by: userId,
+        folder_path: folderPath
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating document record:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, document: data }
+  } catch (error) {
+    console.error('Error in createDocumentRecord:', error)
+    return { success: false, error: 'Failed to create document record' }
+  }
+}
+
+// Get documents for a company
+export async function getCompanyDocuments(
+  companyId: string,
+  folderPath: string = '/'
+): Promise<{ success: boolean; documents?: Document[]; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('folder_path', folderPath)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching company documents:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, documents: data || [] }
+  } catch (error) {
+    console.error('Error in getCompanyDocuments:', error)
+    return { success: false, error: 'Failed to fetch company documents' }
+  }
+}
+
+// Get folders for a company
+export async function getCompanyFolders(
+  companyId: string,
+  parentFolderPath?: string
+): Promise<{ success: boolean; folders?: DocumentFolder[]; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    let query = supabase
+      .from('document_folders')
+      .select('*')
+      .eq('company_id', companyId)
+
+    if (parentFolderPath && parentFolderPath !== '/') {
+      // If we have a parent folder path, find the folder with that path and get its ID
+      const { data: parentFolder, error: parentError } = await supabase
+        .from('document_folders')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('path', parentFolderPath)
+        .single()
+
+      if (parentError) {
+        console.error('Error finding parent folder:', parentError)
+        return { success: false, error: `Parent folder not found: ${parentError.message}` }
+      }
+
+      if (parentFolder) {
+        query = query.eq('parent_folder_id', parentFolder.id)
+      } else {
+        // If parent folder not found, return empty result
+        return { success: true, folders: [] }
+      }
+    } else {
+      // Root level folders (no parent)
+      query = query.is('parent_folder_id', null)
+    }
+
+    const { data, error } = await query.order('name', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching company folders:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, folders: data || [] }
+  } catch (error) {
+    console.error('Error in getCompanyFolders:', error)
+    return { success: false, error: 'Failed to fetch company folders' }
+  }
+}
+
+// Create a new folder
+export async function createFolder(
+  name: string,
+  companyId: string,
+  userId: string,
+  parentFolderId?: string
+): Promise<{ success: boolean; folder?: DocumentFolder; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    console.log('Creating folder with params:', { name, companyId, userId, parentFolderId })
+
+    // Set application context for RLS
+    await setAppContext()
+
+    // Build path
+    let path = `/${name}`
+    if (parentFolderId) {
+      // Get parent folder path
+      const { data: parentFolder, error: parentError } = await supabase
+        .from('document_folders')
+        .select('path')
+        .eq('id', parentFolderId)
+        .single()
+      
+      if (parentError) {
+        console.error('Error fetching parent folder:', parentError)
+        return { success: false, error: `Parent folder error: ${parentError.message}` }
+      }
+      
+      if (parentFolder) {
+        path = `${parentFolder.path}/${name}`
+      }
+    }
+
+    console.log('Folder path will be:', path)
+
+    // Check if user has access to this company using users.company_id
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('company_id, role')
+      .eq('id', userId)
+      .single()
+
+    if (userError) {
+      console.error('Error checking user company access:', userError)
+      // Continue anyway - let RLS handle the security
+    } else {
+      console.log('User company access verified:', user)
+      
+      // Admins and managers can create folders in any company
+      if (user.role === 'admin' || user.role === 'manager') {
+        console.log('Admin/Manager creating folder in company:', companyId)
+        // Allow access to any company
+      } else {
+        // Regular users can only create folders in their own company
+        if (user.company_id !== companyId) {
+          console.error('Regular user trying to create folder in different company')
+          return { success: false, error: 'You can only create folders in your own company' }
+        }
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('document_folders')
+      .insert({
+        name,
+        company_id: companyId,
+        parent_folder_id: parentFolderId,
+        path,
+        created_by: userId
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating folder in database:', error)
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
+      return { success: false, error: `Database error: ${error.message || 'Unknown error'}` }
+    }
+
+    console.log('Folder created successfully:', data)
+    return { success: true, folder: data }
+  } catch (error) {
+    console.error('Unexpected error in createFolder:', error)
+    return { success: false, error: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` }
+  }
+}
+
+// Delete a document
+export async function deleteDocument(
+  documentId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // First get the document to get the file path
+    const { data: document, error: fetchError } = await supabase
+      .from('documents')
+      .select('file_path')
+      .eq('id', documentId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching document for deletion:', fetchError)
+      return { success: false, error: fetchError.message }
+    }
+
+    // Delete from storage
+    const { error: storageError } = await supabase.storage
+      .from('documents')
+      .remove([document.file_path])
+
+    if (storageError) {
+      console.error('Error deleting file from storage:', storageError)
+      // Continue with database deletion even if storage deletion fails
+    }
+
+    // Delete from database
+    const { error: dbError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', documentId)
+
+    if (dbError) {
+      console.error('Error deleting document record:', dbError)
+      return { success: false, error: dbError.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error in deleteDocument:', error)
+    return { success: false, error: 'Failed to delete document' }
+  }
+}
+
+// Delete a folder and all its contents
+export async function deleteFolder(
+  folderId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Get folder path
+    const { data: folder, error: fetchError } = await supabase
+      .from('document_folders')
+      .select('path, company_id')
+      .eq('id', folderId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching folder for deletion:', fetchError)
+      return { success: false, error: fetchError.message }
+    }
+
+    // Delete all documents in this folder and subfolders
+    const { data: documents, error: docsError } = await supabase
+      .from('documents')
+      .select('file_path')
+      .like('folder_path', `${folder.path}%`)
+
+    if (docsError) {
+      console.error('Error fetching documents for deletion:', docsError)
+      return { success: false, error: docsError.message }
+    }
+
+    // Delete files from storage
+    if (documents && documents.length > 0) {
+      const filePaths = documents.map(doc => doc.file_path)
+      const { error: storageError } = await supabase.storage
+        .from('documents')
+        .remove(filePaths)
+
+      if (storageError) {
+        console.error('Error deleting files from storage:', storageError)
+      }
+    }
+
+    // Delete all subfolders
+    await supabase
+      .from('document_folders')
+      .delete()
+      .like('path', `${folder.path}%`)
+
+    // Delete all documents in this folder structure
+    await supabase
+      .from('documents')
+      .delete()
+      .like('folder_path', `${folder.path}%`)
+
+    // Delete the main folder
+    const { error: folderError } = await supabase
+      .from('document_folders')
+      .delete()
+      .eq('id', folderId)
+
+    if (folderError) {
+      console.error('Error deleting folder:', folderError)
+      return { success: false, error: folderError.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error in deleteFolder:', error)
+    return { success: false, error: 'Failed to delete folder' }
+  }
+}
+
+// Get document by ID
+export async function getDocumentById(
+  documentId: string
+): Promise<{ success: boolean; document?: Document; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('id', documentId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching document:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, document: data }
+  } catch (error) {
+    console.error('Error in getDocumentById:', error)
+    return { success: false, error: 'Failed to fetch document' }
+  }
+}
+
+// Get folder by ID
+export async function getFolderById(
+  folderId: string
+): Promise<{ success: boolean; folder?: DocumentFolder; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('document_folders')
+      .select('*')
+      .eq('id', folderId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching folder:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, folder: data }
+  } catch (error) {
+    console.error('Error in getFolderById:', error)
+    return { success: false, error: 'Failed to fetch folder' }
+  }
+}
+
+// Search documents by name
+export async function searchDocuments(
+  companyId: string,
+  searchTerm: string
+): Promise<{ success: boolean; documents?: Document[]; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('company_id', companyId)
+      .ilike('name', `%${searchTerm}%`)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error searching documents:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, documents: data || [] }
+  } catch (error) {
+    console.error('Error in searchDocuments:', error)
+    return { success: false, error: 'Failed to search documents' }
+  }
+}
+
+// Get storage usage for a company
+export async function getCompanyStorageUsage(
+  companyId: string
+): Promise<{ success: boolean; usage?: number; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('documents')
+      .select('file_size')
+      .eq('company_id', companyId)
+
+    if (error) {
+      console.error('Error fetching storage usage:', error)
+      return { success: false, error: error.message }
+    }
+
+    const totalUsage = data?.reduce((sum, doc) => sum + (doc.file_size || 0), 0) || 0
+    return { success: true, usage: totalUsage }
+  } catch (error) {
+    console.error('Error in getCompanyStorageUsage:', error)
+    return { success: false, error: 'Failed to fetch storage usage' }
+  }
+}

@@ -179,7 +179,7 @@ SELECT * FROM get_available_time_slots('admin-id', '2024-01-15', 30);
 ## 🔄 Next Steps
 
 ### **Enhancements to Consider:**
-1. **Email Notifications**: Send confirmation emails for approved bookings
+
 2. **Recurring Events**: Support for recurring appointments
 3. **Calendar Integration**: Sync with external calendars (Google, Outlook)
 4. **Video Conferencing**: Add meeting links for virtual appointments
@@ -187,7 +187,7 @@ SELECT * FROM get_available_time_slots('admin-id', '2024-01-15', 30);
 6. **Mobile Optimization**: Improve mobile calendar experience
 
 ### **Integration Points:**
-- **Notification System**: Integrate with existing notification system
+
 - **User Management**: Connect with user roles and permissions
 - **Project Management**: Link appointments to project tasks
 - **Forms System**: Create appointment request forms

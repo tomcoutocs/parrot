@@ -24,6 +24,7 @@ interface CreateCompanyData {
   website?: string
   phone?: string
   address?: string
+  is_partner?: boolean
 }
 
 interface EditCompanyData {
@@ -34,6 +35,7 @@ interface EditCompanyData {
   phone?: string
   address?: string
   is_active: boolean
+  is_partner: boolean
 }
 
 interface ServiceCategory {
@@ -48,6 +50,7 @@ export default function CompaniesTab() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [industryFilter, setIndustryFilter] = useState<string>('all')
+  const [partnerFilter, setPartnerFilter] = useState<string>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -58,7 +61,8 @@ export default function CompaniesTab() {
     industry: '',
     website: '',
     phone: '',
-    address: ''
+    address: '',
+    is_partner: false
   })
   const [editCompanyData, setEditCompanyData] = useState<EditCompanyData>({
     name: '',
@@ -67,7 +71,8 @@ export default function CompaniesTab() {
     website: '',
     phone: '',
     address: '',
-    is_active: true
+    is_active: true,
+    is_partner: false
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -88,7 +93,7 @@ export default function CompaniesTab() {
 
   useEffect(() => {
     filterCompanies()
-  }, [companies, searchTerm, industryFilter])
+  }, [companies, searchTerm, industryFilter, partnerFilter])
 
   const loadCompanies = async () => {
     setIsLoading(true)
@@ -120,6 +125,12 @@ export default function CompaniesTab() {
       filtered = filtered.filter(company => company.industry === industryFilter)
     }
 
+    // Filter by partner status
+    if (partnerFilter !== 'all') {
+      const isPartner = partnerFilter === 'partner'
+      filtered = filtered.filter(company => company.is_partner === isPartner)
+    }
+
     setFilteredCompanies(filtered)
   }
 
@@ -137,7 +148,7 @@ export default function CompaniesTab() {
       const result = await createCompany(createCompanyData)
       if (result.success) {
         setSuccess('Company created successfully')
-        setCreateCompanyData({ name: '', description: '', industry: '', website: '', phone: '', address: '' })
+        setCreateCompanyData({ name: '', description: '', industry: '', website: '', phone: '', address: '', is_partner: false })
         setShowCreateModal(false)
         await loadCompanies()
       } else {
@@ -203,7 +214,8 @@ export default function CompaniesTab() {
       website: company.website || '',
       phone: company.phone || '',
       address: company.address || '',
-      is_active: company.is_active
+      is_active: company.is_active,
+      is_partner: company.is_partner
     })
     setShowEditModal(true)
   }
@@ -369,6 +381,16 @@ export default function CompaniesTab() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={partnerFilter} onValueChange={setPartnerFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filter by partner status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Companies</SelectItem>
+            <SelectItem value="partner">Partners Only</SelectItem>
+            <SelectItem value="non-partner">Non-Partners Only</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Success/Error Messages */}
@@ -407,10 +429,17 @@ export default function CompaniesTab() {
                       </CardDescription>
                     </div>
                   </div>
-                  <Badge className={getIndustryColor(company.industry)}>
-                    <Briefcase className="h-3 w-3 mr-1" />
-                    {company.industry ?? 'Other'}
-                  </Badge>
+                  <div className="flex gap-2">
+                    <Badge className={getIndustryColor(company.industry)}>
+                      <Briefcase className="h-3 w-3 mr-1" />
+                      {company.industry ?? 'Other'}
+                    </Badge>
+                    {company.is_partner && (
+                      <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                        Partner
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -496,6 +525,11 @@ export default function CompaniesTab() {
                           <Briefcase className="h-3 w-3 mr-1" />
                           {company.industry ?? 'Other'}
                         </Badge>
+                        {company.is_partner && (
+                          <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                            Partner
+                          </Badge>
+                        )}
                         <Badge variant={company.is_active ? 'default' : 'secondary'}>
                           {company.is_active ? 'Active' : 'Inactive'}
                         </Badge>
@@ -633,18 +667,35 @@ export default function CompaniesTab() {
                   className="col-span-3"
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="address" className="text-right">
-                  Address
-                </Label>
-                <Textarea
-                  id="address"
-                  value={createCompanyData.address}
-                  onChange={(e) => setCreateCompanyData({ ...createCompanyData, address: e.target.value })}
-                  className="col-span-3"
-                  rows={2}
-                />
-              </div>
+                             <div className="grid grid-cols-4 items-center gap-4">
+                 <Label htmlFor="address" className="text-right">
+                   Address
+                 </Label>
+                 <Textarea
+                   id="address"
+                   value={createCompanyData.address}
+                   onChange={(e) => setCreateCompanyData({ ...createCompanyData, address: e.target.value })}
+                   className="col-span-3"
+                   rows={2}
+                 />
+               </div>
+               <div className="grid grid-cols-4 items-center gap-4">
+                 <Label htmlFor="is_partner" className="text-right">
+                   Partner Status
+                 </Label>
+                 <div className="col-span-3 flex items-center space-x-2">
+                   <Checkbox
+                     id="is_partner"
+                     checked={createCompanyData.is_partner}
+                     onCheckedChange={(checked) => 
+                       setCreateCompanyData(prev => ({ ...prev, is_partner: !!checked }))
+                     }
+                   />
+                   <Label htmlFor="is_partner" className="text-sm font-normal">
+                     Mark as Partner Company
+                   </Label>
+                 </div>
+               </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
@@ -738,25 +789,42 @@ export default function CompaniesTab() {
                   rows={2}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit_status" className="text-right">
-                  Status
-                </Label>
-                <Select
-                  value={editCompanyData.is_active ? 'active' : 'inactive'}
-                  onValueChange={(value) =>
-                    setEditCompanyData({ ...editCompanyData, is_active: value === 'active' })
-                  }
-                >
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                             <div className="grid grid-cols-4 items-center gap-4">
+                 <Label htmlFor="edit_status" className="text-right">
+                   Status
+                 </Label>
+                 <Select
+                   value={editCompanyData.is_active ? 'active' : 'inactive'}
+                   onValueChange={(value) =>
+                     setEditCompanyData({ ...editCompanyData, is_active: value === 'active' })
+                   }
+                 >
+                   <SelectTrigger className="col-span-3">
+                     <SelectValue />
+                   </SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="active">Active</SelectItem>
+                     <SelectItem value="inactive">Inactive</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
+               <div className="grid grid-cols-4 items-center gap-4">
+                 <Label htmlFor="edit_is_partner" className="text-right">
+                   Partner Status
+                 </Label>
+                 <div className="col-span-3 flex items-center space-x-2">
+                   <Checkbox
+                     id="edit_is_partner"
+                     checked={editCompanyData.is_partner}
+                     onCheckedChange={(checked) => 
+                       setEditCompanyData(prev => ({ ...prev, is_partner: !!checked }))
+                     }
+                   />
+                   <Label htmlFor="edit_is_partner" className="text-sm font-normal">
+                     Mark as Partner Company
+                   </Label>
+                 </div>
+               </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>

@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
-import { NotificationBell } from '@/components/ui/notification-bell'
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -39,7 +39,7 @@ interface DashboardLayoutProps {
   onTabChange: (tab: TabType) => void
 }
 
-export type TabType = 'analytics' | 'projects' | 'forms' | 'services' | 'calendar' | 'documents' | 'chat' | 'admin' | 'companies' | 'debug'
+export type TabType = 'analytics' | 'projects' | 'forms' | 'services' | 'calendar' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'debug'
 
 const navigationItems = [
   { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3, roles: ['admin', 'manager', 'user'] },
@@ -47,8 +47,9 @@ const navigationItems = [
   { id: 'forms' as TabType, label: 'Forms', icon: FileText, roles: ['admin', 'manager', 'user'] },
   { id: 'services' as TabType, label: 'Services', icon: Settings, roles: ['admin', 'manager', 'user'] },
   { id: 'calendar' as TabType, label: 'Calendar', icon: Calendar, roles: ['admin', 'manager', 'user'] },
+  { id: 'company-calendars' as TabType, label: 'Company Calendars', icon: Building2, roles: ['admin', 'manager', 'user'] },
   { id: 'documents' as TabType, label: 'Documents', icon: FolderOpen, roles: ['admin', 'manager', 'user'] },
-  { id: 'chat' as TabType, label: 'Chat', icon: MessageSquare, roles: ['manager', 'user'] },
+
   { id: 'admin' as TabType, label: 'Users', icon: Users, roles: ['admin'] },
   { id: 'companies' as TabType, label: 'Companies', icon: Building2, roles: ['admin'] },
 ]
@@ -191,7 +192,6 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
               {activeTab.replace('-', ' ')}
             </h2>
             <div className="flex items-center space-x-4">
-              <NotificationBell />
               <span className="text-sm text-gray-600">
                 Welcome back, {session.user.name}
               </span>

@@ -26,7 +26,7 @@ const availableTabs = [
   { id: 'services', label: 'Services', description: 'Manage services' },
   { id: 'calendar', label: 'Calendar', description: 'View and manage calendar' },
   { id: 'documents', label: 'Documents', description: 'Manage documents' },
-  { id: 'chat', label: 'Chat', description: 'Access chat system' }
+
 ]
 
 interface CreateUserData {
@@ -146,11 +146,26 @@ export default function UsersTab() {
       const result = await createUser(createUserData)
       if (result.success) {
         setSuccess('User created successfully')
-        setCreateUserData({ email: '', full_name: '', role: 'user', password: '', tab_permissions: [] })
+        setCreateUserData({ 
+          email: '', 
+          full_name: '', 
+          role: 'user', 
+          password: '', 
+          assigned_manager_id: '',
+          company_id: '',
+          company_ids: [],
+          primary_company_id: '',
+          tab_permissions: [] 
+        })
         setShowCreateModal(false)
         await loadUsers()
       } else {
-        setError(result.error || 'Failed to create user')
+        // Check if it's a company assignment error
+        if (result.error && result.error.includes('company assignments')) {
+          setError('Failed to create company assignments. Please ensure the internal user support is properly set up in the database.')
+        } else {
+          setError(result.error || 'Failed to create user')
+        }
       }
     } catch (error) {
       console.error('Error creating user:', error)
@@ -173,7 +188,12 @@ export default function UsersTab() {
         setSelectedUser(null)
         await loadUsers()
       } else {
-        setError(result.error || 'Failed to update user')
+        // Check if it's a company assignment error
+        if (result.error && result.error.includes('company assignments')) {
+          setError('Failed to update company assignments. Please ensure the internal user support is properly set up in the database.')
+        } else {
+          setError(result.error || 'Failed to update user')
+        }
       }
     } catch (error) {
       console.error('Error updating user:', error)

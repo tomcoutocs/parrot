@@ -231,7 +231,7 @@ const result = await submitForm(formId, submissionData, userId)
 - **Conditional Logic**: Show/hide fields based on responses
 - **File Upload**: Support for file attachments
 - **Form Analytics**: Advanced analytics and reporting
-- **Email Notifications**: Notify admins of new submissions
+
 - **Form Scheduling**: Set form availability dates
 - **Multi-step Forms**: Complex multi-page forms
 - **Form Duplication**: Copy existing forms

@@ -18,7 +18,7 @@ A comprehensive client portal web application with role-based access control, bu
 - **📞 Call Booking System**: Schedule appointments with calendar integration
 - **📅 Calendar View**: Comprehensive calendar for appointments and tasks
 - **📁 Document Management**: Secure file upload, storage, and sharing
-- **💬 Real-time Chat**: Communication between assigned managers and clients
+
 - **👨‍💼 Admin Panel**: User management and system administration
 
 ## 🛠️ Tech Stack
@@ -254,7 +254,7 @@ See the detailed feature backlog below for upcoming features and improvements.
 - **User Stories**:
   - As a user, I want to chat with my assigned manager so that I can get quick support
   - As a manager, I want to see all my client conversations so that I can provide effective support
-  - As a user, I want to receive notifications for new messages so that I can respond quickly
+  
 
 #### 3. Document Management System
 - **Priority**: High
@@ -305,7 +305,7 @@ See the detailed feature backlog below for upcoming features and improvements.
 - **Effort**: High
 - **User Stories**:
   - As a user, I want a mobile app so that I can access the portal on the go
-  - As a manager, I want mobile notifications so that I can respond to clients quickly
+  
 
 #### 9. Integration Capabilities
 - **Priority**: Low

@@ -11,6 +11,8 @@ import UsersTab from '@/components/tabs/users-tab'
 import CompaniesTab from '@/components/tabs/companies-tab'
 import ServicesTab from '@/components/tabs/services-tab'
 import CalendarTab from '@/components/tabs/calendar-tab'
+import { CompanyCalendarsTab } from '@/components/tabs/company-calendars-tab'
+import DocumentsTab from '@/components/tabs/documents-tab'
 import DebugTab from '@/components/tabs/debug-tab'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -106,39 +108,13 @@ export default function DashboardPage() {
       case 'calendar':
         return <CalendarTab />
       
-      case 'documents':
-        return (
-          <PlaceholderTab
-            title="Document Management"
-            description="Store, organize, and share documents securely"
-            icon={FolderOpen}
-            features={[
-              'File Upload',
-              'Folder Organization',
-              'Document Sharing',
-              'Version Control',
-              'Access Permissions',
-              'Search & Filter'
-            ]}
-          />
-        )
+      case 'company-calendars':
+        return <CompanyCalendarsTab />
       
-      case 'chat':
-        return (
-          <PlaceholderTab
-            title="Chat System"
-            description="Real-time communication between managers and clients"
-            icon={MessageSquare}
-            features={[
-              'Direct Messages',
-              'Group Chats',
-              'File Sharing',
-              'Message History',
-              'Online Status',
-              'Push Notifications'
-            ]}
-          />
-        )
+      case 'documents':
+        return <DocumentsTab />
+      
+
       
       case 'admin':
         return <UsersTab />

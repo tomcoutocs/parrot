@@ -24,6 +24,7 @@ export interface Company {
   phone?: string
   address?: string
   is_active: boolean
+  is_partner: boolean
   created_at: string
   updated_at: string
 }
@@ -228,4 +229,31 @@ export interface CompanyService {
 
 export interface ServiceWithCompanyStatus extends Service {
   is_company_active?: boolean
+}
+
+// Meeting System Types
+export interface MeetingRequest {
+  id: string
+  requester_id: string
+  requested_date: string
+  requested_time_slot: string
+  meeting_title: string
+  meeting_description?: string
+  status: 'pending' | 'approved' | 'denied' | 'cancelled'
+  admin_notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ConfirmedMeeting {
+  id: string
+  meeting_request_id?: string
+  requester_id: string
+  meeting_date: string
+  start_time: string
+  end_time: string
+  meeting_title: string
+  meeting_description?: string
+  created_at: string
+  updated_at: string
 } 

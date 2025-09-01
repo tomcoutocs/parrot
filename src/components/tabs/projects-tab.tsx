@@ -12,7 +12,8 @@ import {
   Search,
   Edit,
   Trash2,
-  Users
+  Users,
+  CheckSquare
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -533,10 +534,34 @@ export default function ProjectsTab() {
         </div>
         
         {(userRole === 'admin' || userRole === 'manager') && (
-          <Button className="gap-2" onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4" />
-            New Project
-          </Button>
+          <div className="flex gap-2">
+            <Button className="gap-2" onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4" />
+              New Project
+            </Button>
+            {selectedProject ? (
+              <Button 
+                variant="outline" 
+                className="gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 border-green-200" 
+                onClick={() => {
+                  setSelectedTaskStatus('todo')
+                  setShowCreateTaskModal(true)
+                }}
+                title={`Create new task in ${currentProject?.name || 'selected project'}`}>
+                <CheckSquare className="h-4 w-4" />
+                New Task
+              </Button>
+            ) : (
+              <Button 
+                variant="outline" 
+                className="gap-2 opacity-50 cursor-not-allowed transition-all duration-200" 
+                disabled
+                title="Select a project first to create tasks">
+                <CheckSquare className="h-4 w-4" />
+                New Task
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
