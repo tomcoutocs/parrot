@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { 
   Folder, 
@@ -39,6 +39,7 @@ import {
 } from '@/lib/database-functions'
 import { supabase } from '@/lib/supabase'
 import { formatBytes, formatDate } from '@/lib/utils'
+import type { Company } from '@/lib/supabase'
 
 interface BreadcrumbItem {
   id: string
@@ -50,7 +51,7 @@ export default function DocumentsTab() {
   const { data: session } = useSession()
   const [documents, setDocuments] = useState<Document[]>([])
   const [folders, setFolders] = useState<DocumentFolder[]>([])
-  const [companies, setCompanies] = useState<any[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [selectedCompany, setSelectedCompany] = useState<string>('')
   const [currentFolder, setCurrentFolder] = useState<string>('/')
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([{ id: 'root', name: 'Home', path: '/' }])
@@ -89,26 +90,26 @@ export default function DocumentsTab() {
       // Try to get company from user_companies table
       loadUserCompany()
     }
-  }, [isAdmin, companies, userCompanyId, selectedCompany])
+  }, [isAdmin, companies, userCompanyId, selectedCompany, loadUserCompany])
 
-  const loadUserCompany = async () => {
+  const loadUserCompany = useCallback(async () => {
     if (!session?.user?.id) return
     
     try {
-      const { data, error } = await supabase
+      const { data: userCompanyData, error } = await supabase
         .from('internal_user_companies')
         .select('company_id')
         .eq('user_id', session.user.id)
         .eq('is_primary', true)
         .single()
 
-      if (!error && data) {
-        setSelectedCompany(data.company_id)
+      if (!error && userCompanyData) {
+        setSelectedCompany(userCompanyData.company_id)
       }
     } catch (error) {
       console.error('Error loading user company:', error)
     }
-  }
+  }, [session?.user?.id])
 
   // Load documents and folders when company or folder changes
   useEffect(() => {
@@ -116,7 +117,7 @@ export default function DocumentsTab() {
       loadDocumentsAndFolders()
       loadStorageUsage()
     }
-  }, [selectedCompany, currentFolder])
+  }, [selectedCompany, currentFolder, loadDocumentsAndFolders, loadStorageUsage])
 
   const loadCompanies = async () => {
     try {
@@ -134,7 +135,7 @@ export default function DocumentsTab() {
     }
   }
 
-  const loadDocumentsAndFolders = async () => {
+  const loadDocumentsAndFolders = useCallback(async () => {
     if (!selectedCompany) return
 
     setIsLoading(true)
@@ -161,9 +162,9 @@ export default function DocumentsTab() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [selectedCompany, currentFolder])
 
-  const loadStorageUsage = async () => {
+  const loadStorageUsage = useCallback(async () => {
     if (!selectedCompany) return
 
     try {
@@ -174,7 +175,7 @@ export default function DocumentsTab() {
     } catch (error) {
       console.error('Error loading storage usage:', error)
     }
-  }
+  }, [selectedCompany])
 
   const handleFolderClick = (folder: DocumentFolder) => {
     const newPath = folder.path
@@ -693,9 +694,9 @@ export default function DocumentsTab() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete {deleteTarget?.type}</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{deleteTarget?.name}"? This action cannot be undone.
-            </DialogDescription>
+                         <DialogDescription>
+               Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.
+             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
