@@ -103,15 +103,7 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
         // Better error message handling
         let errorMessage = 'Failed to submit meeting request'
         
-        if (submitError.message) {
-          errorMessage += `: ${submitError.message}`
-        } else if (submitError.details) {
-          errorMessage += `: ${submitError.details}`
-        } else if (submitError.hint) {
-          errorMessage += `: ${submitError.hint}`
-        } else if (submitError.code) {
-          errorMessage += ` (Error code: ${submitError.code})`
-        } else if (typeof submitError === 'string') {
+        if (typeof submitError === 'string') {
           errorMessage += `: ${submitError}`
         } else if (submitError && typeof submitError === 'object') {
           errorMessage += `: ${JSON.stringify(submitError)}`
