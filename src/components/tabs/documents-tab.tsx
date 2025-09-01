@@ -4,23 +4,19 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { 
   Folder, 
-  File, 
   Upload, 
   Download, 
   Trash2, 
   Plus, 
   Search, 
   ArrowLeft,
-  MoreVertical,
-  HardDrive,
-  Calendar,
-  User
+  HardDrive
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'

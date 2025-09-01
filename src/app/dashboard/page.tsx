@@ -14,59 +14,9 @@ import CalendarTab from '@/components/tabs/calendar-tab'
 import { CompanyCalendarsTab } from '@/components/tabs/company-calendars-tab'
 import DocumentsTab from '@/components/tabs/documents-tab'
 import DebugTab from '@/components/tabs/debug-tab'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { 
-  FileText, 
-  Settings, 
-  Calendar as CalendarIcon, 
-  MessageSquare, 
-  FolderOpen, 
-  Phone,
-  Shield,
-  Users,
-  Plus
-} from 'lucide-react'
 
-// Placeholder components for other tabs
-function PlaceholderTab({ title, description, icon: Icon, features }: {
-  title: string
-  description: string
-  icon: React.ComponentType<{ className?: string }>
-  features: string[]
-}) {
-  return (
-    <div className="space-y-6">
-      <div className="text-center py-8">
-        <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-full bg-blue-100 mb-4">
-          <Icon className="h-8 w-8 text-blue-600" />
-        </div>
-        <h3 className="text-2xl font-semibold text-gray-900 mb-2">{title}</h3>
-        <p className="text-gray-600 max-w-md mx-auto">{description}</p>
-      </div>
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {features.map((feature, index) => (
-          <Card key={index}>
-            <CardHeader>
-              <CardTitle className="text-lg">{feature}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                This feature will be implemented in the full version of the application.
-              </p>
-              <Button variant="outline" className="w-full">
-                <Plus className="h-4 w-4 mr-2" />
-                Coming Soon
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-}
+
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
