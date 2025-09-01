@@ -88,6 +88,48 @@ export default function DocumentsTab() {
     }
   }, [session?.user?.id])
 
+  const loadDocumentsAndFolders = useCallback(async () => {
+    if (!selectedCompany) return
+
+    setIsLoading(true)
+    try {
+      const [docsResult, foldersResult] = await Promise.all([
+        getCompanyDocuments(selectedCompany, currentFolder),
+        getCompanyFolders(selectedCompany, currentFolder)
+      ])
+
+      if (docsResult.success) {
+        setDocuments(docsResult.documents || [])
+      } else {
+        setError(docsResult.error || 'Failed to load documents')
+      }
+
+      if (foldersResult.success) {
+        setFolders(foldersResult.folders || [])
+      } else {
+        setError(foldersResult.error || 'Failed to load folders')
+      }
+    } catch (error) {
+      console.error('Error loading documents and folders:', error)
+      setError('Failed to load documents and folders')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedCompany, currentFolder])
+
+  const loadStorageUsage = useCallback(async () => {
+    if (!selectedCompany) return
+
+    try {
+      const result = await getCompanyStorageUsage(selectedCompany)
+      if (result.success) {
+        setStorageUsage(result.usage || 0)
+      }
+    } catch (error) {
+      console.error('Error loading storage usage:', error)
+    }
+  }, [selectedCompany])
+
   // Load companies for admin
   useEffect(() => {
     if (isAdmin) {
@@ -132,48 +174,6 @@ export default function DocumentsTab() {
       setError('Failed to load companies')
     }
   }
-
-  const loadDocumentsAndFolders = useCallback(async () => {
-    if (!selectedCompany) return
-
-    setIsLoading(true)
-    try {
-      const [docsResult, foldersResult] = await Promise.all([
-        getCompanyDocuments(selectedCompany, currentFolder),
-        getCompanyFolders(selectedCompany, currentFolder)
-      ])
-
-      if (docsResult.success) {
-        setDocuments(docsResult.documents || [])
-      } else {
-        setError(docsResult.error || 'Failed to load documents')
-      }
-
-      if (foldersResult.success) {
-        setFolders(foldersResult.folders || [])
-      } else {
-        setError(foldersResult.error || 'Failed to load folders')
-      }
-    } catch (error) {
-      console.error('Error loading documents and folders:', error)
-      setError('Failed to load documents and folders')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [selectedCompany, currentFolder])
-
-  const loadStorageUsage = useCallback(async () => {
-    if (!selectedCompany) return
-
-    try {
-      const result = await getCompanyStorageUsage(selectedCompany)
-      if (result.success) {
-        setStorageUsage(result.usage || 0)
-      }
-    } catch (error) {
-      console.error('Error loading storage usage:', error)
-    }
-  }, [selectedCompany])
 
   const handleFolderClick = (folder: DocumentFolder) => {
     const newPath = folder.path
