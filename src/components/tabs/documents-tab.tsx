@@ -163,7 +163,7 @@ export default function DocumentsTab() {
     try {
       const result = await getUserFavorites(session.user.id, selectedCompany)
       if (result.success && result.favorites) {
-        const favoritesSet = new Set(result.favorites.map(fav => fav.itemId))
+        const favoritesSet = new Set(result.favorites.map(fav => fav.item_id))
         setFavorites(favoritesSet)
       }
     } catch (error) {
