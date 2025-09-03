@@ -21,7 +21,7 @@ const DEMO_USERS: Record<string, AuthUser> = {
     name: 'Admin User',
     role: 'admin',
     companyId: 'demo-company-1',
-    tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'documents', 'chat', 'admin', 'companies', 'debug']
+    tab_permissions: ['projects', 'forms', 'services', 'calendar', 'documents', 'chat', 'admin', 'companies', 'project-overview', 'debug']
   },
   'manager@company.com': {
     id: '550e8400-e29b-41d4-a716-446655440002',
@@ -29,7 +29,7 @@ const DEMO_USERS: Record<string, AuthUser> = {
     name: 'Manager User',
     role: 'manager',
     companyId: 'demo-company-1',
-    tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'documents', 'chat']
+    tab_permissions: ['projects', 'forms', 'services', 'calendar', 'documents', 'chat']
   },
   'user@company.com': {
     id: '550e8400-e29b-41d4-a716-446655440003',
@@ -38,7 +38,7 @@ const DEMO_USERS: Record<string, AuthUser> = {
     role: 'user',
     assignedManagerId: '550e8400-e29b-41d4-a716-446655440002',
     companyId: 'demo-company-1',
-    tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'chat']
+    tab_permissions: ['projects', 'forms', 'services', 'calendar', 'chat']
   },
   'internal@company.com': {
     id: '550e8400-e29b-41d4-a716-446655440005',
@@ -47,7 +47,7 @@ const DEMO_USERS: Record<string, AuthUser> = {
     role: 'internal',
     companyIds: ['demo-company-1', 'demo-company-2'],
     primaryCompanyId: 'demo-company-1',
-    tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'chat']
+    tab_permissions: ['projects', 'forms', 'services', 'calendar', 'chat']
   }
 }
 

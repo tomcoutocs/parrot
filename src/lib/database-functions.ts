@@ -9,31 +9,16 @@ async function setAppContext() {
   const currentUser = getCurrentUser()
   if (currentUser) {
     try {
-      console.log('Setting app context for user:', { 
-        id: currentUser.id, 
-        role: currentUser.role, 
-        companyId: currentUser.companyId 
+      // Set user context for RLS policies
+      await supabase.rpc('set_user_context', {
+        user_id: currentUser.id,
+        user_role: currentUser.role,
+        company_id: currentUser.companyId || null
       })
-      
-      // Try to use the custom RPC function to set application context
-      // If it doesn't exist, that's okay - we'll use standard auth
-      try {
-        await supabase.rpc('set_app_context', {
-          user_id: currentUser.id,
-          user_role: currentUser.role,
-          company_id: currentUser.companyId || null
-        })
-        console.log('App context set successfully via RPC')
-      } catch (rpcError) {
-        console.log('RPC set_app_context not available, using standard auth:', rpcError)
-        // This is expected if the RPC function doesn't exist
-        // The RLS policies will use auth.uid() instead
-      }
     } catch (error) {
-      console.warn('Failed to set app context:', error)
+      // Silent error handling - if RPC function doesn't exist, we'll fall back
+      console.warn('set_user_context RPC function not available, falling back to basic auth')
     }
-  } else {
-    console.warn('No current user found for app context')
   }
 }
 
@@ -41,13 +26,10 @@ async function setAppContext() {
 
 export async function fetchProjects(companyId?: string): Promise<ProjectWithDetails[]> {
   if (!supabase) {
-    console.warn('Supabase not configured - running in demo mode')
     return []
   }
 
   try {
-    console.log('Fetching projects from Supabase...', { companyId })
-    
     // Set application context for RLS
     await setAppContext()
     let query = supabase
@@ -68,7 +50,6 @@ export async function fetchProjects(companyId?: string): Promise<ProjectWithDeta
           user:users!project_members_user_id_fkey(id, full_name, email)
         )
       `)
-      .eq('status', 'active')
       .order('created_at', { ascending: false })
 
     // Filter by company if provided
@@ -78,10 +59,7 @@ export async function fetchProjects(companyId?: string): Promise<ProjectWithDeta
 
     const { data, error } = await query
 
-    console.log('Supabase response:', { data, error })
-
     if (error) {
-      console.error('Error fetching projects:', error)
       return []
     }
 
@@ -101,23 +79,18 @@ export async function fetchProjects(companyId?: string): Promise<ProjectWithDeta
       })) || []
     })) || []
     
-    console.log('Transformed projects:', transformedData)
     return transformedData
   } catch (error) {
-    console.error('Error fetching projects:', error)
     return []
   }
 }
 
 export async function fetchTasks(projectId?: string): Promise<TaskWithDetails[]> {
   if (!supabase) {
-    console.warn('Supabase not configured - running in demo mode')
     return []
   }
 
   try {
-    console.log('Fetching tasks from Supabase...', { projectId })
-    
     // Set application context for RLS
     await setAppContext()
     let query = supabase
@@ -136,10 +109,7 @@ export async function fetchTasks(projectId?: string): Promise<TaskWithDetails[]>
 
     const { data, error } = await query
 
-    console.log('Supabase tasks response:', { data, error })
-
     if (error) {
-      console.error('Error fetching tasks:', error)
       return []
     }
 
@@ -149,17 +119,14 @@ export async function fetchTasks(projectId?: string): Promise<TaskWithDetails[]>
       comment_count: task.task_comments?.length || 0
     })) || []
     
-    console.log('Transformed tasks:', transformedData)
     return transformedData
   } catch (error) {
-    console.error('Error fetching tasks:', error)
     return []
   }
 }
 
 export async function updateTaskStatus(taskId: string, newStatus: Task['status'], userId: string): Promise<boolean> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return false
   }
 
@@ -172,7 +139,6 @@ export async function updateTaskStatus(taskId: string, newStatus: Task['status']
       .single()
 
     if (!currentTask) {
-      console.error('Task not found')
       return false
     }
 
@@ -186,7 +152,6 @@ export async function updateTaskStatus(taskId: string, newStatus: Task['status']
       .eq('id', taskId)
 
     if (updateError) {
-      console.error('Error updating task status:', updateError)
       return false
     }
 
@@ -203,14 +168,12 @@ export async function updateTaskStatus(taskId: string, newStatus: Task['status']
 
     return true
   } catch (error) {
-    console.error('Error updating task status:', error)
     return false
   }
 }
 
 export async function updateTaskPosition(taskId: string, newPosition: number, newStatus: Task['status'], userId: string): Promise<boolean> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return false
   }
 
@@ -223,7 +186,6 @@ export async function updateTaskPosition(taskId: string, newPosition: number, ne
       .single()
 
     if (!currentTask) {
-      console.error('Task not found')
       return false
     }
 
@@ -238,7 +200,6 @@ export async function updateTaskPosition(taskId: string, newPosition: number, ne
       .eq('id', taskId)
 
     if (updateError) {
-      console.error('Error updating task position:', updateError)
       return false
     }
 
@@ -255,14 +216,12 @@ export async function updateTaskPosition(taskId: string, newPosition: number, ne
 
     return true
   } catch (error) {
-    console.error('Error updating task position:', error)
     return false
   }
 }
 
 export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'updated_at'>, userId: string): Promise<Task | null> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return null
   }
 
@@ -279,7 +238,6 @@ export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'upd
       .single()
 
     if (error) {
-      console.error('Error creating task:', error)
       return null
     }
 
@@ -295,14 +253,12 @@ export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'upd
 
     return data
   } catch (error) {
-    console.error('Error creating task:', error)
     return null
   }
 }
 
 export async function createProject(projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>, userId: string): Promise<{ success: boolean; data?: Project; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
@@ -319,20 +275,17 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
       .single()
 
     if (error) {
-      console.error('Error creating project:', error)
       return { success: false, error: error.message || 'Failed to create project' }
     }
 
     return { success: true, data }
   } catch (error) {
-    console.error('Error creating project:', error)
     return { success: false, error: 'An unexpected error occurred' }
   }
 }
 
 export async function updateProject(projectId: string, projectData: Partial<Project>): Promise<{ success: boolean; data?: Project; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
@@ -348,26 +301,21 @@ export async function updateProject(projectId: string, projectData: Partial<Proj
       .single()
 
     if (error) {
-      console.error('Error updating project:', error)
       return { success: false, error: error.message || 'Failed to update project' }
     }
 
     return { success: true, data }
   } catch (error) {
-    console.error('Error updating project:', error)
     return { success: false, error: 'An unexpected error occurred' }
   }
 }
 
 export async function addProjectManager(projectId: string, userId: string, role: string = 'manager', currentUserId?: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Adding project manager:', { projectId, userId, role, currentUserId })
-    
     // Check if current user is admin (application-level security)
     if (currentUserId) {
       const { data: userData, error: userError } = await supabase
@@ -377,7 +325,6 @@ export async function addProjectManager(projectId: string, userId: string, role:
         .single()
       
       if (userError || !userData || userData.role !== 'admin') {
-        console.error('Access denied: User is not admin')
         return { success: false, error: 'Access denied: Only admin users can manage project users' }
       }
     }
@@ -391,14 +338,11 @@ export async function addProjectManager(projectId: string, userId: string, role:
       })
 
     if (error) {
-      console.error('Error adding project manager:', error)
       return { success: false, error: error.message || 'Failed to add project manager' }
     }
 
-    console.log('Project manager added successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error adding project manager:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -1318,13 +1262,10 @@ export async function checkMultipleUsersTables(): Promise<{ projectManagers: boo
 // Company management functions
 export async function fetchCompanies(): Promise<Company[]> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return []
   }
 
   try {
-    console.log('Fetching companies from database...')
-    
     // Set application context for RLS
     await setAppContext()
     
@@ -1337,7 +1278,6 @@ export async function fetchCompanies(): Promise<Company[]> {
 
     // If that fails, try without the is_active filter
     if (error && error.message.includes('column "is_active" does not exist')) {
-      console.log('is_active column not found, fetching all companies...')
       const result = await supabase
         .from('companies')
         .select('*')
@@ -1347,16 +1287,85 @@ export async function fetchCompanies(): Promise<Company[]> {
       error = result.error
     }
 
-    console.log('Companies query result:', { data, error })
-
     if (error) {
-      console.error('Error fetching companies:', error)
       return []
     }
 
     return data || []
   } catch (error) {
-    console.error('Error fetching companies:', error)
+    return []
+  }
+}
+
+export async function fetchCompaniesWithServices(): Promise<Company[]> {
+  if (!supabase) {
+    return []
+  }
+
+  try {
+    // Set application context for RLS
+    await setAppContext()
+    
+    // First try to fetch with is_active filter
+    let { data, error } = await supabase
+      .from('companies')
+      .select(`
+        *,
+        company_services!company_services_company_id_fkey(
+          service_id,
+          service:services!company_services_service_id_fkey(
+            id,
+            name,
+            description
+          )
+        )
+      `)
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+
+    // If that fails, try without the is_active filter
+    if (error && error.message.includes('column "is_active" does not exist')) {
+      const result = await supabase
+        .from('companies')
+        .select(`
+          *,
+          company_services!company_services_company_id_fkey(
+            service_id,
+            service:services!company_services_service_id_fkey(
+              id,
+              name,
+              description
+            )
+          )
+        `)
+        .order('name', { ascending: true })
+      
+      data = result.data
+      error = result.error
+    }
+
+    if (error) {
+      console.error('Error fetching companies with services:', error)
+      return []
+    }
+
+    // Transform the data to flatten the services structure
+    const transformedData = (data || []).map(company => {
+      const services = company.company_services
+        ?.map((cs: { service_id: string; service: Service }) => cs.service)
+        .filter(Boolean) || []
+      
+      console.log(`Company ${company.name} has ${services.length} services:`, services.map((s: Service) => s.name))
+      
+      return {
+        ...company,
+        services
+      }
+    })
+
+    return transformedData
+  } catch (error) {
+    console.error('Error in fetchCompaniesWithServices:', error)
     return []
   }
 }
@@ -2284,12 +2293,14 @@ export interface Document {
 export interface DocumentFolder {
   id: string
   name: string
-  company_id: string
+  company_id: string | null
   parent_folder_id?: string
   path: string
   created_by: string
   created_at: string
   updated_at: string
+  is_system_folder?: boolean
+  is_readonly?: boolean
 }
 
 // Create a new document record
@@ -2322,13 +2333,11 @@ export async function createDocumentRecord(
       .single()
 
     if (error) {
-      console.error('Error creating document record:', error)
       return { success: false, error: error.message }
     }
 
     return { success: true, document: data }
   } catch (error) {
-    console.error('Error in createDocumentRecord:', error)
     return { success: false, error: 'Failed to create document record' }
   }
 }
@@ -2351,13 +2360,11 @@ export async function getCompanyDocuments(
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching company documents:', error)
       return { success: false, error: error.message }
     }
 
     return { success: true, documents: data || [] }
   } catch (error) {
-    console.error('Error in getCompanyDocuments:', error)
     return { success: false, error: 'Failed to fetch company documents' }
   }
 }
@@ -2375,19 +2382,18 @@ export async function getCompanyFolders(
     let query = supabase
       .from('document_folders')
       .select('*')
-      .eq('company_id', companyId)
+      .or(`company_id.eq.${companyId},is_system_folder.eq.true`)
 
     if (parentFolderPath && parentFolderPath !== '/') {
       // If we have a parent folder path, find the folder with that path and get its ID
       const { data: parentFolder, error: parentError } = await supabase
         .from('document_folders')
         .select('id')
-        .eq('company_id', companyId)
+        .or(`company_id.eq.${companyId},is_system_folder.eq.true`)
         .eq('path', parentFolderPath)
         .single()
 
       if (parentError) {
-        console.error('Error finding parent folder:', parentError)
         return { success: false, error: `Parent folder not found: ${parentError.message}` }
       }
 
@@ -2405,14 +2411,94 @@ export async function getCompanyFolders(
     const { data, error } = await query.order('name', { ascending: true })
 
     if (error) {
-      console.error('Error fetching company folders:', error)
       return { success: false, error: error.message }
     }
 
     return { success: true, folders: data || [] }
   } catch (error) {
-    console.error('Error in getCompanyFolders:', error)
     return { success: false, error: 'Failed to fetch company folders' }
+  }
+}
+
+// Ensure the "Setup Instructions" system folder exists
+export async function ensureSetupInstructionsFolder(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Check if the Setup Instructions folder already exists
+    const { data: existingFolder, error: checkError } = await supabase
+      .from('document_folders')
+      .select('id')
+      .eq('name', 'Setup Instructions')
+      .eq('is_system_folder', true)
+      .single()
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      return { success: false, error: `Error checking for existing folder: ${checkError.message}` }
+    }
+
+    // If folder doesn't exist, create it
+    if (!existingFolder) {
+      const { error: createError } = await supabase
+        .from('document_folders')
+        .insert({
+          name: 'Setup Instructions',
+          company_id: null,
+          parent_folder_id: null,
+          path: '/Setup Instructions',
+          created_by: userId,
+          is_system_folder: true,
+          is_readonly: true
+        })
+
+      if (createError) {
+        return { success: false, error: `Error creating Setup Instructions folder: ${createError.message}` }
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to ensure Setup Instructions folder exists' }
+  }
+}
+
+// Create a system folder that will be visible to all companies
+export async function createSystemFolder(
+  name: string,
+  userId: string,
+  isReadonly: boolean = true
+): Promise<{ success: boolean; folder?: DocumentFolder; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Set application context for RLS
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('document_folders')
+      .insert({
+        name,
+        company_id: null,
+        parent_folder_id: null,
+        path: `/${name}`,
+        created_by: userId,
+        is_system_folder: true,
+        is_readonly: isReadonly
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, folder: data }
+  } catch (error) {
+    return { success: false, error: 'Failed to create system folder' }
   }
 }
 
@@ -2436,19 +2522,23 @@ export async function createFolder(
     // Build path
     let path = `/${name}`
     if (parentFolderId) {
-      // Get parent folder path
+      // Get parent folder path and check if it's a system folder
       const { data: parentFolder, error: parentError } = await supabase
         .from('document_folders')
-        .select('path')
+        .select('path, is_system_folder, is_readonly')
         .eq('id', parentFolderId)
         .single()
       
       if (parentError) {
-        console.error('Error fetching parent folder:', parentError)
         return { success: false, error: `Parent folder error: ${parentError.message}` }
       }
       
       if (parentFolder) {
+        // Check if parent is a readonly system folder
+        if (parentFolder.is_system_folder && parentFolder.is_readonly) {
+          return { success: false, error: 'Cannot create folders inside readonly system folders' }
+        }
+        
         path = `${parentFolder.path}/${name}`
       }
     }
@@ -2529,7 +2619,6 @@ export async function deleteDocument(
       .single()
 
     if (fetchError) {
-      console.error('Error fetching document for deletion:', fetchError)
       return { success: false, error: fetchError.message }
     }
 
@@ -2539,7 +2628,6 @@ export async function deleteDocument(
       .remove([document.file_path])
 
     if (storageError) {
-      console.error('Error deleting file from storage:', storageError)
       // Continue with database deletion even if storage deletion fails
     }
 
@@ -2550,13 +2638,11 @@ export async function deleteDocument(
       .eq('id', documentId)
 
     if (dbError) {
-      console.error('Error deleting document record:', dbError)
       return { success: false, error: dbError.message }
     }
 
     return { success: true }
   } catch (error) {
-    console.error('Error in deleteDocument:', error)
     return { success: false, error: 'Failed to delete document' }
   }
 }
@@ -2570,16 +2656,20 @@ export async function deleteFolder(
       throw new Error('Supabase client not initialized')
     }
 
-    // Get folder path
+    // Get folder path and check if it's a system folder
     const { data: folder, error: fetchError } = await supabase
       .from('document_folders')
-      .select('path, company_id')
+      .select('path, company_id, is_system_folder, is_readonly')
       .eq('id', folderId)
       .single()
 
     if (fetchError) {
-      console.error('Error fetching folder for deletion:', fetchError)
       return { success: false, error: fetchError.message }
+    }
+
+    // Prevent deletion of readonly system folders
+    if (folder.is_system_folder && folder.is_readonly) {
+      return { success: false, error: 'Cannot delete readonly system folders' }
     }
 
     // Delete all documents in this folder and subfolders
@@ -2589,7 +2679,6 @@ export async function deleteFolder(
       .like('folder_path', `${folder.path}%`)
 
     if (docsError) {
-      console.error('Error fetching documents for deletion:', docsError)
       return { success: false, error: docsError.message }
     }
 
@@ -2601,7 +2690,7 @@ export async function deleteFolder(
         .remove(filePaths)
 
       if (storageError) {
-        console.error('Error deleting files from storage:', storageError)
+        // Continue with deletion even if storage deletion fails
       }
     }
 
@@ -2624,13 +2713,11 @@ export async function deleteFolder(
       .eq('id', folderId)
 
     if (folderError) {
-      console.error('Error deleting folder:', folderError)
       return { success: false, error: folderError.message }
     }
 
     return { success: true }
   } catch (error) {
-    console.error('Error in deleteFolder:', error)
     return { success: false, error: 'Failed to delete folder' }
   }
 }
@@ -2651,13 +2738,11 @@ export async function getDocumentById(
       .single()
 
     if (error) {
-      console.error('Error fetching document:', error)
       return { success: false, error: error.message }
     }
 
     return { success: true, document: data }
   } catch (error) {
-    console.error('Error in getDocumentById:', error)
     return { success: false, error: 'Failed to fetch document' }
   }
 }
@@ -2678,13 +2763,11 @@ export async function getFolderById(
       .single()
 
     if (error) {
-      console.error('Error fetching folder:', error)
       return { success: false, error: error.message }
     }
 
     return { success: true, folder: data }
   } catch (error) {
-    console.error('Error in getFolderById:', error)
     return { success: false, error: 'Failed to fetch folder' }
   }
 }
@@ -2707,13 +2790,11 @@ export async function searchDocuments(
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error searching documents:', error)
       return { success: false, error: error.message }
     }
 
     return { success: true, documents: data || [] }
   } catch (error) {
-    console.error('Error in searchDocuments:', error)
     return { success: false, error: 'Failed to search documents' }
   }
 }
@@ -2733,14 +2814,124 @@ export async function getCompanyStorageUsage(
       .eq('company_id', companyId)
 
     if (error) {
-      console.error('Error fetching storage usage:', error)
       return { success: false, error: error.message }
     }
 
     const totalUsage = data?.reduce((sum, doc) => sum + (doc.file_size || 0), 0) || 0
     return { success: true, usage: totalUsage }
   } catch (error) {
-    console.error('Error in getCompanyStorageUsage:', error)
     return { success: false, error: 'Failed to fetch storage usage' }
+  }
+}
+
+// Favorites functions
+export async function addToFavorites(
+  userId: string,
+  itemId: string,
+  itemType: 'document' | 'folder',
+  companyId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { error } = await supabase
+      .from('user_favorites')
+      .insert({
+        user_id: userId,
+        item_id: itemId,
+        item_type: itemType,
+        company_id: companyId
+      })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to add to favorites' }
+  }
+}
+
+export async function removeFromFavorites(
+  userId: string,
+  itemId: string,
+  itemType: 'document' | 'folder'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { error } = await supabase
+      .from('user_favorites')
+      .delete()
+      .eq('user_id', userId)
+      .eq('item_id', itemId)
+      .eq('item_type', itemType)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to remove from favorites' }
+  }
+}
+
+export async function getUserFavorites(
+  userId: string,
+  companyId: string
+): Promise<{ success: boolean; favorites?: Array<{ id: string; item_id: string; item_type: 'document' | 'folder' }>; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('user_favorites')
+      .select('id, item_id, item_type')
+      .eq('user_id', userId)
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, favorites: data || [] }
+  } catch (error) {
+    return { success: false, error: 'Failed to fetch favorites' }
+  }
+}
+
+export async function isFavorited(
+  userId: string,
+  itemId: string,
+  itemType: 'document' | 'folder'
+): Promise<{ success: boolean; isFavorited?: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const { data, error } = await supabase
+      .from('user_favorites')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('item_id', itemId)
+      .eq('item_type', itemType)
+      .single()
+
+    if (error && error.code !== 'PGRST116') {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, isFavorited: !!data }
+  } catch (error) {
+    return { success: false, error: 'Failed to check favorite status' }
   }
 }

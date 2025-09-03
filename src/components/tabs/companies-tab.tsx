@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Building2, Globe, Phone, MapPin, Search, Filter, Briefcase, Settings, Grid3X3, List } from 'lucide-react'
+import { Plus, Edit, Trash2, Building2, Globe, Phone, MapPin, Search, Settings, Grid3X3, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
-import { fetchCompanies, createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices } from '@/lib/database-functions'
+import { createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices, fetchCompaniesWithServices } from '@/lib/database-functions'
 import type { Company, Service } from '@/lib/supabase'
 
 interface CreateCompanyData {
@@ -45,12 +45,13 @@ interface ServiceCategory {
 
 export default function CompaniesTab() {
   const { data: session } = useSession()
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([])
+  const [companies, setCompanies] = useState<(Company & { services?: Service[] })[]>([])
+  const [filteredCompanies, setFilteredCompanies] = useState<(Company & { services?: Service[] })[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [industryFilter, setIndustryFilter] = useState<string>('all')
   const [partnerFilter, setPartnerFilter] = useState<string>('all')
+  const [serviceFilter, setServiceFilter] = useState<string>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -76,7 +77,7 @@ export default function CompaniesTab() {
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('list')
   const [services, setServices] = useState<Service[]>([])
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [showServicesModal, setShowServicesModal] = useState(false)
@@ -88,23 +89,34 @@ export default function CompaniesTab() {
   useEffect(() => {
     if (isAdmin) {
       loadCompanies()
+      loadServices()
     }
   }, [isAdmin])
 
   useEffect(() => {
     filterCompanies()
-  }, [companies, searchTerm, industryFilter, partnerFilter])
+  }, [companies, searchTerm, industryFilter, partnerFilter, serviceFilter])
 
   const loadCompanies = async () => {
     setIsLoading(true)
     try {
-      const companiesData = await fetchCompanies()
+      const companiesData = await fetchCompaniesWithServices()
       setCompanies(companiesData)
     } catch (error) {
       console.error('Error loading companies:', error)
       setError('Failed to load companies')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadServices = async () => {
+    try {
+      const servicesData = await fetchServices()
+      setServices(servicesData)
+    } catch (error) {
+      console.error('Error loading services:', error)
+      setError('Failed to load services')
     }
   }
 
@@ -129,6 +141,13 @@ export default function CompaniesTab() {
     if (partnerFilter !== 'all') {
       const isPartner = partnerFilter === 'partner'
       filtered = filtered.filter(company => company.is_partner === isPartner)
+    }
+
+    // Filter by service
+    if (serviceFilter !== 'all') {
+      filtered = filtered.filter(company => 
+        company.services && company.services.some(service => service.id === serviceFilter)
+      )
     }
 
     setFilteredCompanies(filtered)
@@ -274,15 +293,6 @@ export default function CompaniesTab() {
     )
   }
 
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'Paid Media': return 'bg-blue-100 text-blue-800'
-      case 'Organic': return 'bg-green-100 text-green-800'
-      case 'Creative': return 'bg-purple-100 text-purple-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'Paid Media': return '💰'
@@ -292,19 +302,31 @@ export default function CompaniesTab() {
     }
   }
 
-  const getIndustryColor = (industry: string | undefined) => {
-    switch (industry?.toLowerCase()) {
-      case 'technology':
-        return 'bg-blue-100 text-blue-800'
-      case 'manufacturing':
-        return 'bg-green-100 text-green-800'
-      case 'healthcare':
-        return 'bg-red-100 text-red-800'
-      case 'finance':
-        return 'bg-purple-100 text-purple-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
+  const getTagColor = (serviceId: string) => {
+    const colors = [
+      'bg-blue-100 text-blue-800 border-blue-200',
+      'bg-green-100 text-green-800 border-green-200',
+      'bg-purple-100 text-purple-800 border-purple-200',
+      'bg-orange-100 text-orange-800 border-orange-200',
+      'bg-pink-100 text-pink-800 border-pink-200',
+      'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'bg-teal-100 text-teal-800 border-teal-200',
+      'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'bg-red-100 text-red-800 border-red-200',
+      'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'bg-cyan-100 text-cyan-800 border-cyan-200',
+      'bg-violet-100 text-violet-800 border-violet-200',
+      'bg-amber-100 text-amber-800 border-amber-200',
+      'bg-lime-100 text-lime-800 border-lime-200',
+      'bg-rose-100 text-rose-800 border-rose-200',
+      'bg-sky-100 text-sky-800 border-sky-200'
+    ]
+    // Use service ID to get unique color assignment
+    const hash = serviceId.split('').reduce((acc, char) => {
+      return char.charCodeAt(0) + ((acc << 5) - acc)
+    }, 0)
+    const index = Math.abs(hash) % colors.length
+    return colors[index]
   }
 
   if (!isAdmin) {
@@ -391,6 +413,19 @@ export default function CompaniesTab() {
             <SelectItem value="non-partner">Non-Partners Only</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={serviceFilter} onValueChange={setServiceFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filter by service" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Services</SelectItem>
+            {services.map((service) => (
+              <SelectItem key={service.id} value={service.id}>
+                {service.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Success/Error Messages */}
@@ -406,6 +441,14 @@ export default function CompaniesTab() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Results Count */}
+      <div className="flex items-center justify-between text-sm text-gray-600">
+        <span>
+          Showing {filteredCompanies.length} of {companies.length} companies
+          {(searchTerm || industryFilter !== 'all' || partnerFilter !== 'all' || serviceFilter !== 'all') && ' (filtered)'}
+        </span>
+      </div>
 
       {/* Companies Display */}
       {isLoading ? (
@@ -429,17 +472,13 @@ export default function CompaniesTab() {
                       </CardDescription>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Badge className={getIndustryColor(company.industry)}>
-                      <Briefcase className="h-3 w-3 mr-1" />
-                      {company.industry ?? 'Other'}
-                    </Badge>
-                    {company.is_partner && (
-                      <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                        Partner
-                      </Badge>
-                    )}
-                  </div>
+                                     <div className="flex gap-2">
+                     {company.is_partner && (
+                       <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                         Partner
+                       </Badge>
+                     )}
+                   </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -470,10 +509,22 @@ export default function CompaniesTab() {
                       {company.is_active ? 'Active' : 'Inactive'}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Created:</span>
-                    <span>{new Date(company.created_at).toLocaleDateString()}</span>
-                  </div>
+                                                                           {company.services && company.services.length > 0 && (
+                    <div className="flex items-start justify-between text-sm">
+                      <span className="text-gray-600">Services:</span>
+                      <div className="flex flex-wrap gap-1 max-w-48">
+                        {company.services.map((service) => (
+                          <Badge key={service.id} className={`text-xs font-medium ${getTagColor(service.id)}`}>
+                            {service.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                   <div className="flex items-center justify-between text-sm">
+                     <span className="text-gray-600">Created:</span>
+                     <span>{new Date(company.created_at).toLocaleDateString()}</span>
+                   </div>
                 </div>
                 <div className="flex gap-2 mt-4">
                   <Button
@@ -519,28 +570,36 @@ export default function CompaniesTab() {
                       <Building2 className="h-6 w-6 text-blue-600" />
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-semibold text-lg">{company.name}</h3>
-                        <Badge className={getIndustryColor(company.industry)}>
-                          <Briefcase className="h-3 w-3 mr-1" />
-                          {company.industry ?? 'Other'}
-                        </Badge>
-                        {company.is_partner && (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                            Partner
-                          </Badge>
-                        )}
-                        <Badge variant={company.is_active ? 'default' : 'secondary'}>
-                          {company.is_active ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </div>
+                                             <div className="flex items-center gap-3">
+                         <h3 className="font-semibold text-lg">{company.name}</h3>
+                         {company.is_partner && (
+                           <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                             Partner
+                           </Badge>
+                         )}
+                         <Badge variant={company.is_active ? 'default' : 'secondary'}>
+                           {company.is_active ? 'Active' : 'Inactive'}
+                         </Badge>
+                       </div>
                       <div className="flex items-center gap-6 mt-1 text-sm text-gray-600">
                         <div className="line-clamp-1">
                           {company.description || 'No description available'}
                         </div>
                         <div>Created: {new Date(company.created_at).toLocaleDateString()}</div>
                       </div>
-                      <div className="flex items-center gap-6 mt-2 text-sm">
+                                                                                           {company.services && company.services.length > 0 && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-sm text-gray-600">Services:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {company.services.map((service) => (
+                              <Badge key={service.id} className={`text-xs font-medium ${getTagColor(service.id)}`}>
+                                {service.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                       <div className="flex items-center gap-6 mt-2 text-sm">
                         {company.website && (
                           <div className="flex items-center gap-1">
                             <Globe className="h-3 w-3 text-gray-500" />
@@ -678,11 +737,11 @@ export default function CompaniesTab() {
                    className="col-span-3"
                    rows={2}
                  />
-               </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label htmlFor="is_partner" className="text-right">
-                   Partner Status
-                 </Label>
+                               </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="is_partner" className="text-right">
+                    Partner Status
+                  </Label>
                  <div className="col-span-3 flex items-center space-x-2">
                    <Checkbox
                      id="is_partner"
@@ -788,8 +847,8 @@ export default function CompaniesTab() {
                   className="col-span-3"
                   rows={2}
                 />
-              </div>
-                             <div className="grid grid-cols-4 items-center gap-4">
+                             </div>
+               <div className="grid grid-cols-4 items-center gap-4">
                  <Label htmlFor="edit_status" className="text-right">
                    Status
                  </Label>

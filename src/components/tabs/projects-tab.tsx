@@ -283,21 +283,16 @@ export default function ProjectsTab() {
     const loadData = async () => {
       setLoading(true)
       try {
-        console.log('Loading projects and tasks...')
-        
         // Test database connection first
         await testDatabaseConnection()
         
-        // Get user's company ID for filtering (admins can see all projects, managers can see all company projects)
-        const userCompanyId = (session?.user?.role === 'admin' || session?.user?.role === 'manager') ? undefined : session?.user?.company_id
+        // Get user's company ID for filtering (only non-admin users should be filtered)
+        const userCompanyId = session?.user?.role === 'admin' ? undefined : session?.user?.company_id
         
         const [projectsData, tasksData] = await Promise.all([
           fetchProjects(userCompanyId),
           fetchTasks()
         ])
-        
-        console.log('Projects loaded:', projectsData)
-        console.log('Tasks loaded:', tasksData)
         
         setProjects(projectsData)
         setTasks(tasksData)
@@ -307,11 +302,7 @@ export default function ProjectsTab() {
           setSelectedProject(projectsData[0].id)
         }
       } catch (error) {
-        console.error('Error loading data:', error)
-        // Don't show error to user if we're in demo mode
-        if (error && typeof error === 'object' && 'message' in error) {
-          console.log('Error details:', error.message)
-        }
+        // Handle error silently
       } finally {
         setLoading(false)
       }
@@ -363,7 +354,6 @@ export default function ProjectsTab() {
     try {
       await updateTaskPosition(draggableId, destination.index + 1, destination.droppableId as Task['status'], session.user.id)
     } catch (error) {
-      console.error('Error updating task:', error)
       // Revert optimistic update on error
       setTasks(prevTasks => 
         prevTasks.map(t => t.id === draggableId ? task : t)
@@ -382,7 +372,7 @@ export default function ProjectsTab() {
         setSelectedProject(projectsData[0].id)
       }
     } catch (error) {
-      console.error('Error refreshing projects:', error)
+      // Handle error silently
     }
   }
 
@@ -415,7 +405,7 @@ export default function ProjectsTab() {
         }
       }
     } catch (error) {
-      console.error('Error refreshing data:', error)
+      // Handle error silently
     }
   }
 
@@ -429,7 +419,7 @@ export default function ProjectsTab() {
       const updatedTasks = await fetchTasks(selectedProject)
       setTasks(updatedTasks)
     } catch (error) {
-      console.error('Error refreshing tasks:', error)
+      // Handle error silently
     }
   }
 
@@ -443,7 +433,7 @@ export default function ProjectsTab() {
       const updatedTasks = await fetchTasks(selectedProject)
       setTasks(updatedTasks)
     } catch (error) {
-      console.error('Error refreshing tasks after assignment update:', error)
+      // Handle error silently
     }
   }
 
@@ -455,15 +445,14 @@ export default function ProjectsTab() {
     try {
       const result = await deleteTask(taskId)
       if (result.success) {
-        console.log('Task deleted successfully')
         // Refresh tasks
         const updatedTasks = await fetchTasks(selectedProject)
         setTasks(updatedTasks)
       } else {
-        console.error('Failed to delete task:', result.error)
+        // Handle error silently
       }
     } catch (error) {
-      console.error('Error deleting task:', error)
+      // Handle error silently
     }
   }
 
@@ -481,7 +470,7 @@ export default function ProjectsTab() {
       const projectsData = await fetchProjects()
       setProjects(projectsData)
     } catch (error) {
-      console.error('Error refreshing projects:', error)
+      // Handle error silently
     }
   }
 
@@ -492,7 +481,7 @@ export default function ProjectsTab() {
         const usersData = await fetchUsers()
         setUsers(usersData)
       } catch (error) {
-        console.error('Error loading users:', error)
+        // Handle error silently
       }
     }
     loadUsers()

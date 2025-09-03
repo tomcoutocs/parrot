@@ -74,6 +74,7 @@ export const CompanyCalendarsTab: React.FC = () => {
   const [eventDate, setEventDate] = useState('')
   const [eventStartTime, setEventStartTime] = useState('')
   const [eventEndTime, setEventEndTime] = useState('')
+  const [includeTime, setIncludeTime] = useState(false)
   const [creating, setCreating] = useState(false)
 
   const isAdmin = session?.user?.role === 'admin'
@@ -173,25 +174,52 @@ export const CompanyCalendarsTab: React.FC = () => {
   }
 
   const createEvent = async () => {
-    if (!eventTitle || !eventDate || !eventStartTime || !eventEndTime || !supabase) {
+    if (!eventTitle || !eventDate || !supabase) {
       setError('Please fill in all required fields')
+      return
+    }
+
+    // If time is included, validate time fields
+    if (includeTime && (!eventStartTime || !eventEndTime)) {
+      setError('Please fill in both start and end times')
       return
     }
 
     try {
       setCreating(true)
+      
+      // Prepare the event data
+      const eventData: {
+        title: string
+        description: string
+        start_date: string
+        end_date: string
+        created_by: string | undefined
+        company_id: string
+        start_time?: string
+        end_time?: string
+      } = {
+        title: eventTitle,
+        description: eventDescription,
+        start_date: eventDate,
+        end_date: eventDate, // For now, same day events
+        created_by: session?.user?.id,
+        company_id: selectedCompany
+      }
+
+      // Only include time fields if time is enabled
+      if (includeTime) {
+        eventData.start_time = eventStartTime
+        eventData.end_time = eventEndTime
+      } else {
+        // For all-day events, set default times (00:00:00)
+        eventData.start_time = '00:00:00'
+        eventData.end_time = '23:59:59'
+      }
+
       const { data, error } = await supabase
         .from('company_events')
-        .insert({
-          title: eventTitle,
-          description: eventDescription,
-          start_date: eventDate,
-          end_date: eventDate, // For now, same day events
-          start_time: eventStartTime,
-          end_time: eventEndTime,
-          created_by: session?.user?.id,
-          company_id: selectedCompany
-        })
+        .insert(eventData)
         .select()
         .single()
 
@@ -203,6 +231,7 @@ export const CompanyCalendarsTab: React.FC = () => {
       setEventDate('')
       setEventStartTime('')
       setEventEndTime('')
+      setIncludeTime(false)
       setShowCreateDialog(false)
 
       // Reload events
@@ -394,7 +423,7 @@ export const CompanyCalendarsTab: React.FC = () => {
                     <div className="text-blue-600 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       <span className="truncate">
-                        {formatTime(event.start_time)} - {formatTime(event.end_time)}
+                        {formatEventTime(event.start_time, event.end_time)}
                       </span>
                     </div>
                     {showAllDetails && (
@@ -479,10 +508,12 @@ export const CompanyCalendarsTab: React.FC = () => {
                               <div className="flex items-center gap-2">
                                 <Clock className="w-3 h-3 flex-shrink-0" />
                                 <span>
-                                  {formatTime(event.start_time)} - {formatTime(event.end_time)}
-                                  <span className="ml-2 text-blue-600">
-                                    ({calculateDuration(event.start_time, event.end_time)})
-                                  </span>
+                                  {formatEventTime(event.start_time, event.end_time)}
+                                  {!isAllDayEvent(event.start_time, event.end_time) && (
+                                    <span className="ml-2 text-blue-600">
+                                      ({calculateDuration(event.start_time, event.end_time)})
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                               {event.description && (
@@ -509,7 +540,7 @@ export const CompanyCalendarsTab: React.FC = () => {
                                       <span className="font-medium">Date:</span> {format(parseISO(event.start_date), 'MMM d, yyyy')}
                                     </div>
                                     <div>
-                                      <span className="font-medium">Time Range:</span> {formatTime(event.start_time)} - {formatTime(event.end_time)}
+                                      <span className="font-medium">Time Range:</span> {formatEventTime(event.start_time, event.end_time)}
                                     </div>
                                     <div>
                                       <span className="font-medium">Created by:</span> 
@@ -697,7 +728,22 @@ export const CompanyCalendarsTab: React.FC = () => {
     return time
   }
 
+  const isAllDayEvent = (startTime: string, endTime: string) => {
+    return startTime === '00:00:00' && endTime === '23:59:59'
+  }
+
+  const formatEventTime = (startTime: string, endTime: string) => {
+    if (isAllDayEvent(startTime, endTime)) {
+      return 'All Day'
+    }
+    return `${formatTime(startTime)} - ${formatTime(endTime)}`
+  }
+
   const calculateDuration = (startTime: string, endTime: string) => {
+    if (isAllDayEvent(startTime, endTime)) {
+      return 'All Day'
+    }
+    
     if (startTime.includes(':') && endTime.includes(':')) {
       const [startHours, startMinutes] = startTime.split(':').map(Number)
       const [endHours, endMinutes] = endTime.split(':').map(Number)
@@ -951,7 +997,7 @@ export const CompanyCalendarsTab: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Add New Event</DialogTitle>
             <DialogDescription>
-              Create a new event for your company calendar.
+              Create a new event for your company calendar. Time is optional - uncheck &quot;Include specific time&quot; for all-day events.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -983,32 +1029,44 @@ export const CompanyCalendarsTab: React.FC = () => {
                 onChange={(e) => setEventDate(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="event-start-time">Start Time *</Label>
-                <Input
-                  id="event-start-time"
-                  type="time"
-                  value={eventStartTime}
-                  onChange={(e) => setEventStartTime(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="event-end-time">End Time *</Label>
-                <Input
-                  id="event-end-time"
-                  type="time"
-                  value={eventEndTime}
-                  onChange={(e) => setEventEndTime(e.target.value)}
-                />
-              </div>
+            <div className="flex items-center space-x-2">
+              <input
+                id="include-time"
+                type="checkbox"
+                checked={includeTime}
+                onChange={(e) => setIncludeTime(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="include-time">Include specific time</Label>
             </div>
+            {includeTime && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="event-start-time">Start Time *</Label>
+                  <Input
+                    id="event-start-time"
+                    type="time"
+                    value={eventStartTime}
+                    onChange={(e) => setEventStartTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="event-end-time">End Time *</Label>
+                  <Input
+                    id="event-end-time"
+                    type="time"
+                    value={eventEndTime}
+                    onChange={(e) => setEventEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={createEvent} disabled={creating}>
+            <Button onClick={createEvent} disabled={creating || !eventTitle || !eventDate || (includeTime && (!eventStartTime || !eventEndTime))}>
               {creating ? 'Creating...' : 'Create Event'}
             </Button>
           </DialogFooter>

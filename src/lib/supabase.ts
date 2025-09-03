@@ -4,11 +4,6 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 
-// Debug environment variables
-console.log('Supabase URL:', supabaseUrl)
-console.log('Supabase Key exists:', !!supabaseAnonKey)
-console.log('URL contains placeholder:', supabaseUrl.includes('placeholder'))
-
 // Create a mock client if we're using placeholder values
 export const supabase = supabaseUrl.includes('placeholder') 
   ? null // We'll handle this in components by checking if supabase is null
@@ -23,10 +18,12 @@ export interface Company {
   website?: string
   phone?: string
   address?: string
+  tags?: string[]
   is_active: boolean
   is_partner: boolean
   created_at: string
   updated_at: string
+  services?: Service[]
 }
 
 export interface User {

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useRouter } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
-import AnalyticsTab from '@/components/tabs/analytics-tab'
 import ProjectsTab from '@/components/tabs/projects-tab'
 import FormsTab from '@/components/tabs/forms-tab'
 import UsersTab from '@/components/tabs/users-tab'
@@ -13,6 +12,7 @@ import ServicesTab from '@/components/tabs/services-tab'
 import CalendarTab from '@/components/tabs/calendar-tab'
 import { CompanyCalendarsTab } from '@/components/tabs/company-calendars-tab'
 import DocumentsTab from '@/components/tabs/documents-tab'
+import ProjectOverviewTab from '@/components/tabs/project-overview-tab'
 import DebugTab from '@/components/tabs/debug-tab'
 import { Badge } from '@/components/ui/badge'
 
@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge'
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabType>('analytics')
+  const [activeTab, setActiveTab] = useState<TabType>('projects')
 
   useEffect(() => {
     if (status !== 'loading' && !session) {
@@ -43,9 +43,6 @@ export default function DashboardPage() {
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'analytics':
-        return <AnalyticsTab />
-      
       case 'projects':
         return <ProjectsTab />
       
@@ -64,19 +61,20 @@ export default function DashboardPage() {
       case 'documents':
         return <DocumentsTab />
       
-
-      
       case 'admin':
         return <UsersTab />
       
       case 'companies':
         return <CompaniesTab />
       
+      case 'project-overview':
+        return <ProjectOverviewTab />
+      
       case 'debug':
         return <DebugTab />
       
       default:
-        return <AnalyticsTab />
+        return <ProjectsTab />
     }
   }
 
@@ -84,7 +82,7 @@ export default function DashboardPage() {
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
       <div className="min-h-full">
         {/* Welcome Banner */}
-        {activeTab === 'analytics' && (
+        {activeTab === 'projects' && (
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-6 text-white mb-6">
             <div className="flex items-center justify-between">
               <div>

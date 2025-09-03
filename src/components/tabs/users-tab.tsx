@@ -20,7 +20,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 
 // Available tabs for user permissions
 const availableTabs = [
-  { id: 'analytics', label: 'Analytics', description: 'View analytics and reports' },
   { id: 'projects', label: 'Projects', description: 'Manage projects and tasks' },
   { id: 'forms', label: 'Forms', description: 'Create and manage forms' },
   { id: 'services', label: 'Services', description: 'Manage services' },
@@ -61,6 +60,7 @@ export default function UsersTab() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [companyFilter, setCompanyFilter] = useState<string>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -108,8 +108,25 @@ export default function UsersTab() {
       filtered = filtered.filter(user => user.role === roleFilter)
     }
 
+    // Filter by company
+    if (companyFilter !== 'all') {
+      filtered = filtered.filter(user => {
+        // Check if user has a direct company_id match
+        if (user.company_id === companyFilter) {
+          return true
+        }
+        
+        // For internal users, check if they have the company in their companies array
+        if (user.role === 'internal' && user.companies) {
+          return user.companies.some(company => company.company_id === companyFilter)
+        }
+        
+        return false
+      })
+    }
+
     setFilteredUsers(filtered)
-  }, [users, searchTerm, roleFilter])
+  }, [users, searchTerm, roleFilter, companyFilter])
 
   useEffect(() => {
     filterUsers()
@@ -323,7 +340,7 @@ export default function UsersTab() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -335,18 +352,33 @@ export default function UsersTab() {
             />
           </div>
         </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-            <SelectItem value="manager">Manager</SelectItem>
-            <SelectItem value="user">User</SelectItem>
-            <SelectItem value="internal">Internal</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filter by role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="manager">Manager</SelectItem>
+              <SelectItem value="user">User</SelectItem>
+              <SelectItem value="internal">Internal</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filter by company" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Companies</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Success/Error Messages */}
@@ -362,6 +394,14 @@ export default function UsersTab() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Results Count */}
+      <div className="flex items-center justify-between text-sm text-gray-600">
+        <span>
+          Showing {filteredUsers.length} of {users.length} users
+          {(searchTerm || roleFilter !== 'all' || companyFilter !== 'all') && ' (filtered)'}
+        </span>
+      </div>
 
       {/* Users Display */}
       {isLoading ? (
@@ -799,7 +839,7 @@ export default function UsersTab() {
                       size="sm"
                       onClick={() => setCreateUserData({
                         ...createUserData,
-                        tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'chat']
+                        tab_permissions: ['projects', 'forms', 'services', 'calendar', 'chat']
                       })}
                     >
                       Basic Access
@@ -810,7 +850,7 @@ export default function UsersTab() {
                       size="sm"
                       onClick={() => setCreateUserData({
                         ...createUserData,
-                        tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'documents', 'chat']
+                        tab_permissions: ['projects', 'forms', 'services', 'calendar', 'documents', 'chat']
                       })}
                     >
                       Manager Access
@@ -1079,7 +1119,7 @@ export default function UsersTab() {
                       size="sm"
                       onClick={() => setEditUserData({
                         ...editUserData,
-                        tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'chat']
+                        tab_permissions: ['projects', 'forms', 'services', 'calendar', 'chat']
                       })}
                     >
                       Basic Access
@@ -1090,7 +1130,7 @@ export default function UsersTab() {
                       size="sm"
                       onClick={() => setEditUserData({
                         ...editUserData,
-                        tab_permissions: ['analytics', 'projects', 'forms', 'services', 'calendar', 'documents', 'chat']
+                        tab_permissions: ['projects', 'forms', 'services', 'calendar', 'documents', 'chat']
                       })}
                     >
                       Manager Access

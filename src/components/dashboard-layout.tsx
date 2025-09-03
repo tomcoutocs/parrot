@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useSession, useAuth } from '@/components/providers/session-provider'
 import { useRouter } from 'next/navigation'
 import { 
-  BarChart3, 
   FileText, 
   Settings, 
   Calendar, 
@@ -16,7 +15,8 @@ import {
   LogOut,
   Shield,
   Kanban,
-  Building2
+  Building2,
+  TrendingUp
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,11 +39,11 @@ interface DashboardLayoutProps {
   onTabChange: (tab: TabType) => void
 }
 
-export type TabType = 'analytics' | 'projects' | 'forms' | 'services' | 'calendar' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'debug'
+export type TabType = 'projects' | 'forms' | 'services' | 'calendar' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
 
 const navigationItems = [
-  { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3, roles: ['admin', 'manager', 'user'] },
   { id: 'projects' as TabType, label: 'Projects', icon: Kanban, roles: ['admin', 'manager', 'user'] },
+  { id: 'project-overview' as TabType, label: 'Project Overview', icon: TrendingUp, roles: ['admin', 'manager'] },
   { id: 'forms' as TabType, label: 'Forms', icon: FileText, roles: ['admin', 'manager', 'user'] },
   { id: 'services' as TabType, label: 'Services', icon: Settings, roles: ['admin', 'manager', 'user'] },
   { id: 'calendar' as TabType, label: 'Calendar', icon: Calendar, roles: ['admin', 'manager', 'user'] },

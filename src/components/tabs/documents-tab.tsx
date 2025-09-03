@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { 
   Folder, 
@@ -10,18 +10,36 @@ import {
   Plus, 
   Search, 
   ArrowLeft,
-  HardDrive
+  HardDrive,
+  MoreVertical,
+  File,
+  FileText,
+  FileImage,
+  FileVideo,
+  FileAudio,
+  Archive,
+  Grid3X3,
+  List,
+  Star,
+  Clock,
+  User
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { 
   getCompanyDocuments, 
   getCompanyFolders, 
@@ -30,6 +48,10 @@ import {
   deleteFolder,
   searchDocuments,
   getCompanyStorageUsage,
+  addToFavorites,
+  removeFromFavorites,
+  getUserFavorites,
+  isFavorited,
   type Document,
   type DocumentFolder
 } from '@/lib/database-functions'
@@ -64,6 +86,10 @@ export default function DocumentsTab() {
   const [storageUsage, setStorageUsage] = useState<number>(0)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [favoritesLoading, setFavoritesLoading] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isAdmin = session?.user?.role === 'admin'
@@ -130,6 +156,23 @@ export default function DocumentsTab() {
     }
   }, [selectedCompany])
 
+  const loadFavorites = useCallback(async () => {
+    if (!selectedCompany || !session?.user?.id) return
+
+    setFavoritesLoading(true)
+    try {
+      const result = await getUserFavorites(session.user.id, selectedCompany)
+      if (result.success && result.favorites) {
+        const favoritesSet = new Set(result.favorites.map(fav => fav.itemId))
+        setFavorites(favoritesSet)
+      }
+    } catch (error) {
+      console.error('Error loading favorites:', error)
+    } finally {
+      setFavoritesLoading(false)
+    }
+  }, [selectedCompany, session?.user?.id])
+
   // Load companies for admin
   useEffect(() => {
     if (isAdmin) {
@@ -154,8 +197,9 @@ export default function DocumentsTab() {
     if (selectedCompany) {
       loadDocumentsAndFolders()
       loadStorageUsage()
+      loadFavorites()
     }
-  }, [selectedCompany, currentFolder, loadDocumentsAndFolders, loadStorageUsage])
+  }, [selectedCompany, currentFolder, loadDocumentsAndFolders, loadStorageUsage, loadFavorites])
 
   const loadCompanies = async () => {
     if (!supabase) return
@@ -194,16 +238,70 @@ export default function DocumentsTab() {
     }
   }
 
+  const getCurrentFolderId = async (): Promise<string | undefined> => {
+    if (currentFolder === '/') return undefined
+    
+    try {
+      const { data, error } = await supabase
+        .from('document_folders')
+        .select('id')
+        .or(`company_id.eq.${selectedCompany},is_system_folder.eq.true`)
+        .eq('path', currentFolder)
+        .single()
+
+      if (error) {
+        console.error('Error getting current folder ID:', error)
+        return undefined
+      }
+
+      return data?.id
+    } catch (error) {
+      console.error('Error getting current folder ID:', error)
+      return undefined
+    }
+  }
+
   const handleCreateFolder = async () => {
     if (!newFolderName.trim() || !selectedCompany) return
 
+    // Validate folder name
+    const folderName = newFolderName.trim()
+    if (folderName.length === 0) {
+      setError('Folder name cannot be empty')
+      return
+    }
+    
+    if (folderName.length > 255) {
+      setError('Folder name is too long (maximum 255 characters)')
+      return
+    }
+    
+    // Check for invalid characters
+    if (/[<>:"/\\|?*]/.test(folderName)) {
+      setError('Folder name contains invalid characters')
+      return
+    }
+
     setCreatingFolder(true)
+    setError('') // Clear any previous errors
+    
     try {
+      // Get the current folder's ID if we're not in the root
+      const currentFolderId = await getCurrentFolderId()
+      
+      console.log('Creating folder:', {
+        name: folderName,
+        companyId: selectedCompany,
+        userId: session?.user?.id,
+        parentFolderId: currentFolderId,
+        currentPath: currentFolder
+      })
+      
       const result = await createFolder(
-        newFolderName.trim(),
+        folderName,
         selectedCompany,
         session?.user?.id || '',
-        currentFolder === '/' ? undefined : currentFolder
+        currentFolderId
       )
 
       if (result.success) {
@@ -226,6 +324,12 @@ export default function DocumentsTab() {
     const files = event.target.files
     if (!files || files.length === 0 || !selectedCompany || !supabase) return
 
+    // Check if we're in a system folder
+    if (currentFolder === '/Setup Instructions') {
+      setError('Cannot upload files to system folders')
+      return
+    }
+
     setUploading(true)
     setUploadProgress(0)
 
@@ -233,7 +337,9 @@ export default function DocumentsTab() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
         const fileName = `${Date.now()}-${file.name}`
-        const filePath = `${selectedCompany}/${currentFolder === '/' ? '' : currentFolder}/${fileName}`
+        // Construct the file path properly - remove leading slash from currentFolder if it exists
+        const folderPath = currentFolder === '/' ? '' : currentFolder.replace(/^\//, '')
+        const filePath = `${selectedCompany}/${folderPath}/${fileName}`.replace(/\/+/g, '/').replace(/\/$/, '')
 
         // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
@@ -357,14 +463,100 @@ export default function DocumentsTab() {
   }
 
   const getFileIcon = (fileType: string) => {
-    if (fileType.includes('image')) return '🖼️'
+    if (fileType.startsWith('image/')) return '🖼️'
+    if (fileType.startsWith('video/')) return '🎥'
+    if (fileType.startsWith('audio/')) return '🎵'
     if (fileType.includes('pdf')) return '📄'
     if (fileType.includes('word') || fileType.includes('document')) return '📝'
     if (fileType.includes('excel') || fileType.includes('spreadsheet')) return '📊'
-    if (fileType.includes('powerpoint') || fileType.includes('presentation')) return '📊'
-    if (fileType.includes('zip') || fileType.includes('archive')) return '📦'
+    if (fileType.includes('powerpoint') || fileType.includes('presentation')) return '📈'
+    if (fileType.includes('zip') || fileType.includes('rar') || fileType.includes('archive')) return '📦'
     return '📄'
   }
+
+  const getFileIconComponent = (fileType: string) => {
+    if (fileType.startsWith('image/')) return <FileImage className="h-5 w-5 text-green-600" />
+    if (fileType.startsWith('video/')) return <FileVideo className="h-5 w-5 text-purple-600" />
+    if (fileType.startsWith('audio/')) return <FileAudio className="h-5 w-5 text-orange-600" />
+    if (fileType.includes('pdf')) return <FileText className="h-5 w-5 text-red-600" />
+    if (fileType.includes('word') || fileType.includes('document')) return <FileText className="h-5 w-5 text-blue-600" />
+    if (fileType.includes('excel') || fileType.includes('spreadsheet')) return <FileText className="h-5 w-5 text-green-600" />
+    if (fileType.includes('powerpoint') || fileType.includes('presentation')) return <FileText className="h-5 w-5 text-orange-600" />
+    if (fileType.includes('zip') || fileType.includes('rar') || fileType.includes('archive')) return <Archive className="h-5 w-5 text-gray-600" />
+    return <File className="h-5 w-5 text-gray-600" />
+  }
+
+  const toggleItemSelection = (id: string) => {
+    const newSelected = new Set(selectedItems)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedItems(newSelected)
+  }
+
+  const clearSelection = () => {
+    setSelectedItems(new Set())
+  }
+
+  const toggleFavorite = async (itemId: string, itemType: 'folder' | 'document') => {
+    if (!session?.user?.id || !selectedCompany) return
+
+    try {
+      const isCurrentlyFavorited = favorites.has(itemId)
+      
+      if (isCurrentlyFavorited) {
+        const result = await removeFromFavorites(session.user.id, itemId, itemType)
+        if (result.success) {
+          const newFavorites = new Set(favorites)
+          newFavorites.delete(itemId)
+          setFavorites(newFavorites)
+          setSuccess(`${itemType === 'folder' ? 'Folder' : 'Document'} removed from favorites`)
+        } else {
+          setError(result.error || 'Failed to remove from favorites')
+        }
+      } else {
+        const result = await addToFavorites(session.user.id, itemId, itemType, selectedCompany)
+        if (result.success) {
+          const newFavorites = new Set(favorites)
+          newFavorites.add(itemId)
+          setFavorites(newFavorites)
+          setSuccess(`${itemType === 'folder' ? 'Folder' : 'Document'} added to favorites`)
+        } else {
+          setError(result.error || 'Failed to add to favorites')
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+      setError('Failed to update favorites')
+    }
+  }
+
+  // Sort items to show favorites first
+  const sortedFolders = useMemo(() => {
+    return [...folders].sort((a, b) => {
+      const aIsFavorited = favorites.has(a.id)
+      const bIsFavorited = favorites.has(b.id)
+      
+      if (aIsFavorited && !bIsFavorited) return -1
+      if (!aIsFavorited && bIsFavorited) return 1
+      
+      return a.name.localeCompare(b.name)
+    })
+  }, [folders, favorites])
+
+  const sortedDocuments = useMemo(() => {
+    return [...documents].sort((a, b) => {
+      const aIsFavorited = favorites.has(a.id)
+      const bIsFavorited = favorites.has(b.id)
+      
+      if (aIsFavorited && !bIsFavorited) return -1
+      if (!aIsFavorited && bIsFavorited) return 1
+      
+      return a.name.localeCompare(b.name)
+    })
+  }, [documents, favorites])
 
   if (!session) {
     return (
@@ -455,11 +647,47 @@ export default function DocumentsTab() {
         </div>
         
         <div className="flex items-center space-x-2">
-          <Button onClick={() => setShowCreateFolderModal(true)}>
+          {/* View Mode Toggle */}
+          <div className="flex items-center border rounded-lg">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className="rounded-r-none"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('grid')}
+              className="rounded-l-none"
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Selection Actions */}
+          {selectedItems.size > 0 && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">{selectedItems.size} selected</span>
+              <Button variant="outline" size="sm" onClick={clearSelection}>
+                Clear
+              </Button>
+            </div>
+          )}
+
+          <Button 
+            onClick={() => setShowCreateFolderModal(true)}
+            disabled={currentFolder === '/Setup Instructions'}
+          >
             <Plus className="h-4 w-4 mr-2" />
             New Folder
           </Button>
-          <Button onClick={() => fileInputRef.current?.click()}>
+          <Button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={currentFolder === '/Setup Instructions'}
+          >
             <Upload className="h-4 w-4 mr-2" />
             Upload Files
           </Button>
@@ -571,46 +799,268 @@ export default function DocumentsTab() {
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                     {/* Folders */}
-           {folders.map((folder) => (
-             <Card key={folder.id} className="hover:shadow-md transition-shadow relative">
-               <CardContent className="pt-6">
-                 <div 
-                   className="text-center cursor-pointer"
-                   onClick={() => handleFolderClick(folder)}
-                 >
-                   <Folder className="h-16 w-16 text-blue-500 mx-auto mb-3" />
-                   <h3 className="font-medium text-gray-900 truncate">{folder.name}</h3>
-                   <p className="text-sm text-gray-500">Folder</p>
-                 </div>
-                 
-                 <div className="absolute bottom-2 right-2">
-                   <Button
-                     size="sm"
-                     variant="outline"
-                     onClick={(e) => {
-                       e.stopPropagation() // Prevent folder navigation
-                       setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name })
-                       setShowDeleteModal(true)
-                     }}
-                   >
-                     <Trash2 className="h-3 w-3" />
-                   </Button>
-                 </div>
-               </CardContent>
-             </Card>
-           ))}
+      ) : viewMode === 'list' ? (
+        <div className="bg-white rounded-lg border">
+          {/* List Header */}
+          <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b bg-gray-50 text-sm font-medium text-gray-600">
+            <div className="col-span-6">Name</div>
+            <div className="col-span-2">Owner</div>
+            <div className="col-span-2">Modified</div>
+            <div className="col-span-1">Size</div>
+            <div className="col-span-1"></div>
+          </div>
+
+          {/* Folders */}
+          {sortedFolders.map((folder) => (
+            <div
+              key={folder.id}
+              className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
+                selectedItems.has(folder.id) ? 'bg-blue-50' : ''
+              } ${folder.is_system_folder ? 'bg-yellow-50' : ''} ${favorites.has(folder.id) ? 'bg-yellow-50' : ''}`}
+              onClick={() => handleFolderClick(folder)}
+            >
+              <div className="col-span-6 flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={selectedItems.has(folder.id)}
+                  onChange={(e) => {
+                    e.stopPropagation()
+                    if (!folder.is_system_folder) {
+                      toggleItemSelection(folder.id)
+                    }
+                  }}
+                  disabled={folder.is_system_folder}
+                  className="h-4 w-4 text-blue-600"
+                />
+                <Folder className={`h-5 w-5 ${folder.is_system_folder ? 'text-yellow-600' : 'text-blue-500'}`} />
+                <span className="font-medium text-gray-900">{folder.name}</span>
+                {folder.is_system_folder && (
+                  <Badge variant="outline" className="text-xs">
+                    System
+                  </Badge>
+                )}
+                {favorites.has(folder.id) && (
+                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                )}
+              </div>
+              <div className="col-span-2 flex items-center text-sm text-gray-600">
+                <User className="h-4 w-4 mr-1" />
+                {session.user.name}
+              </div>
+              <div className="col-span-2 flex items-center text-sm text-gray-600">
+                <Clock className="h-4 w-4 mr-1" />
+                {formatDate(folder.created_at)}
+              </div>
+              <div className="col-span-1 text-sm text-gray-600">-</div>
+              <div className="col-span-1 flex justify-end space-x-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleFavorite(folder.id, 'folder')
+                  }}
+                  className="h-8 w-8 p-0"
+                >
+                  <Star className={`h-4 w-4 ${favorites.has(folder.id) ? 'text-yellow-500 fill-current' : 'text-gray-400'}`} />
+                </Button>
+                {!folder.is_system_folder && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name })
+                        setShowDeleteModal(true)
+                      }}>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
+          ))}
 
           {/* Documents */}
-          {documents.map((document) => (
-            <Card key={document.id} className="hover:shadow-md transition-shadow">
+          {sortedDocuments.map((document) => (
+            <div
+              key={document.id}
+              className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 ${
+                selectedItems.has(document.id) ? 'bg-blue-50' : ''
+              } ${favorites.has(document.id) ? 'bg-yellow-50' : ''}`}
+            >
+              <div className="col-span-6 flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={selectedItems.has(document.id)}
+                  onChange={() => toggleItemSelection(document.id)}
+                  className="h-4 w-4 text-blue-600"
+                />
+                {getFileIconComponent(document.file_type)}
+                <span className="font-medium text-gray-900">{document.name}</span>
+                {favorites.has(document.id) && (
+                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                )}
+              </div>
+              <div className="col-span-2 flex items-center text-sm text-gray-600">
+                <User className="h-4 w-4 mr-1" />
+                {session.user.name}
+              </div>
+              <div className="col-span-2 flex items-center text-sm text-gray-600">
+                <Clock className="h-4 w-4 mr-1" />
+                {formatDate(document.created_at)}
+              </div>
+              <div className="col-span-1 text-sm text-gray-600">
+                {formatBytes(document.file_size)}
+              </div>
+              <div className="col-span-1 flex justify-end space-x-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleFavorite(document.id, 'document')}
+                  className="h-8 w-8 p-0"
+                >
+                  <Star className={`h-4 w-4 ${favorites.has(document.id) ? 'text-yellow-500 fill-current' : 'text-gray-400'}`} />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleDownload(document)}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => {
+                      setDeleteTarget({ type: 'file', id: document.id, name: document.name })
+                      setShowDeleteModal(true)
+                    }}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          ))}
+
+          {/* Empty State */}
+          {folders.length === 0 && documents.length === 0 && !searchTerm && (
+            <div className="text-center py-12">
+              <Folder className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No documents or folders</h3>
+              <p className="text-gray-600">Get started by uploading files or creating folders</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {/* Folders */}
+          {sortedFolders.map((folder) => (
+            <Card key={folder.id} className={`hover:shadow-md transition-shadow relative group ${
+              folder.is_system_folder ? 'border-yellow-200 bg-yellow-50' : ''
+            } ${favorites.has(folder.id) ? 'border-yellow-300 bg-yellow-50' : ''}`}>
+              <CardContent className="pt-6">
+                <div 
+                  className="text-center cursor-pointer"
+                  onClick={() => handleFolderClick(folder)}
+                >
+                  <Folder className={`h-16 w-16 mx-auto mb-3 ${
+                    folder.is_system_folder ? 'text-yellow-600' : 'text-blue-500'
+                  }`} />
+                  <h3 className="font-medium text-gray-900 truncate">{folder.name}</h3>
+                  <p className="text-sm text-gray-500">Folder</p>
+                  {folder.is_system_folder && (
+                    <Badge variant="outline" className="text-xs mt-1">
+                      System
+                    </Badge>
+                  )}
+                  {favorites.has(folder.id) && (
+                    <Star className="h-4 w-4 text-yellow-500 fill-current mx-auto mt-1" />
+                  )}
+                </div>
+                
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <input
+                    type="checkbox"
+                    checked={selectedItems.has(folder.id)}
+                    onChange={(e) => {
+                      e.stopPropagation()
+                      if (!folder.is_system_folder) {
+                        toggleItemSelection(folder.id)
+                      }
+                    }}
+                    disabled={folder.is_system_folder}
+                    className="h-4 w-4 text-blue-600"
+                  />
+                </div>
+                
+                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity space-x-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleFavorite(folder.id, 'folder')
+                    }}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Star className={`h-3 w-3 ${favorites.has(folder.id) ? 'text-yellow-500 fill-current' : 'text-gray-400'}`} />
+                  </Button>
+                  {!folder.is_system_folder && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation()
+                          setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name })
+                          setShowDeleteModal(true)
+                        }}>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Documents */}
+          {sortedDocuments.map((document) => (
+            <Card key={document.id} className={`hover:shadow-md transition-shadow group ${
+              favorites.has(document.id) ? 'border-yellow-300 bg-yellow-50' : ''
+            }`}>
               <CardContent className="pt-6">
                 <div className="text-center mb-3">
                   <div className="text-3xl mb-2">{getFileIcon(document.file_type)}</div>
                   <h3 className="font-medium text-gray-900 truncate text-sm">{document.name}</h3>
                   <p className="text-xs text-gray-500">{formatBytes(document.file_size)}</p>
+                  {favorites.has(document.id) && (
+                    <Star className="h-4 w-4 text-yellow-500 fill-current mx-auto mt-1" />
+                  )}
                 </div>
                 
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
@@ -618,7 +1068,7 @@ export default function DocumentsTab() {
                   <span>{document.file_type}</span>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between space-x-1">
                   <Button
                     size="sm"
                     variant="outline"
@@ -631,13 +1081,33 @@ export default function DocumentsTab() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      setDeleteTarget({ type: 'file', id: document.id, name: document.name })
-                      setShowDeleteModal(true)
-                    }}
+                    onClick={() => toggleFavorite(document.id, 'document')}
+                    className="h-8 w-8 p-0"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <Star className={`h-3 w-3 ${favorites.has(document.id) ? 'text-yellow-500 fill-current' : 'text-gray-400'}`} />
                   </Button>
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        <MoreVertical className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleDownload(document)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => {
+                        setDeleteTarget({ type: 'file', id: document.id, name: document.name })
+                        setShowDeleteModal(true)
+                      }}>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </CardContent>
             </Card>
@@ -660,7 +1130,7 @@ export default function DocumentsTab() {
           <DialogHeader>
             <DialogTitle>Create New Folder</DialogTitle>
             <DialogDescription>
-              Create a new folder in the current location
+              Create a new folder in {currentFolder === '/' ? 'the root directory' : `"${currentFolder}"`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
