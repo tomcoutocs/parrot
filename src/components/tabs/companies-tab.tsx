@@ -866,7 +866,7 @@ export default function CompaniesTab() {
                     </div>
                     <div>
                       <Label htmlFor="invite_role" className="text-xs">Role</Label>
-                      <Select value={invitationForm.role} onValueChange={(value) => setInvitationForm(prev => ({ ...prev, role: value as any }))}>
+                                             <Select value={invitationForm.role} onValueChange={(value) => setInvitationForm(prev => ({ ...prev, role: value as 'admin' | 'manager' | 'user' | 'internal' }))}>
                         <SelectTrigger className="text-sm">
                           <SelectValue placeholder="Select role" />
                         </SelectTrigger>

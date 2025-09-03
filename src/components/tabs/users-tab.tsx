@@ -1193,9 +1193,9 @@ export default function UsersTab() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete {selectedUser?.full_name}? This action cannot be undone.
-            </DialogDescription>
+                         <DialogDescription>
+               Are you sure you want to delete &quot;{selectedUser?.full_name}&quot;? This action cannot be undone.
+             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
