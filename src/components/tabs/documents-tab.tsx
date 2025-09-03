@@ -240,6 +240,7 @@ export default function DocumentsTab() {
 
   const getCurrentFolderId = async (): Promise<string | undefined> => {
     if (currentFolder === '/') return undefined
+    if (!supabase) return undefined
     
     try {
       const { data, error } = await supabase

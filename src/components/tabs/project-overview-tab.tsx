@@ -128,7 +128,7 @@ export default function ProjectOverviewTab() {
        setProjects(allProjects)
        
                // Debug logging
-        console.log('Projects fetched:', allProjects.length, allProjects.map(p => ({ id: p.id, name: p.name, title: p.title })))
+        console.log('Projects fetched:', allProjects.length, allProjects.map(p => ({ id: p.id, name: p.name })))
         console.log('Companies fetched:', allCompanies.length, allCompanies.map(c => ({ id: c.id, name: c.name })))
         console.log('Tasks fetched:', allTasks.length)
         console.log('Task statuses:', [...new Set(allTasks.map(t => t.status))])
@@ -159,10 +159,10 @@ export default function ProjectOverviewTab() {
 
   // Calculate statistics
   const totalTasks = tasks.length
-  const activeTasks = tasks.filter(t => t.status === 'active' || t.status === 'in_progress').length
-  const completedTasks = tasks.filter(t => t.status === 'completed' || t.status === 'done').length
+  const activeTasks = tasks.filter(t => t.status === 'todo' || t.status === 'in_progress').length
+  const completedTasks = tasks.filter(t => t.status === 'done').length
   const overdueTasks = tasks.filter(t => {
-    if ((t.status === 'active' || t.status === 'in_progress' || t.status === 'todo') && t.due_date) {
+    if ((t.status === 'todo' || t.status === 'in_progress') && t.due_date) {
       return new Date(t.due_date) < new Date()
     }
     return false
@@ -187,12 +187,12 @@ export default function ProjectOverviewTab() {
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'No due date'
     return new Date(dateString).toLocaleDateString()
   }
 
-  const isOverdue = (dueDate: string) => {
+  const isOverdue = (dueDate: string | undefined) => {
     if (!dueDate) return false
     return new Date(dueDate) < new Date()
   }
