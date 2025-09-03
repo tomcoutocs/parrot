@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Building2, Globe, Phone, MapPin, Search, Settings, Grid3X3, List, X } from 'lucide-react'
+import { Plus, Edit, Trash2, Building2, Search, Settings, Grid3X3, List, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,16 +14,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
-import { createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices, fetchCompaniesWithServices } from '@/lib/database-functions'
+import { createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices, fetchCompaniesWithServices } from '@/lib/simplified-database-functions'
 import type { Company, Service } from '@/lib/supabase'
 
 interface CreateCompanyData {
   name: string
-  description?: string
-  industry?: string
-  website?: string
-  phone?: string
-  address?: string
   is_partner?: boolean
   userInvitations?: Array<{
     email: string
@@ -34,11 +29,6 @@ interface CreateCompanyData {
 
 interface EditCompanyData {
   name: string
-  description?: string
-  industry?: string
-  website?: string
-  phone?: string
-  address?: string
   is_active: boolean
   is_partner: boolean
 }
@@ -54,7 +44,6 @@ export default function CompaniesTab() {
   const [filteredCompanies, setFilteredCompanies] = useState<(Company & { services?: Service[] })[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [industryFilter, setIndustryFilter] = useState<string>('all')
   const [partnerFilter, setPartnerFilter] = useState<string>('all')
   const [serviceFilter, setServiceFilter] = useState<string>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -63,21 +52,11 @@ export default function CompaniesTab() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [createCompanyData, setCreateCompanyData] = useState<CreateCompanyData>({
     name: '',
-    description: '',
-    industry: '',
-    website: '',
-    phone: '',
-    address: '',
     is_partner: false,
     userInvitations: []
   })
   const [editCompanyData, setEditCompanyData] = useState<EditCompanyData>({
     name: '',
-    description: '',
-    industry: '',
-    website: '',
-    phone: '',
-    address: '',
     is_active: true,
     is_partner: false
   })
@@ -107,7 +86,7 @@ export default function CompaniesTab() {
 
   useEffect(() => {
     filterCompanies()
-  }, [companies, searchTerm, industryFilter, partnerFilter, serviceFilter])
+  }, [companies, searchTerm, partnerFilter, serviceFilter])
 
   const loadCompanies = async () => {
     setIsLoading(true)
@@ -138,15 +117,8 @@ export default function CompaniesTab() {
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(company =>
-        company.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        company.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        company.industry?.toLowerCase().includes(searchTerm.toLowerCase())
+        company.name.toLowerCase().includes(searchTerm.toLowerCase())
       )
-    }
-
-    // Filter by industry
-    if (industryFilter !== 'all') {
-      filtered = filtered.filter(company => company.industry === industryFilter)
     }
 
     // Filter by partner status
@@ -205,7 +177,7 @@ export default function CompaniesTab() {
         }
 
         setSuccess('Company created successfully')
-        setCreateCompanyData({ name: '', description: '', industry: '', website: '', phone: '', address: '', is_partner: false, userInvitations: [] })
+        setCreateCompanyData({ name: '', is_partner: false, userInvitations: [] })
         setShowCreateModal(false)
         await loadCompanies()
       } else {
@@ -266,11 +238,6 @@ export default function CompaniesTab() {
     setSelectedCompany(company)
     setEditCompanyData({
       name: company.name,
-      description: company.description || '',
-      industry: company.industry || '',
-      website: company.website || '',
-      phone: company.phone || '',
-      address: company.address || '',
       is_active: company.is_active,
       is_partner: company.is_partner
     })
@@ -379,8 +346,6 @@ export default function CompaniesTab() {
     )
   }
 
-  const industries = Array.from(new Set(companies.map(c => c.industry).filter(Boolean)))
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -428,19 +393,6 @@ export default function CompaniesTab() {
             />
           </div>
         </div>
-        <Select value={industryFilter} onValueChange={setIndustryFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by industry" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Industries</SelectItem>
-            {industries.map((industry) => (
-              <SelectItem key={industry} value={industry || ''}>
-                {industry}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select value={partnerFilter} onValueChange={setPartnerFilter}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Filter by partner status" />
@@ -484,7 +436,7 @@ export default function CompaniesTab() {
       <div className="flex items-center justify-between text-sm text-gray-600">
         <span>
           Showing {filteredCompanies.length} of {companies.length} companies
-          {(searchTerm || industryFilter !== 'all' || partnerFilter !== 'all' || serviceFilter !== 'all') && ' (filtered)'}
+          {(searchTerm || partnerFilter !== 'all' || serviceFilter !== 'all') && ' (filtered)'}
         </span>
       </div>
 
@@ -503,12 +455,12 @@ export default function CompaniesTab() {
                     <div className="p-2 bg-blue-100 rounded-lg">
                       <Building2 className="h-6 w-6 text-blue-600" />
                     </div>
-                    <div>
-                      <CardTitle className="text-lg">{company.name}</CardTitle>
-                      <CardDescription className="line-clamp-2">
-                        {company.description || 'No description available'}
-                      </CardDescription>
-                    </div>
+                                         <div>
+                       <CardTitle className="text-lg">{company.name}</CardTitle>
+                       <CardDescription className="line-clamp-2">
+                         {company.is_partner ? 'Partner Company' : 'Client Company'}
+                       </CardDescription>
+                     </div>
                   </div>
                                      <div className="flex gap-2">
                      {company.is_partner && (
@@ -520,50 +472,30 @@ export default function CompaniesTab() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {company.website && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Globe className="h-3 w-3 text-gray-500" />
-                      <a href={company.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                        {company.website}
-                      </a>
-                    </div>
-                  )}
-                  {company.phone && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-3 w-3 text-gray-500" />
-                      <span>{company.phone}</span>
-                    </div>
-                  )}
-                  {company.address && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin className="h-3 w-3 text-gray-500" />
-                      <span className="text-gray-600">{company.address}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Status:</span>
-                    <Badge variant={company.is_active ? 'default' : 'secondary'}>
-                      {company.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                                                                           {company.services && company.services.length > 0 && (
-                    <div className="flex items-start justify-between text-sm">
-                      <span className="text-gray-600">Services:</span>
-                      <div className="flex flex-wrap gap-1 max-w-48">
-                        {company.services.map((service) => (
-                          <Badge key={service.id} className={`text-xs font-medium ${getTagColor(service.id)}`}>
-                            {service.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                                 <div className="space-y-2">
+                   <div className="flex items-center justify-between text-sm">
+                     <span className="text-gray-600">Status:</span>
+                     <Badge variant={company.is_active ? 'default' : 'secondary'}>
+                       {company.is_active ? 'Active' : 'Inactive'}
+                     </Badge>
+                   </div>
+                   {company.services && company.services.length > 0 && (
+                     <div className="flex items-start justify-between text-sm">
+                       <span className="text-gray-600">Services:</span>
+                       <div className="flex flex-wrap gap-1 max-w-48">
+                         {company.services.map((service) => (
+                           <Badge key={service.id} className={`text-xs font-medium ${getTagColor(service.id)}`}>
+                             {service.name}
+                           </Badge>
+                         ))}
+                       </div>
+                     </div>
+                   )}
                    <div className="flex items-center justify-between text-sm">
                      <span className="text-gray-600">Created:</span>
                      <span>{new Date(company.created_at).toLocaleDateString()}</span>
                    </div>
-                </div>
+                 </div>
                 <div className="flex gap-2 mt-4">
                   <Button
                     variant="outline"
@@ -598,17 +530,17 @@ export default function CompaniesTab() {
           ))}
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredCompanies.map((company) => (
-            <Card key={company.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Building2 className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                                             <div className="flex items-center gap-3">
+                 <div className="space-y-1">
+           {filteredCompanies.map((company) => (
+             <Card key={company.id} className="hover:shadow-md transition-shadow">
+               <CardContent className="p-3">
+                                 <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 bg-blue-100 rounded-lg">
+                       <Building2 className="h-6 w-6 text-blue-600" />
+                     </div>
+                                         <div className="flex-1">
+                       <div className="flex items-center gap-3">
                          <h3 className="font-semibold text-lg">{company.name}</h3>
                          {company.is_partner && (
                            <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
@@ -619,47 +551,25 @@ export default function CompaniesTab() {
                            {company.is_active ? 'Active' : 'Inactive'}
                          </Badge>
                        </div>
-                      <div className="flex items-center gap-6 mt-1 text-sm text-gray-600">
-                        <div className="line-clamp-1">
-                          {company.description || 'No description available'}
-                        </div>
-                        <div>Created: {new Date(company.created_at).toLocaleDateString()}</div>
-                      </div>
-                                                                                           {company.services && company.services.length > 0 && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="text-sm text-gray-600">Services:</span>
-                          <div className="flex flex-wrap gap-1">
-                            {company.services.map((service) => (
-                              <Badge key={service.id} className={`text-xs font-medium ${getTagColor(service.id)}`}>
-                                {service.name}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                       <div className="flex items-center gap-6 mt-2 text-sm">
-                        {company.website && (
-                          <div className="flex items-center gap-1">
-                            <Globe className="h-3 w-3 text-gray-500" />
-                            <a href={company.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                              {company.website}
-                            </a>
-                          </div>
-                        )}
-                        {company.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3 text-gray-500" />
-                            <span>{company.phone}</span>
-                          </div>
-                        )}
-                        {company.address && (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-gray-500" />
-                            <span className="text-gray-600">{company.address}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                       <div className="flex items-center gap-6 mt-1 text-sm text-gray-600">
+                         <div className="line-clamp-1">
+                           {company.is_partner ? 'Partner Company' : 'Client Company'}
+                         </div>
+                         <div>Created: {new Date(company.created_at).toLocaleDateString()}</div>
+                       </div>
+                       {company.services && company.services.length > 0 && (
+                         <div className="flex items-center gap-2 mt-2">
+                           <span className="text-sm text-gray-600">Services:</span>
+                           <div className="flex flex-wrap gap-1">
+                             {company.services.map((service) => (
+                               <Badge key={service.id} className={`text-xs font-medium ${getTagColor(service.id)}`}>
+                                 {service.name}
+                               </Badge>
+                             ))}
+                           </div>
+                         </div>
+                       )}
+                     </div>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -718,81 +628,22 @@ export default function CompaniesTab() {
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="description" className="text-right">
-                  Description
+                <Label htmlFor="is_partner" className="text-right">
+                  Partner Status
                 </Label>
-                <Textarea
-                  id="description"
-                  value={createCompanyData.description}
-                  onChange={(e) => setCreateCompanyData({ ...createCompanyData, description: e.target.value })}
-                  className="col-span-3"
-                  rows={3}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="industry" className="text-right">
-                  Industry
-                </Label>
-                <Input
-                  id="industry"
-                  value={createCompanyData.industry}
-                  onChange={(e) => setCreateCompanyData({ ...createCompanyData, industry: e.target.value })}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="website" className="text-right">
-                  Website
-                </Label>
-                <Input
-                  id="website"
-                  type="url"
-                  value={createCompanyData.website}
-                  onChange={(e) => setCreateCompanyData({ ...createCompanyData, website: e.target.value })}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="phone" className="text-right">
-                  Phone
-                </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={createCompanyData.phone}
-                  onChange={(e) => setCreateCompanyData({ ...createCompanyData, phone: e.target.value })}
-                  className="col-span-3"
-                />
-              </div>
-                             <div className="grid grid-cols-4 items-center gap-4">
-                 <Label htmlFor="address" className="text-right">
-                   Address
-                 </Label>
-                 <Textarea
-                   id="address"
-                   value={createCompanyData.address}
-                   onChange={(e) => setCreateCompanyData({ ...createCompanyData, address: e.target.value })}
-                   className="col-span-3"
-                   rows={2}
+               <div className="col-span-3 flex items-center space-x-2">
+                 <Checkbox
+                   id="is_partner"
+                   checked={createCompanyData.is_partner}
+                   onCheckedChange={(checked) => 
+                     setCreateCompanyData(prev => ({ ...prev, is_partner: !!checked }))
+                   }
                  />
-                               </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="is_partner" className="text-right">
-                    Partner Status
-                  </Label>
-                 <div className="col-span-3 flex items-center space-x-2">
-                   <Checkbox
-                     id="is_partner"
-                     checked={createCompanyData.is_partner}
-                     onCheckedChange={(checked) => 
-                       setCreateCompanyData(prev => ({ ...prev, is_partner: !!checked }))
-                     }
-                   />
-                   <Label htmlFor="is_partner" className="text-sm font-normal">
-                     Mark as Partner Company
-                   </Label>
-                 </div>
+                 <Label htmlFor="is_partner" className="text-sm font-normal">
+                   Mark as Partner Company
+                 </Label>
                </div>
+             </div>
             </div>
 
             {/* User Invitations Section */}
@@ -935,65 +786,6 @@ export default function CompaniesTab() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit_description" className="text-right">
-                  Description
-                </Label>
-                <Textarea
-                  id="edit_description"
-                  value={editCompanyData.description}
-                  onChange={(e) => setEditCompanyData({ ...editCompanyData, description: e.target.value })}
-                  className="col-span-3"
-                  rows={3}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit_industry" className="text-right">
-                  Industry
-                </Label>
-                <Input
-                  id="edit_industry"
-                  value={editCompanyData.industry}
-                  onChange={(e) => setEditCompanyData({ ...editCompanyData, industry: e.target.value })}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit_website" className="text-right">
-                  Website
-                </Label>
-                <Input
-                  id="edit_website"
-                  type="url"
-                  value={editCompanyData.website}
-                  onChange={(e) => setEditCompanyData({ ...editCompanyData, website: e.target.value })}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit_phone" className="text-right">
-                  Phone
-                </Label>
-                <Input
-                  id="edit_phone"
-                  type="tel"
-                  value={editCompanyData.phone}
-                  onChange={(e) => setEditCompanyData({ ...editCompanyData, phone: e.target.value })}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit_address" className="text-right">
-                  Address
-                </Label>
-                <Textarea
-                  id="edit_address"
-                  value={editCompanyData.address}
-                  onChange={(e) => setEditCompanyData({ ...editCompanyData, address: e.target.value })}
-                  className="col-span-3"
-                  rows={2}
-                />
-                             </div>
                <div className="grid grid-cols-4 items-center gap-4">
                  <Label htmlFor="edit_status" className="text-right">
                    Status

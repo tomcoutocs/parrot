@@ -87,7 +87,6 @@ export default function DocumentsTab() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [favoritesLoading, setFavoritesLoading] = useState(false)
   
@@ -488,17 +487,11 @@ export default function DocumentsTab() {
   }
 
   const toggleItemSelection = (id: string) => {
-    const newSelected = new Set(selectedItems)
-    if (newSelected.has(id)) {
-      newSelected.delete(id)
-    } else {
-      newSelected.add(id)
-    }
-    setSelectedItems(newSelected)
+    // Removed selection functionality
   }
 
   const clearSelection = () => {
-    setSelectedItems(new Set())
+    // Removed selection functionality
   }
 
   const toggleFavorite = async (itemId: string, itemType: 'folder' | 'document') => {
@@ -599,8 +592,8 @@ export default function DocumentsTab() {
         )}
       </div>
 
-      {/* Storage Usage */}
-      <Card>
+      {/* Storage Usage - Hidden from view but still tracked in backend */}
+      {/* <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center">
             <HardDrive className="h-5 w-5 mr-2" />
@@ -625,7 +618,7 @@ export default function DocumentsTab() {
             </Badge>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Search and Actions */}
       <div className="flex items-center justify-between">
@@ -668,15 +661,8 @@ export default function DocumentsTab() {
             </Button>
           </div>
 
-          {/* Selection Actions */}
-          {selectedItems.size > 0 && (
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">{selectedItems.size} selected</span>
-              <Button variant="outline" size="sm" onClick={clearSelection}>
-                Clear
-              </Button>
-            </div>
-          )}
+                     {/* Selection Actions */}
+           {/* Removed selection functionality */}
 
           <Button 
             onClick={() => setShowCreateFolderModal(true)}
@@ -815,26 +801,14 @@ export default function DocumentsTab() {
           {sortedFolders.map((folder) => (
             <div
               key={folder.id}
-              className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
-                selectedItems.has(folder.id) ? 'bg-blue-50' : ''
-              } ${folder.is_system_folder ? 'bg-yellow-50' : ''} ${favorites.has(folder.id) ? 'bg-yellow-50' : ''}`}
+                             className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
+                 folder.is_system_folder ? 'bg-yellow-50' : ''
+               } ${favorites.has(folder.id) ? 'bg-yellow-50' : ''}`}
               onClick={() => handleFolderClick(folder)}
             >
-              <div className="col-span-6 flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={selectedItems.has(folder.id)}
-                  onChange={(e) => {
-                    e.stopPropagation()
-                    if (!folder.is_system_folder) {
-                      toggleItemSelection(folder.id)
-                    }
-                  }}
-                  disabled={folder.is_system_folder}
-                  className="h-4 w-4 text-blue-600"
-                />
-                <Folder className={`h-5 w-5 ${folder.is_system_folder ? 'text-yellow-600' : 'text-blue-500'}`} />
-                <span className="font-medium text-gray-900">{folder.name}</span>
+                             <div className="col-span-6 flex items-center space-x-3">
+                 <Folder className={`h-5 w-5 ${folder.is_system_folder ? 'text-yellow-600' : 'text-blue-500'}`} />
+                 <span className="font-medium text-gray-900">{folder.name}</span>
                 {folder.is_system_folder && (
                   <Badge variant="outline" className="text-xs">
                     System
@@ -896,19 +870,13 @@ export default function DocumentsTab() {
           {sortedDocuments.map((document) => (
             <div
               key={document.id}
-              className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 ${
-                selectedItems.has(document.id) ? 'bg-blue-50' : ''
-              } ${favorites.has(document.id) ? 'bg-yellow-50' : ''}`}
+                             className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 ${
+                 favorites.has(document.id) ? 'bg-yellow-50' : ''
+               }`}
             >
-              <div className="col-span-6 flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  checked={selectedItems.has(document.id)}
-                  onChange={() => toggleItemSelection(document.id)}
-                  className="h-4 w-4 text-blue-600"
-                />
-                {getFileIconComponent(document.file_type)}
-                <span className="font-medium text-gray-900">{document.name}</span>
+                             <div className="col-span-6 flex items-center space-x-3">
+                 {getFileIconComponent(document.file_type)}
+                 <span className="font-medium text-gray-900">{document.name}</span>
                 {favorites.has(document.id) && (
                   <Star className="h-4 w-4 text-yellow-500 fill-current" />
                 )}
@@ -992,24 +960,9 @@ export default function DocumentsTab() {
                   {favorites.has(folder.id) && (
                     <Star className="h-4 w-4 text-yellow-500 fill-current mx-auto mt-1" />
                   )}
-                </div>
-                
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <input
-                    type="checkbox"
-                    checked={selectedItems.has(folder.id)}
-                    onChange={(e) => {
-                      e.stopPropagation()
-                      if (!folder.is_system_folder) {
-                        toggleItemSelection(folder.id)
-                      }
-                    }}
-                    disabled={folder.is_system_folder}
-                    className="h-4 w-4 text-blue-600"
-                  />
-                </div>
-                
-                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity space-x-1">
+                                 </div>
+                 
+                 <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity space-x-1">
                   <Button
                     size="sm"
                     variant="outline"

@@ -2386,22 +2386,30 @@ export async function getCompanyFolders(
 
     if (parentFolderPath && parentFolderPath !== '/') {
       // If we have a parent folder path, find the folder with that path and get its ID
-      const { data: parentFolder, error: parentError } = await supabase
+      const { data: parentFolders, error: parentError } = await supabase
         .from('document_folders')
-        .select('id')
+        .select('id, company_id')
         .or(`company_id.eq.${companyId},is_system_folder.eq.true`)
         .eq('path', parentFolderPath)
-        .single()
 
       if (parentError) {
         return { success: false, error: `Parent folder not found: ${parentError.message}` }
       }
 
-      if (parentFolder) {
-        query = query.eq('parent_folder_id', parentFolder.id)
-      } else {
+      // Check if we found exactly one parent folder
+      if (!parentFolders || parentFolders.length === 0) {
         // If parent folder not found, return empty result
         return { success: true, folders: [] }
+      }
+
+      if (parentFolders.length > 1) {
+        // If multiple folders found, use the first one (company-specific takes precedence)
+        const companyFolder = parentFolders.find(folder => folder.company_id === companyId)
+        const parentFolder = companyFolder || parentFolders[0]
+        query = query.eq('parent_folder_id', parentFolder.id)
+      } else {
+        // Single folder found
+        query = query.eq('parent_folder_id', parentFolders[0].id)
       }
     } else {
       // Root level folders (no parent)

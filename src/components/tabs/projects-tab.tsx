@@ -35,16 +35,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { format } from 'date-fns'
 import { Task, TaskWithDetails, Project, ProjectWithDetails, User } from '@/lib/supabase'
-import { 
-  fetchProjects, 
-  fetchTasks, 
-  fetchUsers,
+import {
+  fetchProjectsOptimized, 
+  fetchTasksOptimized, 
+  fetchUsersOptimized,
   updateTaskPosition, 
-  subscribeToTasks, 
-  subscribeToProjects,
+  subscribeToTasksOptimized, 
+  subscribeToProjectsOptimized,
   testDatabaseConnection,
-  deleteTask
-} from '@/lib/database-functions'
+  deleteTask,
+  invalidateProjectCache
+} from '@/lib/simplified-database-functions'
+import type { Subscription } from '@/lib/performance-optimizations'
 import CreateProjectModal from '@/components/modals/create-project-modal'
 import CreateTaskModal from '@/components/modals/create-task-modal'
 import EditProjectModal from '@/components/modals/edit-project-modal'
@@ -290,8 +292,8 @@ export default function ProjectsTab() {
         const userCompanyId = session?.user?.role === 'admin' ? undefined : session?.user?.company_id
         
         const [projectsData, tasksData] = await Promise.all([
-          fetchProjects(userCompanyId),
-          fetchTasks()
+          fetchProjectsOptimized(userCompanyId),
+          fetchTasksOptimized()
         ])
         
         setProjects(projectsData)
@@ -315,17 +317,32 @@ export default function ProjectsTab() {
   useEffect(() => {
     if (!selectedProject) return
 
-    const tasksSubscription = subscribeToTasks(selectedProject, (updatedTasks) => {
-      setTasks(updatedTasks)
-    })
+    let tasksSubscription: Subscription | null = null
+    let projectsSubscription: Subscription | null = null
 
-    const projectsSubscription = subscribeToProjects((updatedProjects) => {
-      setProjects(updatedProjects)
-    })
+         try {
+       tasksSubscription = subscribeToTasksOptimized(selectedProject, (updatedTasks) => {
+         setTasks(updatedTasks)
+       })
+
+       projectsSubscription = subscribeToProjectsOptimized((updatedProjects) => {
+         setProjects(updatedProjects)
+       })
+     } catch (error) {
+       console.error('Error setting up subscriptions:', error)
+     }
 
     return () => {
-      tasksSubscription?.unsubscribe()
-      projectsSubscription?.unsubscribe()
+      try {
+        if (tasksSubscription && typeof tasksSubscription.unsubscribe === 'function') {
+          tasksSubscription.unsubscribe()
+        }
+        if (projectsSubscription && typeof projectsSubscription.unsubscribe === 'function') {
+          projectsSubscription.unsubscribe()
+        }
+      } catch (error) {
+        console.error('Error cleaning up subscriptions:', error)
+      }
     }
   }, [selectedProject])
 
@@ -364,7 +381,7 @@ export default function ProjectsTab() {
   const handleProjectCreated = async () => {
     // Refresh projects list
     try {
-      const projectsData = await fetchProjects()
+      const projectsData = await fetchProjectsOptimized()
       setProjects(projectsData)
       
       // Select the newly created project if it's the first one
@@ -385,8 +402,8 @@ export default function ProjectsTab() {
     // Refresh tasks and projects list
     try {
       const [tasksData, projectsData] = await Promise.all([
-        fetchTasks(selectedProject),
-        fetchProjects()
+        fetchTasksOptimized(selectedProject),
+        fetchProjectsOptimized()
       ])
       setTasks(tasksData)
       setProjects(projectsData)
@@ -416,7 +433,7 @@ export default function ProjectsTab() {
 
   const handleTaskUpdated = async () => {
     try {
-      const updatedTasks = await fetchTasks(selectedProject)
+      const updatedTasks = await fetchTasksOptimized(selectedProject)
       setTasks(updatedTasks)
     } catch (error) {
       // Handle error silently
@@ -430,7 +447,7 @@ export default function ProjectsTab() {
 
   const handleAssignmentsUpdated = async () => {
     try {
-      const updatedTasks = await fetchTasks(selectedProject)
+      const updatedTasks = await fetchTasksOptimized(selectedProject)
       setTasks(updatedTasks)
     } catch (error) {
       // Handle error silently
@@ -446,7 +463,7 @@ export default function ProjectsTab() {
       const result = await deleteTask(taskId)
       if (result.success) {
         // Refresh tasks
-        const updatedTasks = await fetchTasks(selectedProject)
+        const updatedTasks = await fetchTasksOptimized(selectedProject)
         setTasks(updatedTasks)
       } else {
         // Handle error silently
@@ -467,7 +484,7 @@ export default function ProjectsTab() {
   const handleProjectUpdated = async () => {
     // Refresh projects list
     try {
-      const projectsData = await fetchProjects()
+      const projectsData = await fetchProjectsOptimized()
       setProjects(projectsData)
     } catch (error) {
       // Handle error silently
@@ -478,7 +495,7 @@ export default function ProjectsTab() {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        const usersData = await fetchUsers()
+        const usersData = await fetchUsersOptimized()
         setUsers(usersData)
       } catch (error) {
         // Handle error silently

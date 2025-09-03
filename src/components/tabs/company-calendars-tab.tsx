@@ -51,7 +51,7 @@ interface Company {
 
 type FilterType = 'today' | 'this-week' | 'this-month' | 'all'
 
-export const CompanyCalendarsTab: React.FC = () => {
+export default function CompanyCalendarsTab() {
   const { data: session, status } = useSession()
   const [events, setEvents] = useState<CompanyEvent[]>([])
   const [companies, setCompanies] = useState<Company[]>([])

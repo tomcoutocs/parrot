@@ -16,7 +16,8 @@ import {
   Shield,
   Kanban,
   Building2,
-  TrendingUp
+  TrendingUp,
+  Bug
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,6 +31,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 
 
@@ -52,6 +59,7 @@ const navigationItems = [
 
   { id: 'admin' as TabType, label: 'Users', icon: Users, roles: ['admin'] },
   { id: 'companies' as TabType, label: 'Companies', icon: Building2, roles: ['admin'] },
+  { id: 'debug' as TabType, label: 'Debug', icon: Bug, roles: ['admin'] },
 ]
 
 export default function DashboardLayout({ children, activeTab, onTabChange }: DashboardLayoutProps) {
@@ -145,22 +153,32 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2">
-          {filteredNavItems.map((item) => {
-            const Icon = item.icon
-            const isActive = activeTab === item.id
-            
-            return (
-              <Button
-                key={item.id}
-                variant={isActive ? "default" : "ghost"}
-                className={`w-full justify-start ${!sidebarOpen && 'px-2'}`}
-                onClick={() => onTabChange(item.id)}
-              >
-                <Icon className="h-4 w-4" />
-                {sidebarOpen && <span className="ml-2">{item.label}</span>}
-              </Button>
-            )
-          })}
+          <TooltipProvider>
+            {filteredNavItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeTab === item.id
+              
+              return (
+                <Tooltip key={item.id}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isActive ? "default" : "ghost"}
+                      className={`w-full justify-start ${!sidebarOpen && 'px-2'}`}
+                      onClick={() => onTabChange(item.id)}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {sidebarOpen && <span className="ml-2">{item.label}</span>}
+                    </Button>
+                  </TooltipTrigger>
+                  {!sidebarOpen && (
+                    <TooltipContent side="right">
+                      <p>{item.label}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              )
+            })}
+          </TooltipProvider>
         </nav>
 
         {/* User Menu */}

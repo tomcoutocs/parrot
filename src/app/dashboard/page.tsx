@@ -4,30 +4,59 @@ import { useState, useEffect } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useRouter } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
-import ProjectsTab from '@/components/tabs/projects-tab'
-import FormsTab from '@/components/tabs/forms-tab'
-import UsersTab from '@/components/tabs/users-tab'
-import CompaniesTab from '@/components/tabs/companies-tab'
-import ServicesTab from '@/components/tabs/services-tab'
-import CalendarTab from '@/components/tabs/calendar-tab'
-import { CompanyCalendarsTab } from '@/components/tabs/company-calendars-tab'
-import DocumentsTab from '@/components/tabs/documents-tab'
-import ProjectOverviewTab from '@/components/tabs/project-overview-tab'
-import DebugTab from '@/components/tabs/debug-tab'
+import LazyTabComponent, { preloadCriticalTabs } from '@/components/lazy-tab-loader'
 import { Badge } from '@/components/ui/badge'
-
-
+import { loadDashboardData, cleanupSubscriptions } from '@/lib/simplified-database-functions'
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabType>('projects')
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
     if (status !== 'loading' && !session) {
       router.push('/auth/signin')
     }
   }, [session, status, router])
+
+  // Initialize dashboard data and preload critical tabs
+  useEffect(() => {
+    if (session && !isInitialized) {
+      const initializeDashboard = async () => {
+        try {
+          // Preload critical tabs in the background
+          preloadCriticalTabs()
+          
+          // Load initial dashboard data based on user role
+          const userRole = session.user.role
+          const companyId = session.user.role === 'admin' ? undefined : session.user.company_id
+          
+          await loadDashboardData(userRole, companyId)
+          setIsInitialized(true)
+        } catch (error) {
+          console.error('Failed to initialize dashboard:', error)
+          setIsInitialized(true) // Continue anyway
+        }
+      }
+
+      initializeDashboard()
+    }
+  }, [session, isInitialized])
+
+  // Cleanup subscriptions on unmount
+  useEffect(() => {
+    return () => {
+      cleanupSubscriptions()
+    }
+  }, [])
+
+  // Ensure active tab is valid for user role
+  useEffect(() => {
+    if (session && activeTab === 'debug' && session.user.role !== 'admin') {
+      setActiveTab('projects') // Redirect to projects if non-admin tries to access debug
+    }
+  }, [session, activeTab])
 
   if (status === 'loading') {
     return (
@@ -41,45 +70,17 @@ export default function DashboardPage() {
     return null // Will redirect via useEffect
   }
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'projects':
-        return <ProjectsTab />
-      
-      case 'forms':
-        return <FormsTab />
-      
-      case 'services':
-        return <ServicesTab />
-      
-      case 'calendar':
-        return <CalendarTab />
-      
-      case 'company-calendars':
-        return <CompanyCalendarsTab />
-      
-      case 'documents':
-        return <DocumentsTab />
-      
-      case 'admin':
-        return <UsersTab />
-      
-      case 'companies':
-        return <CompaniesTab />
-      
-      case 'project-overview':
-        return <ProjectOverviewTab />
-      
-      case 'debug':
-        return <DebugTab />
-      
-      default:
-        return <ProjectsTab />
+  const handleTabChange = (tab: TabType) => {
+    // Security check - prevent non-admin users from accessing debug tab
+    if (tab === 'debug' && session?.user?.role !== 'admin') {
+      console.warn('Non-admin user attempted to access debug tab')
+      return
     }
+    setActiveTab(tab)
   }
 
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
+    <DashboardLayout activeTab={activeTab} onTabChange={handleTabChange}>
       <div className="min-h-full">
         {/* Welcome Banner */}
         {activeTab === 'projects' && (
@@ -89,9 +90,9 @@ export default function DashboardPage() {
                 <h1 className="text-2xl font-bold mb-2">
                   Welcome back, {session.user.name}!
                 </h1>
-                                 <p className="text-blue-100">
-                   Here&apos;s what&apos;s happening with your business today.
-                 </p>
+                <p className="text-blue-100">
+                  Here&apos;s what&apos;s happening with your business today.
+                </p>
               </div>
               <div className="text-right">
                 <Badge className="bg-white text-blue-600 hover:bg-gray-100">
@@ -102,8 +103,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Tab Content */}
-        {renderTabContent()}
+        {/* Lazy Loaded Tab Content */}
+        <LazyTabComponent tabName={activeTab} />
       </div>
     </DashboardLayout>
   )
