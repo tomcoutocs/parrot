@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies } from './supabase'
+import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation } from './supabase'
 import { getCurrentUser } from './auth'
 
 // Helper function to set application context for RLS
@@ -2933,5 +2933,241 @@ export async function isFavorited(
     return { success: true, isFavorited: !!data }
   } catch (error) {
     return { success: false, error: 'Failed to check favorite status' }
+  }
+}
+
+// User Invitation System Functions
+export async function createUserInvitation(invitationData: {
+  email: string
+  full_name: string
+  company_id: string
+  role: 'admin' | 'manager' | 'user' | 'internal'
+  invited_by: string
+  tab_permissions?: string[]
+}): Promise<{ success: boolean; data?: UserInvitation; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Generate a unique invitation token
+    const invitationToken = crypto.randomUUID()
+    
+    // Set expiration to 7 days from now
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 7)
+    
+    const { data, error } = await supabase
+      .from('user_invitations')
+      .insert({
+        email: invitationData.email,
+        full_name: invitationData.full_name,
+        company_id: invitationData.company_id,
+        role: invitationData.role,
+        invited_by: invitationData.invited_by,
+        invitation_token: invitationToken,
+        status: 'pending',
+        expires_at: expiresAt.toISOString(),
+        tab_permissions: invitationData.tab_permissions || []
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating user invitation:', error)
+      return { success: false, error: error.message || 'Failed to create invitation' }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error creating user invitation:', error)
+    return { success: false, error: 'Failed to create invitation' }
+  }
+}
+
+export async function createBulkUserInvitations(invitations: Array<{
+  email: string
+  full_name: string
+  company_id: string
+  role: 'admin' | 'manager' | 'user' | 'internal'
+  invited_by: string
+  tab_permissions?: string[]
+}>): Promise<{ success: boolean; data?: UserInvitation[]; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const invitationData = invitations.map(invitation => {
+      const invitationToken = crypto.randomUUID()
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + 7)
+      
+      return {
+        email: invitation.email,
+        full_name: invitation.full_name,
+        company_id: invitation.company_id,
+        role: invitation.role,
+        invited_by: invitation.invited_by,
+        invitation_token: invitationToken,
+        status: 'pending',
+        expires_at: expiresAt.toISOString(),
+        tab_permissions: invitation.tab_permissions || []
+      }
+    })
+    
+    const { data, error } = await supabase
+      .from('user_invitations')
+      .insert(invitationData)
+      .select()
+
+    if (error) {
+      console.error('Error creating bulk user invitations:', error)
+      return { success: false, error: error.message || 'Failed to create invitations' }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error creating bulk user invitations:', error)
+    return { success: false, error: 'Failed to create invitations' }
+  }
+}
+
+export async function getInvitationByToken(token: string): Promise<{ success: boolean; data?: UserInvitation; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { data, error } = await supabase
+      .from('user_invitations')
+      .select('*')
+      .eq('invitation_token', token)
+      .eq('status', 'pending')
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message || 'Invitation not found' }
+    }
+
+    // Check if invitation has expired
+    if (new Date(data.expires_at) < new Date()) {
+      return { success: false, error: 'Invitation has expired' }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: 'Failed to get invitation' }
+  }
+}
+
+export async function acceptInvitation(token: string, password: string): Promise<{ success: boolean; data?: User; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Get the invitation
+    const invitationResult = await getInvitationByToken(token)
+    if (!invitationResult.success || !invitationResult.data) {
+      return { success: false, error: 'Invalid or expired invitation' }
+    }
+
+    const invitation = invitationResult.data
+
+    // Create the user
+    const userData = {
+      email: invitation.email,
+      full_name: invitation.full_name,
+      role: invitation.role,
+      password: password,
+      company_id: invitation.company_id,
+      tab_permissions: invitation.tab_permissions
+    }
+
+    const userResult = await createUser(userData)
+    if (!userResult.success || !userResult.data) {
+      return { success: false, error: userResult.error || 'Failed to create user' }
+    }
+
+    // Mark invitation as accepted
+    const { error: updateError } = await supabase
+      .from('user_invitations')
+      .update({
+        status: 'accepted',
+        accepted_at: new Date().toISOString()
+      })
+      .eq('invitation_token', token)
+
+    if (updateError) {
+      console.error('Error updating invitation status:', updateError)
+      // Don't fail the whole operation if this fails
+    }
+
+    return { success: true, data: userResult.data }
+  } catch (error) {
+    console.error('Error accepting invitation:', error)
+    return { success: false, error: 'Failed to accept invitation' }
+  }
+}
+
+export async function getPendingInvitations(companyId?: string): Promise<{ success: boolean; data?: UserInvitation[]; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    let query = supabase
+      .from('user_invitations')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+
+    if (companyId) {
+      query = query.eq('company_id', companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to fetch invitations' }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: 'Failed to fetch invitations' }
+  }
+}
+
+export async function cancelInvitation(invitationId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { error } = await supabase
+      .from('user_invitations')
+      .update({ status: 'expired' })
+      .eq('id', invitationId)
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to cancel invitation' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to cancel invitation' }
   }
 }

@@ -185,27 +185,6 @@ export default function ServicesTab() {
     }
   }
 
-  // Test functions for alerts
-  const testErrorAlert = () => {
-    console.log('Testing error alert...')
-    console.log('Current error state before:', error)
-    setError('This is a test error alert!')
-    console.log('Error state should be set to:', 'This is a test error alert!')
-  }
-
-  const testSuccessAlert = () => {
-    console.log('Testing success alert...')
-    console.log('Current success state before:', success)
-    setSuccess('This is a test success alert!')
-    console.log('Success state should be set to:', 'This is a test success alert!')
-  }
-
-  // Simple test function
-  const testAlert = () => {
-    console.log('Testing alert...')
-    setError('Test alert!')
-  }
-
   const toggleService = (serviceId: string) => {
     setSelectedServices(prev => 
       prev.includes(serviceId) 
@@ -251,16 +230,6 @@ export default function ServicesTab() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Test buttons for alerts */}
-          <Button variant="outline" size="sm" onClick={testErrorAlert}>
-            Test Error
-          </Button>
-          <Button variant="outline" size="sm" onClick={testSuccessAlert}>
-            Test Success
-          </Button>
-          <Button variant="outline" size="sm" onClick={testAlert}>
-            Simple Test
-          </Button>
           {isAdmin && (
             <Button onClick={openEditModal} className="flex items-center gap-2">
               <Edit className="h-4 w-4" />
@@ -326,18 +295,6 @@ export default function ServicesTab() {
           </Button>
         </Alert>
       )}
-
-      {/* Debug info - remove this later */}
-      {(error || success) && (
-        <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
-          Debug: Error=&quot;{error}&quot; Success=&quot;{success}&quot;
-        </div>
-      )}
-
-      {/* Simple test alert - always show for debugging */}
-      <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
-        Current state - Error: &quot;{error}&quot; Success: &quot;{success}&quot;
-      </div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">

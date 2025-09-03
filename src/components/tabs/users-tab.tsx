@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit, Trash2, User as UserIcon, Mail, Shield, Users, Search, Grid3X3, List } from 'lucide-react'
+import { Plus, Edit, Trash2, User as UserIcon, Mail, Shield, Users, Search, Grid3X3, List, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +17,7 @@ import { useSession } from '@/components/providers/session-provider'
 import { createUser, updateUser, deleteUser, fetchCompanies, fetchUsersWithCompanies } from '@/lib/database-functions'
 import type { Company, UserWithCompanies } from '@/lib/supabase'
 import { Checkbox } from '@/components/ui/checkbox'
+import UserInvitationModal from '@/components/modals/user-invitation-modal'
 
 // Available tabs for user permissions
 const availableTabs = [
@@ -82,6 +83,8 @@ export default function UsersTab() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
+  const [showInviteUsersModal, setShowInviteUsersModal] = useState(false)
+  const [selectedCompanyForInvitation, setSelectedCompanyForInvitation] = useState<Company | null>(null)
 
   // Check if current user is admin
   const isAdmin = session?.user?.role === 'admin'
@@ -335,6 +338,17 @@ export default function UsersTab() {
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create User
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSelectedCompanyForInvitation(companies[0] || null)
+              setShowInviteUsersModal(true)
+            }}
+            disabled={companies.length === 0}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Invite Users
           </Button>
         </div>
       </div>
@@ -1193,6 +1207,16 @@ export default function UsersTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* User Invitation Modal */}
+      {selectedCompanyForInvitation && (
+        <UserInvitationModal
+          open={showInviteUsersModal}
+          onOpenChange={setShowInviteUsersModal}
+          companyId={selectedCompanyForInvitation.id}
+          companyName={selectedCompanyForInvitation.name}
+        />
+      )}
     </div>
   )
 } 

@@ -228,6 +228,28 @@ export interface ServiceWithCompanyStatus extends Service {
   is_company_active?: boolean
 }
 
+// User Invitation System Types
+export interface UserInvitation {
+  id: string
+  email: string
+  full_name: string
+  company_id: string
+  role: 'admin' | 'manager' | 'user' | 'internal'
+  invited_by: string
+  invitation_token: string
+  status: 'pending' | 'accepted' | 'expired'
+  expires_at: string
+  created_at: string
+  accepted_at?: string
+  tab_permissions?: string[]
+}
+
+export interface InvitationStatus {
+  success: boolean
+  message: string
+  invitation?: UserInvitation
+}
+
 // Meeting System Types
 export interface MeetingRequest {
   id: string

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Building2, Globe, Phone, MapPin, Search, Settings, Grid3X3, List } from 'lucide-react'
+import { Plus, Edit, Trash2, Building2, Globe, Phone, MapPin, Search, Settings, Grid3X3, List, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +25,11 @@ interface CreateCompanyData {
   phone?: string
   address?: string
   is_partner?: boolean
+  userInvitations?: Array<{
+    email: string
+    full_name: string
+    role: 'admin' | 'manager' | 'user' | 'internal'
+  }>
 }
 
 interface EditCompanyData {
@@ -63,7 +68,8 @@ export default function CompaniesTab() {
     website: '',
     phone: '',
     address: '',
-    is_partner: false
+    is_partner: false,
+    userInvitations: []
   })
   const [editCompanyData, setEditCompanyData] = useState<EditCompanyData>({
     name: '',
@@ -82,6 +88,12 @@ export default function CompaniesTab() {
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [showServicesModal, setShowServicesModal] = useState(false)
   const [editingCompanyForServices, setEditingCompanyForServices] = useState<Company | null>(null)
+  const [showInviteUsersInCreateModal, setShowInviteUsersInCreateModal] = useState(false)
+  const [invitationForm, setInvitationForm] = useState({
+    email: '',
+    full_name: '',
+    role: 'user' as 'admin' | 'manager' | 'user' | 'internal'
+  })
 
   // Check if current user is admin
   const isAdmin = session?.user?.role === 'admin'
@@ -166,8 +178,34 @@ export default function CompaniesTab() {
     try {
       const result = await createCompany(createCompanyData)
       if (result.success) {
+        // If there are user invitations, create them
+        if (createCompanyData.userInvitations && createCompanyData.userInvitations.length > 0 && result.data) {
+          try {
+            const invitationData = createCompanyData.userInvitations.map(invitation => ({
+              ...invitation,
+              company_id: result.data!.id,
+              invited_by: session?.user?.id || '',
+              tab_permissions: ['projects', 'forms', 'services', 'calendar', 'documents'] // Default permissions
+            }))
+            
+            const invitationResult = await fetch('/api/invitations/bulk', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ invitations: invitationData }),
+            })
+
+            if (!invitationResult.ok) {
+              console.error('Failed to create user invitations')
+            }
+          } catch (invitationError) {
+            console.error('Error creating user invitations:', invitationError)
+          }
+        }
+
         setSuccess('Company created successfully')
-        setCreateCompanyData({ name: '', description: '', industry: '', website: '', phone: '', address: '', is_partner: false })
+        setCreateCompanyData({ name: '', description: '', industry: '', website: '', phone: '', address: '', is_partner: false, userInvitations: [] })
         setShowCreateModal(false)
         await loadCompanies()
       } else {
@@ -756,6 +794,114 @@ export default function CompaniesTab() {
                  </div>
                </div>
             </div>
+
+            {/* User Invitations Section */}
+            <div className="border-t pt-4 mt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-medium">Invite Users to Company</h4>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowInviteUsersInCreateModal(!showInviteUsersInCreateModal)}
+                >
+                  {showInviteUsersInCreateModal ? 'Hide' : 'Add Users'}
+                </Button>
+              </div>
+              
+              {showInviteUsersInCreateModal && (
+                <div className="space-y-4">
+                  <div className="text-sm text-gray-600">
+                    Add users who will be invited to join this company. They will receive an email invitation to set up their account.
+                  </div>
+                  
+                  {createCompanyData.userInvitations && createCompanyData.userInvitations.length > 0 && (
+                    <div className="space-y-2">
+                      <h5 className="text-sm font-medium">Users to Invite:</h5>
+                      {createCompanyData.userInvitations.map((invitation, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div>
+                            <div className="text-sm font-medium">{invitation.full_name}</div>
+                            <div className="text-xs text-gray-500">{invitation.email} • {invitation.role}</div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const updatedInvitations = createCompanyData.userInvitations?.filter((_, i) => i !== index) || []
+                              setCreateCompanyData(prev => ({ ...prev, userInvitations: updatedInvitations }))
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="invite_email" className="text-xs">Email</Label>
+                        <Input
+                          id="invite_email"
+                          type="email"
+                          placeholder="user@example.com"
+                          className="text-sm"
+                          value={invitationForm.email}
+                          onChange={(e) => setInvitationForm(prev => ({ ...prev, email: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="invite_name" className="text-xs">Full Name</Label>
+                        <Input
+                          id="invite_name"
+                          placeholder="John Doe"
+                          className="text-sm"
+                          value={invitationForm.full_name}
+                          onChange={(e) => setInvitationForm(prev => ({ ...prev, full_name: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="invite_role" className="text-xs">Role</Label>
+                      <Select value={invitationForm.role} onValueChange={(value) => setInvitationForm(prev => ({ ...prev, role: value as any }))}>
+                        <SelectTrigger className="text-sm">
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="manager">Manager</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (invitationForm.email && invitationForm.full_name) {
+                          const newInvitation = {
+                            email: invitationForm.email,
+                            full_name: invitationForm.full_name,
+                            role: invitationForm.role
+                          }
+                          const updatedInvitations = [...(createCompanyData.userInvitations || []), newInvitation]
+                          setCreateCompanyData(prev => ({ ...prev, userInvitations: updatedInvitations }))
+                          setInvitationForm({ email: '', full_name: '', role: 'user' })
+                        }
+                      }}
+                      disabled={!invitationForm.email || !invitationForm.full_name}
+                    >
+                      Add User
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
                 Cancel
