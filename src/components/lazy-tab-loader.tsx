@@ -72,8 +72,9 @@ class TabErrorBoundary extends React.Component<
   }
 }
 
-// Tab component mapping
-const tabComponents: Record<string, ComponentType> = {
+// Tab component mapping with proper typing
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tabComponents: Record<string, ComponentType<any>> = {
   projects: ProjectsTab,
   forms: FormsTab,
   services: ServicesTab,
@@ -107,10 +108,25 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
     )
   }
 
+  // Handle components that accept selectedCompany prop
+  const componentsWithSelectedCompany = ['documents', 'company-calendars', 'admin', 'projects']
+  if (componentsWithSelectedCompany.includes(tabName)) {
+    return (
+      <TabErrorBoundary>
+        <Suspense fallback={<TabLoadingSpinner />}>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+          {(TabComponent as any)({ selectedCompany })}
+        </Suspense>
+      </TabErrorBoundary>
+    )
+  }
+
+  // Handle components that don't accept selectedCompany prop
   return (
     <TabErrorBoundary>
       <Suspense fallback={<TabLoadingSpinner />}>
-        <TabComponent selectedCompany={selectedCompany} />
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        {(TabComponent as any)()}
       </Suspense>
     </TabErrorBoundary>
   )

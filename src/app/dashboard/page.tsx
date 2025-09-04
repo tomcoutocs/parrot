@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
@@ -8,7 +8,7 @@ import LazyTabComponent, { preloadCriticalTabs } from '@/components/lazy-tab-loa
 import { Badge } from '@/components/ui/badge'
 import { loadDashboardData, cleanupSubscriptions } from '@/lib/simplified-database-functions'
 
-export default function DashboardPage() {
+function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -107,5 +107,23 @@ export default function DashboardPage() {
         <LazyTabComponent tabName={activeTab} selectedCompany={selectedCompany} />
       </div>
     </DashboardLayout>
+  )
+}
+
+// Loading fallback for Suspense
+function DashboardLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+    </div>
+  )
+}
+
+// Main dashboard page with Suspense boundary
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardContent />
+    </Suspense>
   )
 } 
