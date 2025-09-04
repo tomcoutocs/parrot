@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Building2, Search, Settings, Grid3X3, List, X, ExternalLink, Calendar, FileText, HardDrive, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +9,6 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
@@ -42,9 +40,9 @@ interface ServiceCategory {
 
 interface CompanyDetails {
   company: Company
-  projects: any[]
-  tasks: any[]
-  users: any[]
+  projects: Array<{ id: string; name: string; status: string; task_count?: number; updated_at?: string }>
+  tasks: Array<{ id: string; title: string; status: string; priority: string }>
+  users: Array<{ id: string; full_name: string; email: string; role: string }>
   storage: {
     totalSize: number
     documentCount: number
@@ -54,7 +52,6 @@ interface CompanyDetails {
 
 export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?: string | null }) {
   const { data: session } = useSession()
-  const router = useRouter()
   const [companies, setCompanies] = useState<(Company & { services?: Service[] })[]>([])
   const [filteredCompanies, setFilteredCompanies] = useState<(Company & { services?: Service[] })[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -106,7 +103,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
 
   useEffect(() => {
     filterCompanies()
-  }, [companies, searchTerm, partnerFilter, serviceFilter])
+  }, [companies, searchTerm, partnerFilter, serviceFilter, filterCompanies])
 
   // Highlight selected company if provided
   useEffect(() => {
@@ -147,7 +144,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     }
   }
 
-  const filterCompanies = () => {
+  const filterCompanies = useCallback(() => {
     let filtered = companies
 
     // Filter by search term
@@ -171,7 +168,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     }
 
     setFilteredCompanies(filtered)
-  }
+  }, [companies, searchTerm, partnerFilter, serviceFilter])
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1192,7 +1189,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
                         <div>
                           <p className="font-medium">{project.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {project.task_count} tasks • Updated {new Date(project.updated_at).toLocaleDateString()}
+                            {project.task_count} tasks{project.updated_at ? ` • Updated ${new Date(project.updated_at).toLocaleDateString()}` : ''}
                           </p>
                         </div>
                         <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
