@@ -94,33 +94,6 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
   // Check if current user is admin
   const isAdmin = session?.user?.role === 'admin'
 
-  useEffect(() => {
-    if (isAdmin) {
-      loadCompanies()
-      loadServices()
-    }
-  }, [isAdmin])
-
-  useEffect(() => {
-    filterCompanies()
-  }, [companies, searchTerm, partnerFilter, serviceFilter, filterCompanies])
-
-  // Highlight selected company if provided
-  useEffect(() => {
-    if (selectedCompanyId) {
-      // Scroll to the selected company if it exists
-      const companyElement = document.getElementById(`company-${selectedCompanyId}`)
-      if (companyElement) {
-        companyElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        // Add a temporary highlight effect
-        companyElement.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50')
-        setTimeout(() => {
-          companyElement.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50')
-        }, 3000)
-      }
-    }
-  }, [selectedCompanyId, filteredCompanies])
-
   const loadCompanies = async () => {
     setIsLoading(true)
     try {
@@ -169,6 +142,33 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
 
     setFilteredCompanies(filtered)
   }, [companies, searchTerm, partnerFilter, serviceFilter])
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadCompanies()
+      loadServices()
+    }
+  }, [isAdmin])
+
+  useEffect(() => {
+    filterCompanies()
+  }, [filterCompanies])
+
+  // Highlight selected company if provided
+  useEffect(() => {
+    if (selectedCompanyId) {
+      // Scroll to the selected company if it exists
+      const companyElement = document.getElementById(`company-${selectedCompanyId}`)
+      if (companyElement) {
+        companyElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Add a temporary highlight effect
+        companyElement.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50')
+        setTimeout(() => {
+          companyElement.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50')
+        }, 3000)
+      }
+    }
+  }, [selectedCompanyId, filteredCompanies])
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault()
