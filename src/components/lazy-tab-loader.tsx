@@ -1,19 +1,19 @@
 // Lazy Loading Components for Performance Optimization
 // This module implements lazy loading for dashboard tabs to improve initial load times
 
-import React, { lazy, Suspense, ComponentType } from 'react'
+import React, { Suspense, ComponentType } from 'react'
 
-// Lazy load all tab components
-const ProjectsTab = lazy(() => import('@/components/tabs/projects-tab'))
-const FormsTab = lazy(() => import('@/components/tabs/forms-tab'))
-const UsersTab = lazy(() => import('@/components/tabs/users-tab'))
-const CompaniesTab = lazy(() => import('@/components/tabs/companies-tab'))
-const ServicesTab = lazy(() => import('@/components/tabs/services-tab'))
-const CalendarTab = lazy(() => import('@/components/tabs/calendar-tab'))
-const CompanyCalendarsTab = lazy(() => import('@/components/tabs/company-calendars-tab'))
-const DocumentsTab = lazy(() => import('@/components/tabs/documents-tab'))
-const ProjectOverviewTab = lazy(() => import('@/components/tabs/project-overview-tab'))
-const DebugTab = lazy(() => import('@/components/tabs/debug-tab'))
+// Temporarily disable lazy loading to debug runtime errors
+import ProjectsTab from '@/components/tabs/projects-tab'
+import FormsTab from '@/components/tabs/forms-tab'
+import UsersTab from '@/components/tabs/users-tab'
+import CompaniesTab from '@/components/tabs/companies-tab'
+import ServicesTab from '@/components/tabs/services-tab'
+import CalendarTab from '@/components/tabs/calendar-tab'
+import CompanyCalendarsTab from '@/components/tabs/company-calendars-tab'
+import DocumentsTab from '@/components/tabs/documents-tab'
+import ProjectOverviewTab from '@/components/tabs/project-overview-tab'
+import DebugTab from '@/components/tabs/debug-tab'
 
 // Loading component
 function TabLoadingSpinner() {
@@ -103,10 +103,7 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
   if (componentsWithSelectedCompany.includes(tabName)) {
     return (
       <TabErrorBoundary>
-        <Suspense fallback={<TabLoadingSpinner />}>
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {(TabComponent as any)({ selectedCompany })}
-        </Suspense>
+        <TabComponent selectedCompany={selectedCompany} />
       </TabErrorBoundary>
     )
   }
@@ -115,10 +112,7 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
   if (tabName === 'companies') {
     return (
       <TabErrorBoundary>
-        <Suspense fallback={<TabLoadingSpinner />}>
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {(TabComponent as any)({ selectedCompanyId: selectedCompany })}
-        </Suspense>
+        <TabComponent selectedCompanyId={selectedCompany} />
       </TabErrorBoundary>
     )
   }
@@ -126,10 +120,7 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
   // Handle components that don't accept selectedCompany prop
   return (
     <TabErrorBoundary>
-      <Suspense fallback={<TabLoadingSpinner />}>
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        {(TabComponent as any)()}
-      </Suspense>
+      <TabComponent />
     </TabErrorBoundary>
   )
 }
