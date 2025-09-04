@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -51,11 +52,12 @@ interface Company {
 
 type FilterType = 'today' | 'this-week' | 'this-month' | 'all'
 
-export default function CompanyCalendarsTab() {
+export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompany?: string | null }) {
   const { data: session, status } = useSession()
+  const searchParams = useSearchParams()
   const [events, setEvents] = useState<CompanyEvent[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
-  const [selectedCompany, setSelectedCompany] = useState<string>('')
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -82,6 +84,20 @@ export default function CompanyCalendarsTab() {
   // Debug logging
   console.log('CompanyCalendarsTab - Status:', status, 'Session:', session?.user?.id, 'IsAdmin:', isAdmin)
 
+  // Handle URL parameters for company selection
+  useEffect(() => {
+    const companyParam = searchParams.get('company')
+    console.log('CompanyCalendarsTab - URL company parameter:', companyParam)
+    console.log('CompanyCalendarsTab - selectedCompany prop:', selectedCompany)
+    
+    // Prioritize URL parameter over prop
+    const companyToSelect = companyParam || selectedCompany
+    if (companyToSelect) {
+      console.log('Setting selected company to:', companyToSelect)
+      setSelectedCompanyId(companyToSelect)
+    }
+  }, [searchParams, selectedCompany])
+
   useEffect(() => {
     console.log('useEffect triggered - status:', status, 'session.user.id:', session?.user?.id)
     if (status === 'authenticated' && session?.user?.id && supabase) {
@@ -93,10 +109,10 @@ export default function CompanyCalendarsTab() {
   }, [status, session?.user?.id])
 
   useEffect(() => {
-    if (selectedCompany) {
+    if (selectedCompanyId) {
       loadEvents()
     }
-  }, [selectedCompany])
+  }, [selectedCompanyId])
 
   const loadCompanies = async () => {
     try {
@@ -119,7 +135,7 @@ export default function CompanyCalendarsTab() {
         
         setCompanies(data || [])
         if (data && data.length > 0) {
-          setSelectedCompany(data[0].id)
+          setSelectedCompanyId(data[0].id)
         }
       } else {
         // Regular user can only see their company
@@ -141,7 +157,7 @@ export default function CompanyCalendarsTab() {
           if (companyError) throw companyError
           
           setCompanies([companyData])
-          setSelectedCompany(companyData.id)
+          setSelectedCompanyId(companyData.id)
         }
       }
     } catch (err) {
@@ -151,7 +167,7 @@ export default function CompanyCalendarsTab() {
   }
 
   const loadEvents = async () => {
-    if (!selectedCompany || !supabase) return
+    if (!selectedCompanyId || !supabase) return
     
     try {
       setLoading(true)
@@ -159,7 +175,7 @@ export default function CompanyCalendarsTab() {
       const { data, error } = await supabase
         .from('company_events')
         .select('*')
-        .eq('company_id', selectedCompany)
+        .eq('company_id', selectedCompanyId)
         .order('start_date', { ascending: true })
       
       if (error) throw error
@@ -204,7 +220,7 @@ export default function CompanyCalendarsTab() {
         start_date: eventDate,
         end_date: eventDate, // For now, same day events
         created_by: session?.user?.id,
-        company_id: selectedCompany
+        company_id: selectedCompanyId
       }
 
       // Only include time fields if time is enabled
@@ -807,7 +823,7 @@ export default function CompanyCalendarsTab() {
     )
   }
 
-  if (!selectedCompany) {
+  if (!selectedCompanyId) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -861,7 +877,7 @@ export default function CompanyCalendarsTab() {
             <Label htmlFor="company-select" className="text-sm font-medium text-gray-700">
               Company:
             </Label>
-            <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+                         <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
               <SelectTrigger id="company-select" className="w-64">
                 <SelectValue placeholder="Select a company" />
               </SelectTrigger>

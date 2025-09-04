@@ -87,7 +87,7 @@ const tabComponents: Record<string, ComponentType> = {
 }
 
 // Lazy loaded tab wrapper
-export function LazyTabComponent({ tabName }: { tabName: string }) {
+export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string; selectedCompany?: string | null }) {
   const TabComponent = tabComponents[tabName]
 
   if (!TabComponent) {
@@ -102,7 +102,7 @@ export function LazyTabComponent({ tabName }: { tabName: string }) {
   if (tabName === 'companies') {
     return (
       <TabErrorBoundary>
-        <CompaniesTab />
+        <CompaniesTab selectedCompanyId={selectedCompany} />
       </TabErrorBoundary>
     )
   }
@@ -110,7 +110,7 @@ export function LazyTabComponent({ tabName }: { tabName: string }) {
   return (
     <TabErrorBoundary>
       <Suspense fallback={<TabLoadingSpinner />}>
-        <TabComponent />
+        <TabComponent selectedCompany={selectedCompany} />
       </Suspense>
     </TabErrorBoundary>
   )

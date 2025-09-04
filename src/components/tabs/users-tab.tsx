@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Plus, Edit, Trash2, User as UserIcon, Mail, Shield, Users, Search, Grid3X3, List, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,8 +54,9 @@ interface EditUserData {
   tab_permissions: string[]
 }
 
-export default function UsersTab() {
+export default function UsersTab({ selectedCompany }: { selectedCompany?: string | null }) {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
   const [users, setUsers] = useState<UserWithCompanies[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [filteredUsers, setFilteredUsers] = useState<UserWithCompanies[]>([])
@@ -82,12 +84,31 @@ export default function UsersTab() {
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('list')
   const [showInviteUsersModal, setShowInviteUsersModal] = useState(false)
   const [selectedCompanyForInvitation, setSelectedCompanyForInvitation] = useState<Company | null>(null)
 
   // Check if current user is admin
   const isAdmin = session?.user?.role === 'admin'
+
+  // Handle URL parameters for company filtering
+  useEffect(() => {
+    const companyParam = searchParams.get('company')
+    console.log('Users tab - URL company parameter:', companyParam)
+    console.log('Users tab - selectedCompany prop:', selectedCompany)
+    
+    // Prioritize URL parameter over prop
+    const companyToFilter = companyParam || selectedCompany
+    if (companyToFilter) {
+      console.log('Setting company filter to:', companyToFilter)
+      setCompanyFilter(companyToFilter)
+    }
+  }, [searchParams, selectedCompany])
+
+  // Debug: Log when company filter changes
+  useEffect(() => {
+    console.log('Users tab - Company filter changed to:', companyFilter)
+  }, [companyFilter])
 
   useEffect(() => {
     if (isAdmin) {

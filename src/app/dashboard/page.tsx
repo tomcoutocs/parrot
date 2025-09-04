@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from '@/components/providers/session-provider'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
 import LazyTabComponent, { preloadCriticalTabs } from '@/components/lazy-tab-loader'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,9 @@ import { loadDashboardData, cleanupSubscriptions } from '@/lib/simplified-databa
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabType>('projects')
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
@@ -19,6 +21,25 @@ export default function DashboardPage() {
       router.push('/auth/signin')
     }
   }, [session, status, router])
+
+  // Handle URL parameters for tab and company
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as TabType
+    const companyParam = searchParams.get('company')
+    
+    console.log('Dashboard URL params - tab:', tabParam, 'company:', companyParam)
+    console.log('Current activeTab:', activeTab)
+    
+    if (tabParam && ['projects', 'forms', 'services', 'calendar', 'documents', 'admin', 'companies', 'company-calendars', 'debug'].includes(tabParam)) {
+      console.log('Setting active tab to:', tabParam)
+      setActiveTab(tabParam)
+    }
+    
+    if (companyParam) {
+      console.log('Setting selected company to:', companyParam)
+      setSelectedCompany(companyParam)
+    }
+  }, [searchParams])
 
   // Initialize dashboard data and preload critical tabs
   useEffect(() => {
@@ -82,29 +103,8 @@ export default function DashboardPage() {
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={handleTabChange}>
       <div className="min-h-full">
-        {/* Welcome Banner */}
-        {activeTab === 'projects' && (
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-6 text-white mb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold mb-2">
-                  Welcome back, {session.user.name}!
-                </h1>
-                <p className="text-blue-100">
-                  Here&apos;s what&apos;s happening with your business today.
-                </p>
-              </div>
-              <div className="text-right">
-                <Badge className="bg-white text-blue-600 hover:bg-gray-100">
-                  {session.user.role.toUpperCase()}
-                </Badge>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Lazy Loaded Tab Content */}
-        <LazyTabComponent tabName={activeTab} />
+        <LazyTabComponent tabName={activeTab} selectedCompany={selectedCompany} />
       </div>
     </DashboardLayout>
   )

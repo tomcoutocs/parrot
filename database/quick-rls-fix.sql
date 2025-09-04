@@ -1,40 +1,124 @@
--- Quick RLS Fix for Folder Creation Issue
--- This script temporarily disables RLS and creates a simple working policy
+-- Quick RLS Fix for Admin Access
+-- Run this in your Supabase SQL Editor to fix admin access
 
--- Step 1: Disable RLS temporarily to allow folder creation
-ALTER TABLE document_folders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
+-- Step 1: Drop all existing policies on key tables
+DROP POLICY IF EXISTS "Allow all authenticated users to access companies" ON companies;
+DROP POLICY IF EXISTS "Admin users see all companies, others see own company" ON companies;
+DROP POLICY IF EXISTS "Allow all authenticated users to access projects" ON projects;
+DROP POLICY IF EXISTS "Admin users see all projects, others see company projects" ON projects;
+DROP POLICY IF EXISTS "Allow all authenticated users to access tasks" ON tasks;
+DROP POLICY IF EXISTS "Admin users see all tasks, others see company tasks" ON tasks;
+DROP POLICY IF EXISTS "Allow all authenticated users to access users" ON users;
+DROP POLICY IF EXISTS "Allow all authenticated users to access document_folders" ON document_folders;
+DROP POLICY IF EXISTS "Admin users see all folders, others see company folders" ON document_folders;
+DROP POLICY IF EXISTS "Allow all authenticated users to access documents" ON documents;
+DROP POLICY IF EXISTS "Admin users see all documents, others see company documents" ON documents;
 
--- Step 2: Drop any existing policies
-DROP POLICY IF EXISTS "Users can view company folders" ON document_folders;
-DROP POLICY IF EXISTS "Users can create company folders" ON document_folders;
-DROP POLICY IF EXISTS "Users can update folders they created" ON document_folders;
-DROP POLICY IF EXISTS "Users can delete folders they created" ON document_folders;
-DROP POLICY IF EXISTS "Users can view company documents" ON documents;
-DROP POLICY IF EXISTS "Users can create company documents" ON documents;
-DROP POLICY IF EXISTS "Users can update documents they uploaded" ON documents;
-DROP POLICY IF EXISTS "Users can delete documents they uploaded" ON documents;
-DROP POLICY IF EXISTS "Admins can view all folders" ON document_folders;
-DROP POLICY IF EXISTS "Admins can manage all folders" ON document_folders;
-DROP POLICY IF EXISTS "Admins can view all documents" ON documents;
-DROP POLICY IF EXISTS "Admins can manage all documents" ON documents;
-DROP POLICY IF EXISTS "Allow all authenticated users" ON document_folders;
-DROP POLICY IF EXISTS "Allow all authenticated users" ON documents;
-DROP POLICY IF EXISTS "Allow authenticated users all operations" ON document_folders;
-DROP POLICY IF EXISTS "Allow authenticated users all operations" ON documents;
+-- Step 2: Create proper RLS policies using auth.uid() pattern
+-- Companies: Admin users can see all companies, others see their own company
+CREATE POLICY "Admin users see all companies, others see own company" ON companies
+FOR ALL USING (
+  -- Admin users can see all companies
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE users.id = auth.uid() 
+    AND users.role = 'admin'
+  )
+  OR
+  -- Other users can see their own company
+  id = (
+    SELECT company_id FROM users WHERE id = auth.uid()
+  )
+);
 
--- Step 3: Re-enable RLS
-ALTER TABLE document_folders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+-- Projects: Admin users can see all projects, others see their company's projects
+CREATE POLICY "Admin users see all projects, others see company projects" ON projects
+FOR ALL USING (
+  -- Admin users can see all projects
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE users.id = auth.uid() 
+    AND users.role = 'admin'
+  )
+  OR
+  -- Other users can see projects from their company
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE users.id = auth.uid() 
+    AND users.company_id = projects.company_id
+  )
+);
 
--- Step 4: Create simple, permissive policies
-CREATE POLICY "Allow all authenticated users" ON document_folders
-  FOR ALL USING (auth.role() = 'authenticated');
+-- Tasks: Admin users can see all tasks, others see tasks from their company's projects
+CREATE POLICY "Admin users see all tasks, others see company tasks" ON tasks
+FOR ALL USING (
+  -- Admin users can see all tasks
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE users.id = auth.uid() 
+    AND users.role = 'admin'
+  )
+  OR
+  -- Other users can see tasks from their company's projects
+  EXISTS (
+    SELECT 1 FROM users u
+    JOIN projects p ON u.company_id = p.company_id
+    WHERE u.id = auth.uid() 
+    AND p.id = tasks.project_id
+  )
+);
 
-CREATE POLICY "Allow all authenticated users" ON documents
-  FOR ALL USING (auth.role() = 'authenticated');
+-- Users: Simple policy to avoid infinite recursion
+CREATE POLICY "Allow all authenticated users to access users" ON users
+FOR ALL USING (auth.role() = 'authenticated');
 
--- Step 5: Verify the fix
-SELECT 'RLS Fix Applied Successfully!' as status;
-SELECT COUNT(*) as document_folders_policies FROM pg_policies WHERE tablename = 'document_folders';
-SELECT COUNT(*) as documents_policies FROM pg_policies WHERE tablename = 'documents';
+-- Document Folders: Admin users can see all folders, others see their company's folders
+CREATE POLICY "Admin users see all folders, others see company folders" ON document_folders
+FOR ALL USING (
+  -- Admin users can see all folders
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE users.id = auth.uid() 
+    AND users.role = 'admin'
+  )
+  OR
+  -- Other users can see their company's folders and system folders
+  (company_id = (
+    SELECT company_id FROM users WHERE id = auth.uid()
+  ) OR is_system_folder = TRUE)
+);
+
+-- Documents: Admin users can see all documents, others see their company's documents
+CREATE POLICY "Admin users see all documents, others see company documents" ON documents
+FOR ALL USING (
+  -- Admin users can see all documents
+  EXISTS (
+    SELECT 1 FROM users 
+    WHERE users.id = auth.uid() 
+    AND users.role = 'admin'
+  )
+  OR
+  -- Other users can see their company's documents
+  company_id = (
+    SELECT company_id FROM users WHERE id = auth.uid()
+  )
+);
+
+-- Step 3: Verify the policies were created
+SELECT '=== VERIFYING POLICIES ===' as info;
+SELECT 
+  tablename,
+  policyname,
+  permissive,
+  cmd
+FROM pg_policies 
+WHERE tablename IN ('companies', 'projects', 'tasks', 'users', 'document_folders', 'documents')
+ORDER BY tablename, policyname;
+
+-- Step 4: Test access
+SELECT '=== TESTING ACCESS ===' as info;
+SELECT COUNT(*) as company_count FROM companies;
+SELECT COUNT(*) as project_count FROM projects;
+SELECT COUNT(*) as user_count FROM users;
+
+SELECT 'RLS FIX COMPLETED! Admin users should now have access to all data.' as final_status;

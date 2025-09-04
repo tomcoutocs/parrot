@@ -91,7 +91,11 @@ export async function fetchTasksOptimized(projectId?: string): Promise<TaskWithD
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, full_name, email),
         created_user:users!tasks_created_by_fkey(id, full_name, email),
-        task_comments(id)
+        task_comments(id),
+        task_assignments!task_assignments_task_id_fkey(
+          user_id,
+          user:users!task_assignments_user_id_fkey(id, full_name, email)
+        )
       `)
       .order('position', { ascending: true })
 
@@ -105,7 +109,9 @@ export async function fetchTasksOptimized(projectId?: string): Promise<TaskWithD
 
     const transformedData = data?.map(task => ({
       ...task,
-      comment_count: task.task_comments?.length || 0
+      comment_count: task.task_comments?.length || 0,
+      // Use the first assigned user from task_assignments if available, otherwise fall back to assigned_user
+      assigned_user: task.task_assignments?.[0]?.user || task.assigned_user
     })) || []
     
     return transformedData
@@ -249,7 +255,7 @@ export async function updateTaskPosition(taskId: string, position: number, statu
     await setAppContext()
     const { error } = await supabase
       .from('tasks')
-      .update({ position, status, updated_by: userId })
+      .update({ position, status })
       .eq('id', taskId)
 
     if (error) {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
 import { 
   Folder, 
@@ -65,12 +66,13 @@ interface BreadcrumbItem {
   path: string
 }
 
-export default function DocumentsTab() {
+export default function DocumentsTab({ selectedCompany }: { selectedCompany?: string | null }) {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
   const [documents, setDocuments] = useState<Document[]>([])
   const [folders, setFolders] = useState<DocumentFolder[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
-  const [selectedCompany, setSelectedCompany] = useState<string>('')
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
   const [currentFolder, setCurrentFolder] = useState<string>('/')
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([{ id: 'root', name: 'Home', path: '/' }])
   const [isLoading, setIsLoading] = useState(true)
@@ -94,6 +96,20 @@ export default function DocumentsTab() {
   const isAdmin = session?.user?.role === 'admin'
   const userCompanyId = session?.user?.company_id
 
+  // Handle URL parameters for company selection
+  useEffect(() => {
+    const companyParam = searchParams.get('company')
+    console.log('DocumentsTab - URL company parameter:', companyParam)
+    console.log('DocumentsTab - selectedCompany prop:', selectedCompany)
+    
+    // Prioritize URL parameter over prop
+    const companyToSelect = companyParam || selectedCompany
+    if (companyToSelect) {
+      console.log('Setting selected company to:', companyToSelect)
+      setSelectedCompanyId(companyToSelect)
+    }
+  }, [searchParams, selectedCompany])
+
   const loadUserCompany = useCallback(async () => {
     if (!session?.user?.id || !supabase) return
     
@@ -106,7 +122,7 @@ export default function DocumentsTab() {
         .single()
 
       if (!error && userCompanyData) {
-        setSelectedCompany(userCompanyData.company_id)
+        setSelectedCompanyId(userCompanyData.company_id)
       }
     } catch (error) {
       console.error('Error loading user company:', error)
@@ -114,13 +130,13 @@ export default function DocumentsTab() {
   }, [session?.user?.id])
 
   const loadDocumentsAndFolders = useCallback(async () => {
-    if (!selectedCompany) return
+    if (!selectedCompanyId) return
 
     setIsLoading(true)
     try {
       const [docsResult, foldersResult] = await Promise.all([
-        getCompanyDocuments(selectedCompany, currentFolder),
-        getCompanyFolders(selectedCompany, currentFolder)
+        getCompanyDocuments(selectedCompanyId, currentFolder),
+        getCompanyFolders(selectedCompanyId, currentFolder)
       ])
 
       if (docsResult.success) {
@@ -140,27 +156,27 @@ export default function DocumentsTab() {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedCompany, currentFolder])
+  }, [selectedCompanyId, currentFolder])
 
   const loadStorageUsage = useCallback(async () => {
-    if (!selectedCompany) return
+    if (!selectedCompanyId) return
 
     try {
-      const result = await getCompanyStorageUsage(selectedCompany)
+      const result = await getCompanyStorageUsage(selectedCompanyId)
       if (result.success) {
         setStorageUsage(result.usage || 0)
       }
     } catch (error) {
       console.error('Error loading storage usage:', error)
     }
-  }, [selectedCompany])
+  }, [selectedCompanyId])
 
   const loadFavorites = useCallback(async () => {
-    if (!selectedCompany || !session?.user?.id) return
+    if (!selectedCompanyId || !session?.user?.id) return
 
     setFavoritesLoading(true)
     try {
-      const result = await getUserFavorites(session.user.id, selectedCompany)
+      const result = await getUserFavorites(session.user.id, selectedCompanyId)
       if (result.success && result.favorites) {
         const favoritesSet = new Set(result.favorites.map(fav => fav.item_id))
         setFavorites(favoritesSet)
@@ -170,7 +186,7 @@ export default function DocumentsTab() {
     } finally {
       setFavoritesLoading(false)
     }
-  }, [selectedCompany, session?.user?.id])
+  }, [selectedCompanyId, session?.user?.id])
 
   // Load companies for admin
   useEffect(() => {
@@ -181,24 +197,24 @@ export default function DocumentsTab() {
 
   // Set initial company
   useEffect(() => {
-    if (isAdmin && companies.length > 0 && !selectedCompany) {
-      setSelectedCompany(companies[0].id)
+    if (isAdmin && companies.length > 0 && !selectedCompanyId) {
+      setSelectedCompanyId(companies[0].id)
     } else if (!isAdmin && userCompanyId) {
-      setSelectedCompany(userCompanyId)
+      setSelectedCompanyId(userCompanyId)
     } else if (!isAdmin && !userCompanyId) {
       // Try to get company from user_companies table
       loadUserCompany()
     }
-  }, [isAdmin, companies, userCompanyId, selectedCompany, loadUserCompany])
+  }, [isAdmin, companies, userCompanyId, selectedCompanyId, loadUserCompany])
 
   // Load documents and folders when company or folder changes
   useEffect(() => {
-    if (selectedCompany) {
+    if (selectedCompanyId) {
       loadDocumentsAndFolders()
       loadStorageUsage()
       loadFavorites()
     }
-  }, [selectedCompany, currentFolder, loadDocumentsAndFolders, loadStorageUsage, loadFavorites])
+  }, [selectedCompanyId, currentFolder, loadDocumentsAndFolders, loadStorageUsage, loadFavorites])
 
   const loadCompanies = async () => {
     if (!supabase) return
@@ -245,7 +261,7 @@ export default function DocumentsTab() {
       const { data, error } = await supabase
         .from('document_folders')
         .select('id')
-        .or(`company_id.eq.${selectedCompany},is_system_folder.eq.true`)
+        .or(`company_id.eq.${selectedCompanyId},is_system_folder.eq.true`)
         .eq('path', currentFolder)
         .single()
 
@@ -262,7 +278,7 @@ export default function DocumentsTab() {
   }
 
   const handleCreateFolder = async () => {
-    if (!newFolderName.trim() || !selectedCompany) return
+    if (!newFolderName.trim() || !selectedCompanyId) return
 
     // Validate folder name
     const folderName = newFolderName.trim()
@@ -291,7 +307,7 @@ export default function DocumentsTab() {
       
       console.log('Creating folder:', {
         name: folderName,
-        companyId: selectedCompany,
+        companyId: selectedCompanyId,
         userId: session?.user?.id,
         parentFolderId: currentFolderId,
         currentPath: currentFolder
@@ -299,7 +315,7 @@ export default function DocumentsTab() {
       
       const result = await createFolder(
         folderName,
-        selectedCompany,
+        selectedCompanyId,
         session?.user?.id || '',
         currentFolderId
       )
@@ -322,7 +338,7 @@ export default function DocumentsTab() {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
-    if (!files || files.length === 0 || !selectedCompany || !supabase) return
+    if (!files || files.length === 0 || !selectedCompanyId || !supabase) return
 
     // Check if we're in a system folder
     if (currentFolder === '/Setup Instructions') {
@@ -339,7 +355,7 @@ export default function DocumentsTab() {
         const fileName = `${Date.now()}-${file.name}`
         // Construct the file path properly - remove leading slash from currentFolder if it exists
         const folderPath = currentFolder === '/' ? '' : currentFolder.replace(/^\//, '')
-        const filePath = `${selectedCompany}/${folderPath}/${fileName}`.replace(/\/+/g, '/').replace(/\/$/, '')
+        const filePath = `${selectedCompanyId}/${folderPath}/${fileName}`.replace(/\/+/g, '/').replace(/\/$/, '')
 
         // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
@@ -358,7 +374,7 @@ export default function DocumentsTab() {
             file_path: filePath,
             file_size: file.size,
             file_type: file.type,
-            company_id: selectedCompany,
+            company_id: selectedCompanyId,
             uploaded_by: session?.user?.id || '',
             folder_path: currentFolder
           })
@@ -441,10 +457,10 @@ export default function DocumentsTab() {
   }
 
   const handleSearch = async () => {
-    if (!searchTerm.trim() || !selectedCompany) return
+    if (!searchTerm.trim() || !selectedCompanyId) return
 
     try {
-      const result = await searchDocuments(selectedCompany, searchTerm.trim())
+      const result = await searchDocuments(selectedCompanyId, searchTerm.trim())
       if (result.success) {
         setDocuments(result.documents || [])
         setFolders([]) // Clear folders when searching
@@ -495,7 +511,7 @@ export default function DocumentsTab() {
   }
 
   const toggleFavorite = async (itemId: string, itemType: 'folder' | 'document') => {
-    if (!session?.user?.id || !selectedCompany) return
+    if (!session?.user?.id || !selectedCompanyId) return
 
     try {
       const isCurrentlyFavorited = favorites.has(itemId)
@@ -511,7 +527,7 @@ export default function DocumentsTab() {
           setError(result.error || 'Failed to remove from favorites')
         }
       } else {
-        const result = await addToFavorites(session.user.id, itemId, itemType, selectedCompany)
+        const result = await addToFavorites(session.user.id, itemId, itemType, selectedCompanyId)
         if (result.success) {
           const newFavorites = new Set(favorites)
           newFavorites.add(itemId)
@@ -572,24 +588,24 @@ export default function DocumentsTab() {
           <p className="text-gray-600">Manage and organize your company documents</p>
         </div>
         
-        {/* Company Selector (Admin Only) */}
-        {isAdmin && (
-          <div className="flex items-center space-x-4">
-            <Label htmlFor="company-select">Company:</Label>
-            <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Select company" />
-              </SelectTrigger>
-              <SelectContent>
-                {companies.map((company) => (
-                  <SelectItem key={company.id} value={company.id}>
-                    {company.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+                 {/* Company Selector (Admin Only) */}
+         {isAdmin && (
+           <div className="flex items-center space-x-4">
+             <Label htmlFor="company-select">Company:</Label>
+             <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+               <SelectTrigger className="w-48">
+                 <SelectValue placeholder="Select company" />
+               </SelectTrigger>
+               <SelectContent>
+                 {companies.map((company) => (
+                   <SelectItem key={company.id} value={company.id}>
+                     {company.name}
+                   </SelectItem>
+                 ))}
+               </SelectContent>
+             </Select>
+           </div>
+         )}
       </div>
 
       {/* Storage Usage - Hidden from view but still tracked in backend */}

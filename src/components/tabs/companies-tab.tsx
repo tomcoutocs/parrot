@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Building2, Search, Settings, Grid3X3, List, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Edit, Trash2, Building2, Search, Settings, Grid3X3, List, X, ExternalLink, Calendar, FileText, HardDrive, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,6 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices, fetchCompaniesWithServices } from '@/lib/simplified-database-functions'
+import { fetchCompanyDetails, testCompanyAccess, simpleCompanyTest, fetchCompaniesDirect } from '@/lib/company-detail-functions'
 import type { Company, Service } from '@/lib/supabase'
 
 interface CreateCompanyData {
@@ -38,8 +40,21 @@ interface ServiceCategory {
   services: Service[]
 }
 
-export default function CompaniesTab() {
+interface CompanyDetails {
+  company: Company
+  projects: any[]
+  tasks: any[]
+  users: any[]
+  storage: {
+    totalSize: number
+    documentCount: number
+    folderCount: number
+  }
+}
+
+export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?: string | null }) {
   const { data: session } = useSession()
+  const router = useRouter()
   const [companies, setCompanies] = useState<(Company & { services?: Service[] })[]>([])
   const [filteredCompanies, setFilteredCompanies] = useState<(Company & { services?: Service[] })[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -74,6 +89,11 @@ export default function CompaniesTab() {
     role: 'user' as 'admin' | 'manager' | 'user' | 'internal'
   })
 
+  // Company detail modal state
+  const [showCompanyDetailModal, setShowCompanyDetailModal] = useState(false)
+  const [selectedCompanyDetails, setSelectedCompanyDetails] = useState<CompanyDetails | null>(null)
+  const [isLoadingCompanyDetails, setIsLoadingCompanyDetails] = useState(false)
+
   // Check if current user is admin
   const isAdmin = session?.user?.role === 'admin'
 
@@ -87,6 +107,22 @@ export default function CompaniesTab() {
   useEffect(() => {
     filterCompanies()
   }, [companies, searchTerm, partnerFilter, serviceFilter])
+
+  // Highlight selected company if provided
+  useEffect(() => {
+    if (selectedCompanyId) {
+      // Scroll to the selected company if it exists
+      const companyElement = document.getElementById(`company-${selectedCompanyId}`)
+      if (companyElement) {
+        companyElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Add a temporary highlight effect
+        companyElement.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50')
+        setTimeout(() => {
+          companyElement.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50')
+        }, 3000)
+      }
+    }
+  }, [selectedCompanyId, filteredCompanies])
 
   const loadCompanies = async () => {
     setIsLoading(true)
@@ -307,6 +343,90 @@ export default function CompaniesTab() {
     }
   }
 
+  const handleNavigateToCompany = async (companyId: string) => {
+    setIsLoadingCompanyDetails(true)
+    setShowCompanyDetailModal(true)
+    setError('') // Clear any previous errors
+    
+    // Debug: Log the company ID being requested
+    console.log('Attempting to fetch company with ID:', companyId)
+    
+    try {
+      const details = await fetchCompanyDetails(companyId)
+      setSelectedCompanyDetails(details)
+    } catch (error) {
+      console.error('Error loading company details:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load company details'
+      setError(errorMessage)
+      setSelectedCompanyDetails(null)
+      
+      // Debug: Test company access and log available companies
+      try {
+        const testResult = await testCompanyAccess()
+        console.log('Available companies (with RLS):', testResult)
+        
+        const simpleTestResult = await simpleCompanyTest()
+        console.log('Available companies (simple):', simpleTestResult)
+        
+        const directResult = await fetchCompaniesDirect()
+        console.log('Available companies (direct):', directResult)
+        
+        // Also log the current companies list to see what IDs we have
+        console.log('Current companies in state:', companies.map(c => ({ id: c.id, name: c.name })))
+      } catch (debugError) {
+        console.error('Debug error:', debugError)
+      }
+    } finally {
+      setIsLoadingCompanyDetails(false)
+    }
+  }
+
+  const handleEditClick = (e: React.MouseEvent, company: Company) => {
+    e.stopPropagation()
+    openEditModal(company)
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, company: Company) => {
+    e.stopPropagation()
+    openDeleteModal(company)
+  }
+
+  const handleServicesClick = (e: React.MouseEvent, company: Company) => {
+    e.stopPropagation()
+    openServicesModal(company)
+  }
+
+  const formatStorageSize = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const getTaskStatusCount = (status: string) => {
+    return selectedCompanyDetails?.tasks.filter(task => task.status === status).length || 0
+  }
+
+  const getProjectStatusCount = (status: string) => {
+    return selectedCompanyDetails?.projects.filter(project => project.status === status).length || 0
+  }
+
+  const handleNavigateToTab = (tab: string) => {
+    setShowCompanyDetailModal(false)
+    const companyId = selectedCompanyDetails?.company.id
+    console.log('Navigating to tab:', tab, 'with company ID:', companyId)
+    if (companyId) {
+      const url = `/dashboard?tab=${tab}&company=${companyId}`
+      console.log('Generated URL:', url)
+      // Use window.location.href to force a full navigation
+      window.location.href = url
+    } else {
+      console.log('No company ID, navigating to:', `/dashboard?tab=${tab}`)
+      window.location.href = `/dashboard?tab=${tab}`
+    }
+  }
+
   const getTagColor = (serviceId: string) => {
     const colors = [
       'bg-blue-100 text-blue-800 border-blue-200',
@@ -448,7 +568,12 @@ export default function CompaniesTab() {
       ) : viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCompanies.map((company) => (
-            <Card key={company.id} className="hover:shadow-md transition-shadow">
+            <Card 
+              key={company.id} 
+              id={`company-${company.id}`}
+              className="hover:shadow-lg transition-shadow cursor-pointer group"
+              onClick={() => handleNavigateToCompany(company.id)}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -462,13 +587,14 @@ export default function CompaniesTab() {
                        </CardDescription>
                      </div>
                   </div>
-                                     <div className="flex gap-2">
-                     {company.is_partner && (
-                       <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                         Partner
-                       </Badge>
-                     )}
-                   </div>
+                                                       <div className="flex gap-2">
+                    {company.is_partner && (
+                      <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                        Partner
+                      </Badge>
+                    )}
+                    <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -500,7 +626,7 @@ export default function CompaniesTab() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => openEditModal(company)}
+                    onClick={(e) => handleEditClick(e, company)}
                     className="flex-1"
                   >
                     <Edit className="h-4 w-4 mr-1" />
@@ -509,7 +635,7 @@ export default function CompaniesTab() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => openDeleteModal(company)}
+                    onClick={(e) => handleDeleteClick(e, company)}
                     className="flex-1"
                   >
                     <Trash2 className="h-4 w-4 mr-1" />
@@ -518,7 +644,7 @@ export default function CompaniesTab() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => openServicesModal(company)}
+                    onClick={(e) => handleServicesClick(e, company)}
                     className="flex-1"
                   >
                     <Settings className="h-4 w-4 mr-1" />
@@ -532,7 +658,12 @@ export default function CompaniesTab() {
       ) : (
                  <div className="space-y-1">
            {filteredCompanies.map((company) => (
-             <Card key={company.id} className="hover:shadow-md transition-shadow">
+             <Card 
+               key={company.id} 
+               id={`company-${company.id}`}
+               className="hover:shadow-lg transition-shadow cursor-pointer group"
+               onClick={() => handleNavigateToCompany(company.id)}
+             >
                <CardContent className="p-3">
                                  <div className="flex items-center justify-between">
                    <div className="flex items-center gap-3">
@@ -572,10 +703,11 @@ export default function CompaniesTab() {
                      </div>
                   </div>
                   <div className="flex gap-2">
+                    <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openEditModal(company)}
+                      onClick={(e) => handleEditClick(e, company)}
                     >
                       <Edit className="h-4 w-4 mr-1" />
                       Edit
@@ -583,7 +715,7 @@ export default function CompaniesTab() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openDeleteModal(company)}
+                      onClick={(e) => handleDeleteClick(e, company)}
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
                       Delete
@@ -591,7 +723,7 @@ export default function CompaniesTab() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openServicesModal(company)}
+                      onClick={(e) => handleServicesClick(e, company)}
                     >
                       <Settings className="h-4 w-4 mr-1" />
                       Services
@@ -916,6 +1048,194 @@ export default function CompaniesTab() {
             </Button>
             <Button onClick={handleUpdateCompanyServices}>
               Update Services
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Company Detail Modal */}
+      <Dialog open={showCompanyDetailModal} onOpenChange={setShowCompanyDetailModal}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <Building2 className="h-6 w-6" />
+              {selectedCompanyDetails?.company.name || 'Company Details'}
+            </DialogTitle>
+            <DialogDescription>
+              Comprehensive overview of company information and metrics
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingCompanyDetails ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : selectedCompanyDetails ? (
+            <div className="space-y-6">
+              {/* Company Status */}
+              <div className="flex items-center gap-2">
+                <Badge variant={selectedCompanyDetails.company.is_partner ? "default" : "secondary"}>
+                  {selectedCompanyDetails.company.is_partner ? "Partner Company" : "Client Company"}
+                </Badge>
+                <Badge variant={selectedCompanyDetails.company.is_active ? "default" : "destructive"}>
+                  {selectedCompanyDetails.company.is_active ? "Active" : "Inactive"}
+                </Badge>
+              </div>
+
+              {/* Dashboard Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Projects Overview */}
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigateToTab('projects')}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Projects</CardTitle>
+                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{selectedCompanyDetails.projects.length}</div>
+                    <div className="flex gap-2 mt-2">
+                      <Badge variant="default" className="text-xs">
+                        {getProjectStatusCount('active')} Active
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {getProjectStatusCount('completed')} Completed
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Tasks Overview */}
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigateToTab('projects')}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Active Tasks</CardTitle>
+                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{getTaskStatusCount('in_progress') + getTaskStatusCount('todo')}</div>
+                    <div className="flex gap-2 mt-2">
+                      <Badge variant="default" className="text-xs">
+                        {getTaskStatusCount('in_progress')} In Progress
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {getTaskStatusCount('todo')} To Do
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Team Members */}
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigateToTab('admin')}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Team Members</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{selectedCompanyDetails.users.length}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Active team members
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Calendar */}
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigateToTab('company-calendars')}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Company Calendar</CardTitle>
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">View</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Company events & meetings
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Documents */}
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigateToTab('documents')}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Documents</CardTitle>
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{selectedCompanyDetails.storage.documentCount}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedCompanyDetails.storage.folderCount} folders
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Storage Usage */}
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigateToTab('documents')}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Storage Usage</CardTitle>
+                    <HardDrive className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{formatStorageSize(selectedCompanyDetails.storage.totalSize)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total storage used
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Recent Activity Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                  <CardDescription>Latest updates from this company</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {selectedCompanyDetails.projects.slice(0, 3).map((project) => (
+                      <div key={project.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div>
+                          <p className="font-medium">{project.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {project.task_count} tasks • Updated {new Date(project.updated_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
+                          {project.status}
+                        </Badge>
+                      </div>
+                    ))}
+                    {selectedCompanyDetails.projects.length === 0 && (
+                      <p className="text-center text-muted-foreground py-8">
+                        No recent activity
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                <p className="text-muted-foreground mb-2">Failed to load company details</p>
+                {error && (
+                  <p className="text-sm text-red-500">{error}</p>
+                )}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowCompanyDetailModal(false)}
+                  className="mt-2"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCompanyDetailModal(false)}>
+              Close
+            </Button>
+            <Button onClick={() => handleNavigateToTab('companies')}>
+              <Settings className="h-4 w-4 mr-2" />
+              Manage Company
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,80 +1,93 @@
--- Emergency RLS Fix - Complete Reset
--- This script completely removes all RLS policies and creates a simple working one
+-- Emergency RLS Fix - Disable RLS on All Tables
+-- This script fixes the 406 errors by disabling RLS temporarily
 
--- Step 1: Disable RLS temporarily
+-- Step 1: Disable RLS on all tables
+ALTER TABLE companies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE projects DISABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE document_folders DISABLE ROW LEVEL SECURITY;
 ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
+ALTER TABLE forms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE form_submissions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE services DISABLE ROW LEVEL SECURITY;
+ALTER TABLE company_services DISABLE ROW LEVEL SECURITY;
+ALTER TABLE internal_user_companies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE meeting_requests DISABLE ROW LEVEL SECURITY;
+ALTER TABLE confirmed_meetings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE company_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE user_favorites DISABLE ROW LEVEL SECURITY;
 
--- Step 2: Drop ALL existing policies (clean slate)
+-- Step 2: Drop all existing policies
 DO $$
 DECLARE
     policy_record RECORD;
+    table_name TEXT;
 BEGIN
-    -- Drop all policies on document_folders
-    FOR policy_record IN 
-        SELECT policyname 
-        FROM pg_policies 
-        WHERE tablename = 'document_folders'
+    -- List of tables to process
+    FOR table_name IN 
+        SELECT unnest(ARRAY[
+            'companies', 
+            'projects', 
+            'tasks', 
+            'users', 
+            'document_folders', 
+            'documents', 
+            'forms',
+            'form_submissions',
+            'services',
+            'company_services',
+            'internal_user_companies',
+            'meeting_requests',
+            'confirmed_meetings',
+            'company_events',
+            'user_favorites'
+        ])
     LOOP
-        EXECUTE format('DROP POLICY IF EXISTS %I ON document_folders', policy_record.policyname);
-        RAISE NOTICE 'Dropped policy: %', policy_record.policyname;
-    END LOOP;
-    
-    -- Drop all policies on documents
-    FOR policy_record IN 
-        SELECT policyname 
-        FROM pg_policies 
-        WHERE tablename = 'documents'
-    LOOP
-        EXECUTE format('DROP POLICY IF EXISTS %I ON documents', policy_record.policyname);
-        RAISE NOTICE 'Dropped policy: %', policy_record.policyname;
+        -- Drop all policies on each table
+        FOR policy_record IN 
+            SELECT policyname 
+            FROM pg_policies 
+            WHERE tablename = table_name
+        LOOP
+            EXECUTE format('DROP POLICY IF EXISTS %I ON %I', policy_record.policyname, table_name);
+            RAISE NOTICE 'Dropped policy: % on table %', policy_record.policyname, table_name;
+        END LOOP;
     END LOOP;
     
     RAISE NOTICE 'All policies dropped successfully';
 END $$;
 
--- Step 3: Re-enable RLS
-ALTER TABLE document_folders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-
--- Step 4: Create ONE simple policy that allows all authenticated users
-CREATE POLICY "Allow all authenticated users" ON document_folders
-  FOR ALL USING (auth.role() = 'authenticated');
-
-CREATE POLICY "Allow all authenticated users" ON documents
-  FOR ALL USING (auth.role() = 'authenticated');
-
--- Step 5: Verify the fix
+-- Step 3: Verify RLS is disabled
 SELECT 
-  'Final RLS policies count: ' || COUNT(*) as final_status
-FROM pg_policies 
-WHERE tablename IN ('document_folders', 'documents');
+    tablename,
+    CASE WHEN rowsecurity THEN 'ENABLED' ELSE 'DISABLED' END as rls_status,
+    (SELECT COUNT(*) FROM pg_policies WHERE tablename = t.tablename) as policy_count
+FROM pg_tables t
+WHERE tablename IN (
+    'companies', 
+    'projects', 
+    'tasks', 
+    'users', 
+    'document_folders', 
+    'documents', 
+    'forms',
+    'form_submissions',
+    'services',
+    'company_services'
+)
+ORDER BY tablename;
 
--- Step 6: Test folder creation
-DO $$
-DECLARE
-  test_company_id UUID;
-  test_user_id UUID;
-BEGIN
-  -- Get a company ID
-  SELECT id INTO test_company_id FROM companies LIMIT 1;
-  
-  -- Get a user ID
-  SELECT id INTO test_user_id FROM auth.users LIMIT 1;
-  
-  IF test_company_id IS NOT NULL AND test_user_id IS NOT NULL THEN
-    -- Try to insert a test folder
-    INSERT INTO document_folders (name, company_id, path, created_by) 
-    VALUES ('Test Folder', test_company_id, '/Test Folder', test_user_id);
-    
-    RAISE NOTICE 'SUCCESS: Test folder created successfully!';
-    
-    -- Clean up the test folder
-    DELETE FROM document_folders WHERE name = 'Test Folder';
-    RAISE NOTICE 'Test folder cleaned up.';
-  ELSE
-    RAISE NOTICE 'WARNING: Could not find company or user for testing';
-  END IF;
-END $$;
+-- Step 4: Test access
+SELECT '=== TESTING ACCESS ===' as info;
 
-SELECT 'EMERGENCY RLS FIX COMPLETED! All authenticated users can now create folders and documents.' as status;
+-- Test companies table
+SELECT COUNT(*) as company_count FROM companies;
+SELECT id, name FROM companies LIMIT 3;
+
+-- Test other tables
+SELECT COUNT(*) as project_count FROM projects;
+SELECT COUNT(*) as user_count FROM users;
+SELECT COUNT(*) as service_count FROM services;
+
+SELECT 'EMERGENCY RLS FIX COMPLETED! All tables should now be accessible.' as final_status;
