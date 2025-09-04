@@ -7,8 +7,7 @@ import React, { lazy, Suspense, ComponentType } from 'react'
 const ProjectsTab = lazy(() => import('@/components/tabs/projects-tab'))
 const FormsTab = lazy(() => import('@/components/tabs/forms-tab'))
 const UsersTab = lazy(() => import('@/components/tabs/users-tab'))
-// Temporarily disable lazy loading for companies tab to debug
-import CompaniesTab from '@/components/tabs/companies-tab'
+const CompaniesTab = lazy(() => import('@/components/tabs/companies-tab'))
 const ServicesTab = lazy(() => import('@/components/tabs/services-tab'))
 const CalendarTab = lazy(() => import('@/components/tabs/calendar-tab'))
 const CompanyCalendarsTab = lazy(() => import('@/components/tabs/company-calendars-tab'))
@@ -99,15 +98,6 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
     )
   }
 
-  // Special handling for non-lazy CompaniesTab
-  if (tabName === 'companies') {
-    return (
-      <TabErrorBoundary>
-        <CompaniesTab selectedCompanyId={selectedCompany} />
-      </TabErrorBoundary>
-    )
-  }
-
   // Handle components that accept selectedCompany prop
   const componentsWithSelectedCompany = ['documents', 'company-calendars', 'admin', 'projects']
   if (componentsWithSelectedCompany.includes(tabName)) {
@@ -116,6 +106,18 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
         <Suspense fallback={<TabLoadingSpinner />}>
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {(TabComponent as any)({ selectedCompany })}
+        </Suspense>
+      </TabErrorBoundary>
+    )
+  }
+
+  // Handle companies tab with correct prop name
+  if (tabName === 'companies') {
+    return (
+      <TabErrorBoundary>
+        <Suspense fallback={<TabLoadingSpinner />}>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+          {(TabComponent as any)({ selectedCompanyId: selectedCompany })}
         </Suspense>
       </TabErrorBoundary>
     )
