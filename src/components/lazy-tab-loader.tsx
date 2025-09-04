@@ -99,7 +99,7 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
   }
 
   // Handle components that accept selectedCompany prop
-  const componentsWithSelectedCompany = ['documents', 'company-calendars', 'admin', 'projects']
+  const componentsWithSelectedCompany = ['documents', 'company-calendars', 'admin']
   if (componentsWithSelectedCompany.includes(tabName)) {
     return (
       <TabErrorBoundary>
