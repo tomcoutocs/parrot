@@ -12,7 +12,7 @@ function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [activeTab, setActiveTab] = useState<TabType>('projects')
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard')
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
@@ -30,7 +30,7 @@ function DashboardContent() {
     console.log('Dashboard URL params - tab:', tabParam, 'company:', companyParam)
     console.log('Current activeTab:', activeTab)
     
-    if (tabParam && ['projects', 'forms', 'services', 'calendar', 'documents', 'admin', 'companies', 'company-calendars', 'debug'].includes(tabParam)) {
+    if (tabParam && ['dashboard', 'projects', 'forms', 'services', 'calendar', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug'].includes(tabParam)) {
       console.log('Setting active tab to:', tabParam)
       setActiveTab(tabParam)
     }
@@ -75,7 +75,7 @@ function DashboardContent() {
   // Ensure active tab is valid for user role
   useEffect(() => {
     if (session && activeTab === 'debug' && session.user.role !== 'admin') {
-      setActiveTab('projects') // Redirect to projects if non-admin tries to access debug
+      setActiveTab('dashboard') // Redirect to dashboard if non-admin tries to access debug
     }
   }, [session, activeTab])
 
@@ -100,11 +100,15 @@ function DashboardContent() {
     setActiveTab(tab)
   }
 
+  const handleNavigateToTab = (tab: string) => {
+    handleTabChange(tab as TabType)
+  }
+
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={handleTabChange}>
       <div className="min-h-full">
         {/* Lazy Loaded Tab Content */}
-        <LazyTabComponent tabName={activeTab} selectedCompany={selectedCompany} />
+        <LazyTabComponent tabName={activeTab} selectedCompany={selectedCompany} onNavigateToTab={handleNavigateToTab} />
       </div>
     </DashboardLayout>
   )

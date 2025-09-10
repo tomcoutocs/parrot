@@ -23,7 +23,8 @@ import {
   List,
   Star,
   Clock,
-  User
+  User,
+  Eye
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,6 +60,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { formatBytes, formatDate } from '@/lib/utils'
 import type { Company } from '@/lib/supabase'
+import DocumentPreviewModal from '@/components/modals/document-preview-modal'
 
 interface BreadcrumbItem {
   id: string
@@ -91,6 +93,8 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [favoritesLoading, setFavoritesLoading] = useState(false)
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isAdmin = session?.user?.role === 'admin'
@@ -340,6 +344,16 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
     const files = event.target.files
     if (!files || files.length === 0 || !selectedCompanyId || !supabase) return
 
+    // Validate session and user ID
+    if (!session?.user?.id) {
+      setError('User session not found. Please log in again.')
+      return
+    }
+
+    console.log('Document upload - User ID:', session.user.id)
+    console.log('Document upload - User name:', session.user.name)
+    console.log('Document upload - User email:', session.user.email)
+
     // Check if we're in a system folder
     if (currentFolder === '/Setup Instructions') {
       setError('Cannot upload files to system folders')
@@ -366,22 +380,30 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           throw uploadError
         }
 
-        // Create document record
+        // Create document record with validation
+        const documentData = {
+          name: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          file_type: file.type,
+          company_id: selectedCompanyId,
+          uploaded_by: session.user.id, // Use validated user ID
+          folder_path: currentFolder
+        }
+
+        console.log('Creating document record with data:', documentData)
+
         const { error: recordError } = await supabase
           .from('documents')
-          .insert({
-            name: file.name,
-            file_path: filePath,
-            file_size: file.size,
-            file_type: file.type,
-            company_id: selectedCompanyId,
-            uploaded_by: session?.user?.id || '',
-            folder_path: currentFolder
-          })
+          .insert(documentData)
 
         if (recordError) {
+          console.error('Document record creation error:', recordError)
+          console.error('Document data that failed:', documentData)
           throw recordError
         }
+
+        console.log('Document record created successfully for:', file.name)
 
         // Update progress for each file
         setUploadProgress(((i + 1) / files.length) * 100)
@@ -456,6 +478,16 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
     }
   }
 
+  const handlePreview = (document: Document) => {
+    setPreviewDocument(document)
+    setShowPreview(true)
+  }
+
+  const handleClosePreview = () => {
+    setShowPreview(false)
+    setPreviewDocument(null)
+  }
+
   const handleSearch = async () => {
     if (!searchTerm.trim() || !selectedCompanyId) return
 
@@ -500,6 +532,18 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
     if (fileType.includes('powerpoint') || fileType.includes('presentation')) return <FileText className="h-5 w-5 text-orange-600" />
     if (fileType.includes('zip') || fileType.includes('rar') || fileType.includes('archive')) return <Archive className="h-5 w-5 text-gray-600" />
     return <File className="h-5 w-5 text-gray-600" />
+  }
+
+  const canPreview = (fileType: string) => {
+    const extension = fileType.split('.').pop()?.toLowerCase()
+    return (
+      fileType.startsWith('image/') ||
+      fileType.startsWith('video/') ||
+      fileType.startsWith('audio/') ||
+      fileType === 'application/pdf' ||
+      fileType.startsWith('text/') ||
+      ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'pdf', 'txt', 'md', 'json', 'xml', 'csv', 'log', 'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mp3', 'wav', 'ogg', 'aac', 'flac'].includes(extension || '')
+    )
   }
 
   const toggleItemSelection = (id: string) => {
@@ -886,13 +930,17 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           {sortedDocuments.map((document) => (
             <div
               key={document.id}
-                             className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 ${
-                 favorites.has(document.id) ? 'bg-yellow-50' : ''
-               }`}
+              className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
+                favorites.has(document.id) ? 'bg-yellow-50' : ''
+              }`}
+              onClick={() => handlePreview(document)}
             >
-                             <div className="col-span-6 flex items-center space-x-3">
-                 {getFileIconComponent(document.file_type)}
-                 <span className="font-medium text-gray-900">{document.name}</span>
+              <div className="col-span-6 flex items-center space-x-3">
+                {getFileIconComponent(document.file_type)}
+                <span className="font-medium text-gray-900">{document.name}</span>
+                {canPreview(document.file_type) && (
+                  <Eye className="h-4 w-4 text-blue-500" />
+                )}
                 {favorites.has(document.id) && (
                   <Star className="h-4 w-4 text-yellow-500 fill-current" />
                 )}
@@ -924,6 +972,10 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handlePreview(document)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Preview
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleDownload(document)}>
                       <Download className="h-4 w-4 mr-2" />
                       Download
@@ -1020,14 +1072,21 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
 
           {/* Documents */}
           {sortedDocuments.map((document) => (
-            <Card key={document.id} className={`hover:shadow-md transition-shadow group ${
-              favorites.has(document.id) ? 'border-yellow-300 bg-yellow-50' : ''
-            }`}>
+            <Card 
+              key={document.id} 
+              className={`hover:shadow-md transition-shadow group cursor-pointer ${
+                favorites.has(document.id) ? 'border-yellow-300 bg-yellow-50' : ''
+              }`}
+              onClick={() => handlePreview(document)}
+            >
               <CardContent className="pt-6">
                 <div className="text-center mb-3">
                   <div className="text-3xl mb-2">{getFileIcon(document.file_type)}</div>
                   <h3 className="font-medium text-gray-900 truncate text-sm">{document.name}</h3>
                   <p className="text-xs text-gray-500">{formatBytes(document.file_size)}</p>
+                  {canPreview(document.file_type) && (
+                    <Eye className="h-4 w-4 text-blue-500 mx-auto mt-1" />
+                  )}
                   {favorites.has(document.id) && (
                     <Star className="h-4 w-4 text-yellow-500 fill-current mx-auto mt-1" />
                   )}
@@ -1039,6 +1098,15 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
                 </div>
 
                 <div className="flex items-center justify-between space-x-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handlePreview(document)}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    Preview
+                  </Button>
+                  
                   <Button
                     size="sm"
                     variant="outline"
@@ -1151,6 +1219,13 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        document={previewDocument}
+        isOpen={showPreview}
+        onClose={handleClosePreview}
+      />
     </div>
   )
 }

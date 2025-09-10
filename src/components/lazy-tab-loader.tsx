@@ -4,6 +4,7 @@
 import React, { Suspense, ComponentType } from 'react'
 
 // Temporarily disable lazy loading to debug runtime errors
+import DashboardLandingTab from '@/components/tabs/dashboard-landing-tab'
 import ProjectsTab from '@/components/tabs/projects-tab'
 import FormsTab from '@/components/tabs/forms-tab'
 import UsersTab from '@/components/tabs/users-tab'
@@ -74,6 +75,7 @@ class TabErrorBoundary extends React.Component<
 // Tab component mapping with proper typing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tabComponents: Record<string, ComponentType<any>> = {
+  dashboard: DashboardLandingTab,
   projects: ProjectsTab,
   forms: FormsTab,
   services: ServicesTab,
@@ -87,7 +89,7 @@ const tabComponents: Record<string, ComponentType<any>> = {
 }
 
 // Lazy loaded tab wrapper
-export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string; selectedCompany?: string | null }) {
+export function LazyTabComponent({ tabName, selectedCompany, onNavigateToTab }: { tabName: string; selectedCompany?: string | null; onNavigateToTab?: (tab: string) => void }) {
   const TabComponent = tabComponents[tabName]
 
   if (!TabComponent) {
@@ -95,6 +97,15 @@ export function LazyTabComponent({ tabName, selectedCompany }: { tabName: string
       <div className="flex items-center justify-center h-64">
         <p className="text-gray-600">Tab not found</p>
       </div>
+    )
+  }
+
+  // Handle dashboard tab with navigation prop
+  if (tabName === 'dashboard') {
+    return (
+      <TabErrorBoundary>
+        <TabComponent onNavigateToTab={onNavigateToTab} />
+      </TabErrorBoundary>
     )
   }
 

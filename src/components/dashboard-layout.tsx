@@ -7,20 +7,17 @@ import {
   FileText, 
   Settings, 
   Calendar, 
-  MessageSquare, 
   FolderOpen, 
-  Phone,
   Users,
   Menu,
   LogOut,
-  Shield,
   Kanban,
   Building2,
   TrendingUp,
-  Bug
+  Bug,
+  LayoutDashboard
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -37,7 +34,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Separator } from '@/components/ui/separator'
+import ParrotLogo from '@/components/ui/parrot-logo'
 
 
 interface DashboardLayoutProps {
@@ -46,9 +43,10 @@ interface DashboardLayoutProps {
   onTabChange: (tab: TabType) => void
 }
 
-export type TabType = 'projects' | 'forms' | 'services' | 'calendar' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
+export type TabType = 'dashboard' | 'projects' | 'forms' | 'services' | 'calendar' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
 
 const navigationItems = [
+  { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'user'] },
   { id: 'projects' as TabType, label: 'Projects', icon: Kanban, roles: ['admin', 'manager', 'user'] },
   { id: 'project-overview' as TabType, label: 'Project Overview', icon: TrendingUp, roles: ['admin', 'manager'] },
   { id: 'forms' as TabType, label: 'Forms', icon: FileText, roles: ['admin', 'manager', 'user'] },
@@ -92,14 +90,6 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
     return hasRoleAccess && hasTabPermission
   })
 
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800'
-      case 'manager': return 'bg-blue-100 text-blue-800'
-      case 'user': return 'bg-green-100 text-green-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
 
   const getInitials = (name: string) => {
     return name
@@ -111,18 +101,22 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen parrot-page-bg">
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-16'} bg-white shadow-lg transition-all duration-300 flex flex-col`}>
-        <div className="p-4 border-b">
+      <div className={`${sidebarOpen ? 'w-64' : 'w-16'} parrot-sidebar-gradient shadow-lg transition-all duration-300 flex flex-col`}>
+        <div className="p-2 border-b">
           <div className="flex items-center justify-between">
-            <h1 className={`font-bold text-xl text-gray-800 ${!sidebarOpen && 'hidden'}`}>
-              Client Portal
-            </h1>
+            <div className="parrot-logo-container-simple">
+              <ParrotLogo size="sm" />
+              <h1 className={`parrot-logo-text text-lg ${!sidebarOpen && 'hidden'}`}>
+                Parrot
+              </h1>
+            </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="text-white hover:bg-white/20 h-8 w-8 p-0"
             >
               <Menu className="h-4 w-4" />
             </Button>
@@ -130,19 +124,19 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </div>
 
         {/* User Profile Section */}
-        <div className="p-4 border-b">
-          <div className="flex items-center space-x-3">
-            <Avatar>
+        <div className="p-2 border-b border-white/20">
+          <div className="flex items-center space-x-2">
+            <Avatar className="h-8 w-8">
               <AvatarImage src="" />
-              <AvatarFallback>{getInitials(session.user.name)}</AvatarFallback>
+              <AvatarFallback className="bg-teal-900/60 text-white backdrop-blur-sm text-xs">{getInitials(session.user.name)}</AvatarFallback>
             </Avatar>
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-xs font-medium text-white truncate">
                   {session.user.name}
                 </p>
-                <div className="flex items-center space-x-2 mt-1">
-                  <Badge className={getRoleColor(userRole)} variant="secondary">
+                <div className="flex items-center space-x-1 mt-0.5">
+                  <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs px-1 py-0" variant="secondary">
                     {userRole}
                   </Badge>
                 </div>
@@ -152,7 +146,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-2 space-y-1">
           <TooltipProvider>
             {filteredNavItems.map((item) => {
               const Icon = item.icon
@@ -163,7 +157,11 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
                   <TooltipTrigger asChild>
                     <Button
                       variant={isActive ? "default" : "ghost"}
-                      className={`w-full justify-start ${!sidebarOpen && 'px-2'}`}
+                      className={`w-full justify-start h-8 text-sm ${!sidebarOpen && 'px-2'} ${
+                        isActive
+                          ? 'bg-teal-900/80 text-white hover:bg-teal-900/90 border border-teal-800/50'
+                          : 'text-white hover:bg-white/20'
+                      }`}
                       onClick={() => onTabChange(item.id)}
                     >
                       <Icon className="h-4 w-4" />
@@ -182,10 +180,10 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </nav>
 
         {/* User Menu */}
-        <div className="p-4 border-t">
+        <div className="p-2 border-t border-white/20">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start">
+              <Button variant="ghost" className="w-full justify-start text-white hover:bg-white/20 h-8 text-sm">
                 <Settings className="h-4 w-4" />
                 {sidebarOpen && <span className="ml-2">Settings</span>}
               </Button>
@@ -204,20 +202,20 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm border-b px-6 py-4">
+        <header className="parrot-header-dark px-6 py-4">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold text-gray-800 capitalize">
               {activeTab.replace('-', ' ')}
             </h2>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">
-                Welcome back, {session.user.name}
+                Welcome to Parrot, {session.user.name}
               </span>
             </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-6 parrot-scrollbar">
           {children}
         </main>
       </div>

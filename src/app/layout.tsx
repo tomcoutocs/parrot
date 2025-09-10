@@ -9,8 +9,15 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Client Portal - Business Management Dashboard",
-  description: "Secure client portal with role-based access for business management",
+  title: "Parrot - Client Portal",
+  description: "Parrot client portal with role-based access for business management",
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/parrot-logo.png', type: 'image/png' }
+    ],
+    apple: '/parrot-logo.png',
+  },
 }
 
 export default function RootLayout({

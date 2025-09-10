@@ -1,0 +1,137 @@
+/* Parrot Brand Colors and Gradients */
+
+:root {
+  /* Parrot Brand Colors */
+  --parrot-orange: #D2691E;        /* Warm orange-brown */
+  --parrot-orange-dark: #B8860B;  /* Darker orange-brown */
+  --parrot-teal: #2F4F4F;         /* Dark teal-blue */
+  --parrot-teal-light: #4682B4;   /* Lighter teal-blue */
+  --parrot-white: #FFFFFF;
+  --parrot-gray: #F8F9FA;
+  
+  /* Brand Gradients */
+  --parrot-gradient: linear-gradient(135deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+  --parrot-gradient-hover: linear-gradient(135deg, var(--parrot-orange-dark) 0%, var(--parrot-teal-light) 100%);
+  --parrot-gradient-subtle: linear-gradient(135deg, rgba(210, 105, 30, 0.1) 0%, rgba(47, 79, 79, 0.1) 100%);
+  
+  /* Component Colors */
+  --parrot-primary: var(--parrot-orange);
+  --parrot-primary-hover: var(--parrot-orange-dark);
+  --parrot-secondary: var(--parrot-teal);
+  --parrot-secondary-hover: var(--parrot-teal-light);
+}
+
+/* Parrot Branded Components */
+.parrot-gradient-bg {
+  background: var(--parrot-gradient);
+}
+
+.parrot-gradient-text {
+  background: var(--parrot-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.parrot-button-primary {
+  background: var(--parrot-gradient);
+  color: white;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.parrot-button-primary:hover {
+  background: var(--parrot-gradient-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(210, 105, 30, 0.3);
+}
+
+/* Sidebar Gradient */
+.parrot-sidebar-gradient {
+  background: linear-gradient(180deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.2);
+}
+
+.parrot-sidebar-gradient .parrot-logo-text {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.parrot-sidebar-gradient .text-white {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Active tab styling */
+.parrot-sidebar-gradient .bg-teal-900\/80 {
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.parrot-header-gradient {
+  background: linear-gradient(90deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+}
+
+/* Logo Container */
+.parrot-logo-container {
+  background: var(--parrot-gradient);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parrot-logo-container-simple {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parrot-logo-text {
+  color: var(--parrot-white);
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.parrot-logo-text-dark {
+  color: var(--parrot-teal);
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+/* Dark Theme Enhancements */
+.parrot-card-dark {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.parrot-page-bg {
+  background: #f8f9fa;
+}
+
+.parrot-header-dark {
+  background: #ffffff;
+  border-bottom: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Custom scrollbar with brand colors */
+.parrot-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.parrot-scrollbar::-webkit-scrollbar-track {
+  background: var(--parrot-gray);
+}
+
+.parrot-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--parrot-gradient);
+  border-radius: 3px;
+}
+
+.parrot-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--parrot-gradient-hover);
+}
