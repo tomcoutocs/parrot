@@ -1,5 +1,20 @@
 import { supabase } from './supabase'
 
+// Simple password hashing function (in production, use bcrypt)
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password + 'parrot-salt') // Add salt
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Simple password verification function
+async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
+  const hashedInput = await hashPassword(password)
+  return hashedInput === hashedPassword
+}
+
 export interface AuthUser {
   id: string
   email: string
@@ -55,6 +70,7 @@ export async function signIn(email: string, password: string): Promise<{ user: A
   // If Supabase is not configured, use demo authentication
   if (!supabase) {
     console.log('Supabase not configured, using demo authentication')
+    // For demo mode, still use the simple password check
     if (password === 'demo123' && DEMO_USERS[email]) {
       return { user: DEMO_USERS[email], error: null }
     }
@@ -84,9 +100,14 @@ export async function signIn(email: string, password: string): Promise<{ user: A
       return { user: null, error: 'User not found' }
     }
 
-    // In a real app, you'd verify the password hash here
-    // For this demo, we'll use a simple check
-    if (password !== 'demo123') {
+    // Verify the password hash
+    if (!user.password) {
+      console.log('User has no password set')
+      return { user: null, error: 'User has no password set' }
+    }
+
+    const isPasswordValid = await verifyPassword(password, user.password)
+    if (!isPasswordValid) {
       console.log('Invalid password')
       return { user: null, error: 'Invalid password' }
     }

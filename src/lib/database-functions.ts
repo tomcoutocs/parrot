@@ -2,6 +2,21 @@ import { supabase } from './supabase'
 import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation } from './supabase'
 import { getCurrentUser } from './auth'
 
+// Simple password hashing function (in production, use bcrypt)
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password + 'parrot-salt') // Add salt
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Simple password verification function
+async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
+  const hashedInput = await hashPassword(password)
+  return hashedInput === hashedPassword
+}
+
 // Helper function to set application context for RLS
 async function setAppContext() {
   if (!supabase) return
@@ -863,6 +878,9 @@ export async function createUser(userData: {
     console.log('Tab permissions to save:', userData.tab_permissions)
     await setAppContext()
     
+    // Hash the password using a simple approach (in production, use bcrypt)
+    const hashedPassword = await hashPassword(userData.password)
+    
     // Prepare insert data, excluding tab_permissions if column doesn't exist
     const insertData: {
       email: string
@@ -871,6 +889,7 @@ export async function createUser(userData: {
       assigned_manager_id: string | null
       company_id: string | null
       is_active: boolean
+      password: string
       tab_permissions?: string[]
     } = {
       email: userData.email,
@@ -878,7 +897,8 @@ export async function createUser(userData: {
       role: userData.role,
       assigned_manager_id: userData.assigned_manager_id || null,
       company_id: userData.company_id || null,
-      is_active: true
+      is_active: true,
+      password: hashedPassword
     }
 
     // Include tab_permissions if provided
