@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Settings, CheckCircle, Circle, Edit, Building2, Filter, Search, X } from 'lucide-react'
+import { Settings, CheckCircle, Building2, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { fetchServicesWithCompanyStatus, updateCompanyServices, getCompanyServices } from '@/lib/database-functions'
-import type { ServiceWithCompanyStatus, Company } from '@/lib/supabase'
+import type { ServiceWithCompanyStatus } from '@/lib/supabase'
 
 interface ServiceCategory {
   name: string
@@ -37,7 +37,6 @@ export default function ServicesTab() {
   const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Check if current user is admin
-  const isAdmin = session?.user?.role === 'admin'
   const userCompanyId = session?.user?.company_id
 
   useEffect(() => {
@@ -135,23 +134,6 @@ export default function ServicesTab() {
     setFilteredServices(grouped)
   }
 
-  const openEditModal = async () => {
-    if (!userCompanyId) {
-      setError('No company assigned to user')
-      return
-    }
-
-    try {
-      const companyServices = await getCompanyServices(userCompanyId)
-      const activeServiceIds = companyServices.map(service => service.id)
-      setSelectedServices(activeServiceIds)
-      setShowEditModal(true)
-    } catch (error) {
-      console.error('Error loading company services:', error)
-      setError('Failed to load company services')
-    }
-  }
-
   const handleUpdateServices = async () => {
     if (!userCompanyId) {
       setError('No company assigned to user')
@@ -228,14 +210,6 @@ export default function ServicesTab() {
           <p className="text-muted-foreground">
             View and manage the services available to your company
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Button onClick={openEditModal} className="flex items-center gap-2">
-              <Edit className="h-4 w-4" />
-              Manage Company Services
-            </Button>
-          )}
         </div>
       </div>
 

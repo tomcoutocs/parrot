@@ -116,7 +116,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
               variant="ghost"
               size="sm"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-white hover:bg-white/20 h-8 w-8 p-0"
+              className="text-gray-700 hover:bg-gray-200 h-8 w-8 p-0"
             >
               <Menu className="h-4 w-4" />
             </Button>
@@ -124,7 +124,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </div>
 
         {/* User Profile Section */}
-        <div className="p-2 border-b border-white/20">
+        <div className="p-2 border-b border-gray-300">
           <div className="flex items-center space-x-2">
             <Avatar className="h-8 w-8">
               <AvatarImage src="" />
@@ -132,11 +132,11 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
             </Avatar>
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-white truncate">
+                <p className="text-xs font-medium text-gray-700 truncate">
                   {session.user.name}
                 </p>
                 <div className="flex items-center space-x-1 mt-0.5">
-                  <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs px-1 py-0" variant="secondary">
+                  <Badge className="bg-gray-200 text-gray-700 border-gray-300 backdrop-blur-sm text-xs px-1 py-0" variant="secondary">
                     {userRole}
                   </Badge>
                 </div>
@@ -159,8 +159,8 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
                       variant={isActive ? "default" : "ghost"}
                       className={`w-full justify-start h-8 text-sm ${!sidebarOpen && 'px-2'} ${
                         isActive
-                          ? 'bg-teal-900/80 text-white hover:bg-teal-900/90 border border-teal-800/50'
-                          : 'text-white hover:bg-white/20'
+                          ? 'bg-orange-600/60 text-gray-800 hover:bg-orange-600/80 border border-orange-500/40'
+                          : 'text-gray-700 hover:bg-gray-200'
                       }`}
                       onClick={() => onTabChange(item.id)}
                     >
@@ -180,10 +180,10 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </nav>
 
         {/* User Menu */}
-        <div className="p-2 border-t border-white/20">
+        <div className="p-2 border-t border-gray-300">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start text-white hover:bg-white/20 h-8 text-sm">
+              <Button variant="ghost" className="w-full justify-start text-gray-700 hover:bg-gray-200 h-8 text-sm">
                 <Settings className="h-4 w-4" />
                 {sidebarOpen && <span className="ml-2">Settings</span>}
               </Button>

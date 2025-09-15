@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Shield } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import ParrotLogo from '@/components/ui/parrot-logo'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -41,23 +42,23 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center parrot-page-bg py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-blue-100">
-            <Shield className="h-6 w-6 text-blue-600" />
+          <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-full parrot-gradient-bg">
+            <ParrotLogo size="lg" className="text-white" />
           </div>
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Sign in to Client Portal
+            Welcome to Parrot
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Access your business dashboard
+            Sign in to access your business dashboard
           </p>
         </div>
 
-        <Card>
+        <Card className="parrot-card-dark">
           <CardHeader>
-            <CardTitle>Welcome back</CardTitle>
+            <CardTitle className="text-gray-900">Sign In</CardTitle>
             <CardDescription>
               Enter your credentials to access your account
             </CardDescription>
@@ -100,7 +101,7 @@ export default function SignInPage() {
 
               <Button 
                 type="submit" 
-                className="w-full" 
+                className="w-full parrot-button-primary" 
                 disabled={isLoading}
               >
                 {isLoading ? (

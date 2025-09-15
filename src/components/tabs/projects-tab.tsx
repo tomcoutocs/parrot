@@ -92,7 +92,7 @@ interface TaskCardProps {
 
 function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAssignments }: TaskCardProps) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date()
-  const canEdit = userRole === 'admin' || userRole === 'manager'
+  const canEdit = true // Allow all users to edit tasks
 
   return (
     <Draggable draggableId={task.id} index={index}>
@@ -204,7 +204,7 @@ interface KanbanColumnProps {
 }
 
 function KanbanColumn({ column, tasks, userRole, onAddTask, onEditTask, onDeleteTask, onManageAssignments }: KanbanColumnProps) {
-  const canCreateTask = userRole === 'admin' || userRole === 'manager'
+  const canCreateTask = true // Allow all users to create tasks
 
   return (
     <div className="flex-1 min-w-0 xl:min-w-72">
@@ -268,7 +268,7 @@ interface TaskRowProps {
 
 function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssignments, onQuickEdit }: TaskRowProps) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date()
-  const canEdit = userRole === 'admin' || userRole === 'manager'
+  const canEdit = true // Allow all users to edit tasks
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
 
@@ -532,7 +532,7 @@ interface ListViewProps {
 }
 
 function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onManageAssignments, onQuickEdit }: ListViewProps) {
-  const canCreateTask = userRole === 'admin' || userRole === 'manager'
+  const canCreateTask = true // Allow all users to create tasks
 
   // Group tasks by status
   const tasksByStatus = columns.reduce((acc, column) => {
@@ -1125,36 +1125,36 @@ export default function ProjectsTab() {
           )}
         </div>
         
-        {(userRole === 'admin' || userRole === 'manager') && (
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {(userRole === 'admin' || userRole === 'manager') && (
             <Button className="gap-2 w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4" />
               New Project
             </Button>
-            {selectedProject ? (
-              <Button 
-                variant="outline" 
-                className="gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 border-green-200 w-full sm:w-auto" 
-                onClick={() => {
-                  setSelectedTaskStatus('todo')
-                  setShowCreateTaskModal(true)
-                }}
-                title={`Create new task in ${currentProject?.name || 'selected project'}`}>
-                <CheckSquare className="h-4 w-4" />
-                New Task
-              </Button>
-            ) : (
-              <Button 
-                variant="outline" 
-                className="gap-2 opacity-50 cursor-not-allowed transition-all duration-200 w-full sm:w-auto" 
-                disabled
-                title="Select a project first to create tasks">
-                <CheckSquare className="h-4 w-4" />
-                New Task
-              </Button>
-            )}
-          </div>
-        )}
+          )}
+          {selectedProject ? (
+            <Button 
+              variant="outline" 
+              className="gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 border-green-200 w-full sm:w-auto" 
+              onClick={() => {
+                setSelectedTaskStatus('todo')
+                setShowCreateTaskModal(true)
+              }}
+              title={`Create new task in ${currentProject?.name || 'selected project'}`}>
+              <CheckSquare className="h-4 w-4" />
+              New Task
+            </Button>
+          ) : (
+            <Button 
+              variant="outline" 
+              className="gap-2 opacity-50 cursor-not-allowed transition-all duration-200 w-full sm:w-auto" 
+              disabled
+              title="Select a project first to create tasks">
+              <CheckSquare className="h-4 w-4" />
+              New Task
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Project Selection & Filters */}

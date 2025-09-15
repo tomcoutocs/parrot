@@ -6,10 +6,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar, Clock, User, Globe, ChevronLeft, ChevronRight, Plus, Settings, AlertCircle } from 'lucide-react'
 import { MeetingRequestModal } from '@/components/meeting-request-modal'
@@ -17,8 +15,7 @@ import { AdminMeetingRequests } from '@/components/admin-meeting-requests'
 import { AdminConfirmedMeetingsCalendar } from '@/components/admin-confirmed-meetings-calendar'
 import { isTimeSlotAvailable, formatDateLocal } from '@/lib/meeting-functions'
 import { refreshManager } from '@/lib/refresh-utils'
-import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, addMinutes, startOfMonth, endOfMonth, eachDayOfInterval as eachDayOfMonth, addMonths, subMonths, isSameMonth, isToday, getDay, getDate } from 'date-fns'
-import { supabase } from '@/lib/supabase'
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, getDate } from 'date-fns'
 
 interface MeetingDetails {
   title: string
@@ -37,7 +34,7 @@ export default function CalendarTab() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('12h')
-  const [meetingDetails, setMeetingDetails] = useState<MeetingDetails>({
+  const [meetingDetails] = useState<MeetingDetails>({
     title: '30 Min Meeting',
     duration: 30,
     platform: 'Google Meet',
@@ -64,13 +61,13 @@ export default function CalendarTab() {
       showAdminPanel: false,
       // Per-day availability settings
       dailySettings: {
-        monday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        tuesday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        wednesday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        thursday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        friday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        saturday: { enabled: false, startHour: 9, endHour: 17, blocked: false },
-        sunday: { enabled: false, startHour: 9, endHour: 17, blocked: false }
+        monday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        tuesday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        wednesday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        thursday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        friday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        saturday: { enabled: false, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        sunday: { enabled: false, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] }
       }
     }
   })
@@ -93,13 +90,13 @@ export default function CalendarTab() {
       slotDuration: 30,
       showAdminPanel: false,
       dailySettings: {
-        monday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        tuesday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        wednesday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        thursday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        friday: { enabled: true, startHour: 9, endHour: 17, blocked: false },
-        saturday: { enabled: false, startHour: 9, endHour: 17, blocked: false },
-        sunday: { enabled: false, startHour: 9, endHour: 17, blocked: false }
+        monday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        tuesday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        wednesday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        thursday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        friday: { enabled: true, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        saturday: { enabled: false, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] },
+        sunday: { enabled: false, startHour: 9, endHour: 17, blocked: false, timeBlocks: [] }
       }
     }
     updateAdminSettings(() => defaultSettings)
@@ -143,10 +140,25 @@ export default function CalendarTab() {
       return []
     }
 
-    const { startHour, endHour } = daySettings
+    const { startHour, endHour, timeBlocks = [] } = daySettings
+
+    // Helper function to check if a time slot falls within any blocked time range
+    const isTimeBlocked = (hour: number, minute: number): boolean => {
+      const slotTime = hour + (minute / 60)
+      return timeBlocks.some((block: { startHour: number; endHour: number }) => {
+        const blockStart = block.startHour
+        const blockEnd = block.endHour
+        return slotTime >= blockStart && slotTime < blockEnd
+      })
+    }
 
     for (let hour = startHour; hour < endHour; hour++) {
       for (let minute = 0; minute < 60; minute += slotDuration) {
+        // Skip if this time slot is blocked
+        if (isTimeBlocked(hour, minute)) {
+          continue
+        }
+
         const time = new Date()
         time.setHours(hour, minute, 0, 0)
 
@@ -250,9 +262,9 @@ export default function CalendarTab() {
   }
 
   // Global refresh function that can be called from anywhere
-  const triggerGlobalRefresh = () => {
-    setGlobalRefreshTrigger(prev => prev + 1)
-  }
+  // const triggerGlobalRefresh = () => {
+  //   setGlobalRefreshTrigger(prev => prev + 1)
+  // }
 
   const selectTimeSlot = (slotIndex: number) => {
     setTimeSlots(prev => prev.map((slot, index) => ({
@@ -528,6 +540,121 @@ export default function CalendarTab() {
                           </Badge>
                         )}
                       </div>
+
+                      {/* Time Blocks Management */}
+                      {settings.enabled && !settings.blocked && (
+                        <div className="mt-4 ml-6">
+                          <div className="flex items-center justify-between mb-3">
+                            <Label className="text-sm font-medium text-gray-700">Blocked Time Ranges</Label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateAdminSettings(prev => ({
+                                ...prev,
+                                dailySettings: {
+                                  ...prev.dailySettings,
+                                  [day]: {
+                                    ...prev.dailySettings[day as keyof typeof prev.dailySettings],
+                                    timeBlocks: [...(prev.dailySettings[day as keyof typeof prev.dailySettings].timeBlocks || []), { startHour: 12, endHour: 13, label: 'Lunch Break' }]
+                                  }
+                                }
+                              }))}
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Plus className="w-3 h-3 mr-1" />
+                              Add Block
+                            </Button>
+                          </div>
+                          
+                          {settings.timeBlocks && settings.timeBlocks.length > 0 ? (
+                            <div className="space-y-2">
+                              {settings.timeBlocks.map((block: { startHour: number; endHour: number; label?: string }, blockIndex: number) => (
+                                <div key={blockIndex} className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded">
+                                  <div className="flex-1 grid grid-cols-2 gap-2">
+                                    <div>
+                                      <Label className="text-xs text-gray-600">Start</Label>
+                                      <Select
+                                        value={block.startHour.toString()}
+                                        onValueChange={(value) => updateAdminSettings(prev => ({
+                                          ...prev,
+                                          dailySettings: {
+                                            ...prev.dailySettings,
+                                            [day]: {
+                                              ...prev.dailySettings[day as keyof typeof prev.dailySettings],
+                                              timeBlocks: prev.dailySettings[day as keyof typeof prev.dailySettings].timeBlocks.map((b: { startHour: number; endHour: number; label?: string }, i: number) => 
+                                                i === blockIndex ? { ...b, startHour: parseInt(value) } : b
+                                              )
+                                            }
+                                          }
+                                        }))}
+                                      >
+                                        <SelectTrigger className="h-7 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {Array.from({ length: 24 }, (_, i) => (
+                                            <SelectItem key={i} value={i.toString()}>
+                                              {format(new Date().setHours(i), 'h:00 a')}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs text-gray-600">End</Label>
+                                      <Select
+                                        value={block.endHour.toString()}
+                                        onValueChange={(value) => updateAdminSettings(prev => ({
+                                          ...prev,
+                                          dailySettings: {
+                                            ...prev.dailySettings,
+                                            [day]: {
+                                              ...prev.dailySettings[day as keyof typeof prev.dailySettings],
+                                              timeBlocks: prev.dailySettings[day as keyof typeof prev.dailySettings].timeBlocks.map((b: { startHour: number; endHour: number; label?: string }, i: number) => 
+                                                i === blockIndex ? { ...b, endHour: parseInt(value) } : b
+                                              )
+                                            }
+                                          }
+                                        }))}
+                                      >
+                                        <SelectTrigger className="h-7 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {Array.from({ length: 24 }, (_, i) => (
+                                            <SelectItem key={i} value={i.toString()}>
+                                              {format(new Date().setHours(i), 'h:00 a')}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => updateAdminSettings(prev => ({
+                                      ...prev,
+                                      dailySettings: {
+                                        ...prev.dailySettings,
+                                        [day]: {
+                                          ...prev.dailySettings[day as keyof typeof prev.dailySettings],
+                                          timeBlocks: prev.dailySettings[day as keyof typeof prev.dailySettings].timeBlocks.filter((_: { startHour: number; endHour: number; label?: string }, i: number) => i !== blockIndex)
+                                        }
+                                      }
+                                    }))}
+                                    className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
+                                  >
+                                    ×
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-500 italic">No time blocks set</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -729,7 +856,7 @@ export default function CalendarTab() {
                 </div>
 
                 {/* Time Slots */}
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-96 overflow-y-auto parrot-scrollbar">
                   {timeSlots.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <Calendar className="w-8 h-8 mx-auto mb-2 text-gray-300" />
