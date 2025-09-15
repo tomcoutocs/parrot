@@ -103,7 +103,11 @@ export default function UserInvitationModal({ open, onOpenChange, companyId, com
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ invitations })
+        body: JSON.stringify({ 
+          invitations,
+          company_name: companyName,
+          inviter_name: session.user.name || 'Administrator'
+        })
       })
 
       const data = await response.json()

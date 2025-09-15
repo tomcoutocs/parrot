@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createBulkUserInvitations } from '@/lib/database-functions'
+import { sendBulkInvitationEmails } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { invitations } = body
+    const { invitations, company_name, inviter_name } = body
 
     if (!invitations || !Array.isArray(invitations) || invitations.length === 0) {
       return NextResponse.json(
@@ -32,13 +33,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Send invitation emails here
-    // For now, we'll just return success
-    // In production, you'd integrate with an email service like SendGrid, Resend, etc.
+    // Send invitation emails
+    if (result.data && result.data.length > 0) {
+      const emailData = result.data.map(invitation => ({
+        ...invitation,
+        company_name: company_name || 'Your Company',
+        inviter_name: inviter_name || 'Your Administrator'
+      }))
+
+      const emailResult = await sendBulkInvitationEmails(emailData)
+      
+      if (!emailResult.success) {
+        console.warn('Some invitation emails failed to send:', emailResult.results.filter(r => !r.success))
+        // Don't fail the whole operation if some emails fail
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      message: `${invitations.length} invitations created successfully`,
+      message: `${invitations.length} invitations created and emails sent successfully`,
       invitations: result.data
     })
 

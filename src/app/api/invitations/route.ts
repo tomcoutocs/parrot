@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createUserInvitation, createBulkUserInvitations } from '@/lib/database-functions'
+import { sendInvitationEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, full_name, company_id, role, invited_by, tab_permissions } = body
+    const { email, full_name, company_id, role, invited_by, tab_permissions, company_name, inviter_name } = body
 
     if (!email || !full_name || !company_id || !role || !invited_by) {
       return NextResponse.json(
@@ -29,13 +30,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Send invitation email here
-    // For now, we'll just return success
-    // In production, you'd integrate with an email service like SendGrid, Resend, etc.
+    // Send invitation email
+    if (result.data) {
+      const emailResult = await sendInvitationEmail({
+        recipientName: full_name,
+        recipientEmail: email,
+        companyName: company_name || 'Your Company',
+        invitationToken: result.data.invitation_token,
+        inviterName: inviter_name || 'Your Administrator',
+        role: role,
+        expiresAt: result.data.expires_at
+      })
+
+      if (!emailResult.success) {
+        console.warn('Failed to send invitation email:', emailResult.error)
+        // Don't fail the whole operation if email fails
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Invitation created successfully',
+      message: 'Invitation created and email sent successfully',
       invitation: result.data
     })
 
