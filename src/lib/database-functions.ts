@@ -259,28 +259,76 @@ export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'upd
 
 export async function createProject(projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>, userId: string): Promise<{ success: boolean; data?: Project; error?: string }> {
   if (!supabase) {
-    return { success: false, error: 'Supabase not configured' }
+    console.error('Supabase not configured - missing environment variables')
+    return { 
+      success: false, 
+      error: 'Database not configured. Please check your Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY).' 
+    }
   }
 
   try {
+    // Explicitly define the fields to insert to avoid any unexpected fields
+    const insertData = {
+      name: projectData.name,
+      description: projectData.description,
+      manager_id: projectData.manager_id,
+      company_id: projectData.company_id,
+      status: projectData.status,
+      created_by: projectData.created_by || userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    console.log('Inserting project data:', insertData)
+    console.log('Supabase client:', supabase)
+
+    // Validate required fields
+    if (!insertData.name || insertData.name.trim() === '') {
+      return { success: false, error: 'Project name is required' }
+    }
+    if (!insertData.company_id) {
+      return { success: false, error: 'Company ID is required' }
+    }
+    if (!insertData.created_by) {
+      return { success: false, error: 'Created by user ID is required' }
+    }
+
+    console.log('Data validation passed')
+
     const { data, error } = await supabase
       .from('projects')
-      .insert({
-        ...projectData,
-        created_by: userId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(insertData)
       .select()
       .single()
 
+    console.log('Supabase response - data:', data)
+    console.log('Supabase response - error:', error)
+    console.log('Supabase response - error JSON:', JSON.stringify(error, null, 2))
+
     if (error) {
+      console.error('Supabase error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      console.error('Full error object:', JSON.stringify(error, null, 2))
       return { success: false, error: error.message || 'Failed to create project' }
     }
 
+    if (!data) {
+      console.error('No data returned from Supabase')
+      return { success: false, error: 'No data returned from database' }
+    }
+
+    console.log('Project created successfully:', data)
     return { success: true, data }
   } catch (error) {
-    return { success: false, error: 'An unexpected error occurred' }
+    console.error('Unexpected error creating project:', error)
+    console.error('Error type:', typeof error)
+    console.error('Error constructor:', error?.constructor?.name)
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available')
+    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 

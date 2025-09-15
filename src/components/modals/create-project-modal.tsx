@@ -107,6 +107,7 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
       }
 
       console.log('Creating project with data:', projectData)
+      console.log('User ID:', session.user.id)
       const result = await createProject(projectData, session.user.id)
       console.log('Create project result:', result)
       

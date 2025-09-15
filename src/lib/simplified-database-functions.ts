@@ -183,7 +183,7 @@ export async function fetchFormsOptimized(): Promise<Form[]> {
     const { data, error } = await supabase
       .from('forms')
       .select('*')
-      .order('name', { ascending: true })
+      .order('title', { ascending: true })
 
     if (error) return []
     return data || []
