@@ -10,14 +10,11 @@ import {
   Building2, 
   FolderOpen, 
   Users, 
-  TrendingUp,
   Clock,
   CheckCircle,
   AlertCircle,
-  BarChart3,
-  Activity,
-  ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Eye
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -28,47 +25,15 @@ import {
   fetchTasksOptimized, 
   fetchCompaniesOptimized, 
   fetchUsersOptimized,
-  fetchFormsOptimized,
-  fetchServicesOptimized
+  fetchFormsOptimized
 } from '@/lib/simplified-database-functions'
 import type { 
   ProjectWithDetails, 
   TaskWithDetails, 
   Company, 
   User, 
-  Form, 
-  Service 
+  Form
 } from '@/lib/supabase'
-
-interface DashboardStats {
-  projects: {
-    total: number
-    active: number
-    completed: number
-  }
-  tasks: {
-    total: number
-    assigned: number
-    completed: number
-    overdue: number
-  }
-  forms: {
-    total: number
-    submissions: number
-  }
-  services: {
-    total: number
-    active: number
-  }
-  companies?: {
-    total: number
-    active: number
-  }
-  users?: {
-    total: number
-    active: number
-  }
-}
 
 interface DashboardLandingTabProps {
   onNavigateToTab?: (tab: string) => void
@@ -76,7 +41,10 @@ interface DashboardLandingTabProps {
 
 export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandingTabProps) {
   const { data: session } = useSession()
-  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [tasks, setTasks] = useState<TaskWithDetails[]>([])
+  const [forms, setForms] = useState<Form[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -90,94 +58,68 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
     setError('')
     
     try {
-      const userRole = session?.user?.role
-      const userCompanyId = session?.user?.company_id
-      
-      // Fetch data based on user role
-      const [projects, tasks, forms, services] = await Promise.all([
-        fetchProjectsOptimized(userRole === 'admin' ? undefined : userCompanyId),
+      // Fetch all data in parallel for admin dashboard
+      const [companiesData, tasksData, formsData, usersData] = await Promise.all([
+        fetchCompaniesOptimized(),
         fetchTasksOptimized(),
         fetchFormsOptimized(),
-        fetchServicesOptimized()
+        fetchUsersOptimized()
       ])
 
-      // Fetch admin-only data
-      let companies: Company[] = []
-      let users: User[] = []
-      
-      if (userRole === 'admin') {
-        [companies, users] = await Promise.all([
-          fetchCompaniesOptimized(),
-          fetchUsersOptimized()
-        ])
-      }
-
-      // Calculate statistics
-      const now = new Date()
-      const stats: DashboardStats = {
-        projects: {
-          total: projects.length,
-          active: projects.filter(p => p.status === 'active').length,
-          completed: projects.filter(p => p.status === 'completed').length
-        },
-        tasks: {
-          total: tasks.length,
-          assigned: tasks.filter(t => t.assigned_to).length,
-          completed: tasks.filter(t => t.status === 'done').length,
-          overdue: tasks.filter(t => 
-            t.due_date && 
-            new Date(t.due_date) < now && 
-            t.status !== 'done'
-          ).length
-        },
-        forms: {
-          total: forms.length,
-          submissions: 0 // TODO: Calculate actual submission count
-        },
-        services: {
-          total: services.length,
-          active: services.filter(s => s.is_active).length
-        }
-      }
-
-      // Add admin-only stats
-      if (userRole === 'admin') {
-        stats.companies = {
-          total: companies.length,
-          active: companies.filter(c => c.is_active).length
-        }
-        stats.users = {
-          total: users.length,
-          active: users.filter(u => u.is_active).length
-        }
-      }
-
-      setStats(stats)
+      setCompanies(companiesData || [])
+      setTasks(tasksData || [])
+      setForms(formsData || [])
+      setUsers(usersData || [])
       setLastUpdated(new Date())
     } catch (err) {
-      console.error('Error loading dashboard data:', err)
+      console.error('Failed to load dashboard data:', err)
       setError('Failed to load dashboard data. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  const getTaskPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'text-red-600'
-      case 'medium': return 'text-yellow-600'
-      case 'low': return 'text-green-600'
-      default: return 'text-gray-600'
-    }
+  // Helper functions for admin dashboard
+  const getTasksDueWithin24Hours = () => {
+    const now = new Date()
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    
+    return tasks.filter(task => {
+      if (!task.due_date) return false
+      const dueDate = new Date(task.due_date)
+      return dueDate >= now && dueDate <= tomorrow && task.status !== 'done'
+    })
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-blue-100 text-blue-800'
-      case 'completed': return 'bg-green-100 text-green-800'
-      case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'cancelled': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+  const getActiveClients = () => {
+    return companies.filter(company => company.is_active)
+  }
+
+  const formatDate = (dateString: string) => {
+    try {
+      // If it's already in YYYY-MM-DD format, parse it as local date
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        const [year, month, day] = dateString.split('-')
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }
+      
+      // For ISO dates (including our noon UTC dates), use UTC methods
+      const date = new Date(dateString)
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch (error) {
+      console.error('Error formatting date:', error)
+      return 'Invalid date'
     }
   }
 
@@ -207,22 +149,14 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
     )
   }
 
-  if (!stats) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-gray-600">No data available</p>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-3xl font-bold parrot-gradient-text">Admin Dashboard</h1>
           <p className="text-gray-600 mt-1">
-            Welcome back, {session?.user.name}! Here&apos;s an overview of your workspace.
+            Welcome back, {session?.user.name}! Here&apos;s your admin overview.
           </p>
           {lastUpdated && (
             <p className="text-sm text-gray-500 mt-1">
@@ -236,227 +170,175 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
         </Button>
       </div>
 
-      {/* Overview Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {/* Admin Dashboard Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Projects Overview */}
-        <Card 
-          className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => onNavigateToTab?.('projects')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Projects</CardTitle>
-            <Kanban className="h-4 w-4 text-muted-foreground" />
+        {/* Active Clients List */}
+        <Card className="parrot-card-dark">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Building2 className="h-5 w-5 mr-2" />
+              Active Clients ({getActiveClients().length})
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.projects.total}</div>
-            <div className="flex gap-2 mt-2">
-              <Badge variant="default" className="text-xs">
-                {stats.projects.active} Active
-              </Badge>
-              <Badge variant="secondary" className="text-xs">
-                {stats.projects.completed} Completed
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Manage your projects and tasks
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Tasks Overview */}
-        <Card 
-          className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => onNavigateToTab?.('projects')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tasks</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.tasks.total}</div>
-            <div className="flex gap-2 mt-2">
-              <Badge variant="default" className="text-xs">
-                {stats.tasks.assigned} Assigned
-              </Badge>
-              <Badge variant="secondary" className="text-xs">
-                {stats.tasks.completed} Completed
-              </Badge>
-              {stats.tasks.overdue > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  {stats.tasks.overdue} Overdue
-                </Badge>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {getActiveClients().map((client) => (
+                <div key={client.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{client.name}</p>
+                    <p className="text-sm text-gray-500">{client.website || 'No website'}</p>
+                  </div>
+                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    Active
+                  </Badge>
+                </div>
+              ))}
+              {getActiveClients().length === 0 && (
+                <p className="text-gray-500 text-center py-4">No active clients</p>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Track your assigned tasks
-            </p>
           </CardContent>
         </Card>
 
-        {/* Forms Overview */}
-        <Card 
-          className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => onNavigateToTab?.('forms')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Forms</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.forms.total}</div>
-            <div className="flex gap-2 mt-2">
-              <Badge variant="default" className="text-xs">
-                {stats.forms.submissions} Submissions
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Create and manage forms
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Services Overview */}
-        <Card 
-          className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => onNavigateToTab?.('services')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Services</CardTitle>
-            <Settings className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.services.total}</div>
-            <div className="flex gap-2 mt-2">
-              <Badge variant="default" className="text-xs">
-                {stats.services.active} Active
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Manage available services
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Calendar Overview */}
-        <Card 
-          className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => onNavigateToTab?.('calendar')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Calendar</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-muted-foreground mt-2">
-              View and manage your calendar
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Documents Overview */}
-        <Card 
-          className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => onNavigateToTab?.('documents')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Documents</CardTitle>
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Manage your documents
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Admin-only cards */}
-        {session?.user.role === 'admin' && (
-          <>
-            {/* Companies Overview */}
-            <Card 
-              className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => onNavigateToTab?.('companies')}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Companies</CardTitle>
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.companies?.total || 0}</div>
-                <div className="flex gap-2 mt-2">
-                  <Badge variant="default" className="text-xs">
-                    {stats.companies?.active || 0} Active
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Manage client companies
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Users Overview */}
-            <Card 
-              className="parrot-card-dark hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => onNavigateToTab?.('admin')}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Users</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.users?.total || 0}</div>
-                <div className="flex gap-2 mt-2">
-                  <Badge variant="default" className="text-xs">
-                    {stats.users?.active || 0} Active
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Manage system users
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="mt-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Button variant="outline" className="h-20 flex flex-col items-center justify-center parrot-card-dark hover:shadow-md transition-shadow">
-            <Kanban className="h-6 w-6 mb-2" />
-            <span className="text-sm">View Projects</span>
-          </Button>
-          <Button variant="outline" className="h-20 flex flex-col items-center justify-center parrot-card-dark hover:shadow-md transition-shadow">
-            <FileText className="h-6 w-6 mb-2" />
-            <span className="text-sm">Create Form</span>
-          </Button>
-          <Button variant="outline" className="h-20 flex flex-col items-center justify-center parrot-card-dark hover:shadow-md transition-shadow">
-            <Calendar className="h-6 w-6 mb-2" />
-            <span className="text-sm">Schedule Meeting</span>
-          </Button>
-          <Button variant="outline" className="h-20 flex flex-col items-center justify-center parrot-card-dark hover:shadow-md transition-shadow">
-            <Settings className="h-6 w-6 mb-2" />
-            <span className="text-sm">Manage Services</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* Recent Activity Placeholder */}
-      <div className="mt-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
+        {/* Tasks Due Within 24 Hours */}
         <Card className="parrot-card-dark">
-          <CardContent className="p-6">
-            <div className="text-center text-gray-500">
-              <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Recent activity will be displayed here</p>
-              <p className="text-sm mt-2">This feature is coming soon!</p>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Clock className="h-5 w-5 mr-2" />
+              Tasks Due Within 24 Hours ({getTasksDueWithin24Hours().length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {getTasksDueWithin24Hours().map((task) => (
+                <div key={task.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{task.title}</p>
+                    <p className="text-sm text-gray-500">
+                      Due: {formatDate(task.due_date!)}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                    {task.priority}
+                  </Badge>
+                </div>
+              ))}
+              {getTasksDueWithin24Hours().length === 0 && (
+                <p className="text-gray-500 text-center py-4">No tasks due within 24 hours</p>
+              )}
             </div>
           </CardContent>
         </Card>
+
+        {/* Preview of All Tasks */}
+        <Card className="parrot-card-dark">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Kanban className="h-5 w-5 mr-2" />
+              All Tasks Preview ({tasks.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {tasks.slice(0, 10).map((task) => (
+                <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{task.title}</p>
+                    <p className="text-sm text-gray-500">
+                      Status: {task.status} | Priority: {task.priority}
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {task.status}
+                  </Badge>
+                </div>
+              ))}
+              {tasks.length > 10 && (
+                <p className="text-gray-500 text-center py-2">
+                  Showing 10 of {tasks.length} tasks
+                </p>
+              )}
+              {tasks.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No tasks found</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Forms */}
+        <Card className="parrot-card-dark">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <FileText className="h-5 w-5 mr-2" />
+              Forms ({forms.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {forms.map((form) => (
+                <div key={form.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{form.title}</p>
+                    <p className="text-sm text-gray-500">{form.description}</p>
+                  </div>
+                  <Badge variant={form.is_active ? "default" : "secondary"}>
+                    {form.is_active ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+              ))}
+              {forms.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No forms found</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Users */}
+        <Card className="parrot-card-dark">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Users className="h-5 w-5 mr-2" />
+              Users ({users.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {users.map((user) => (
+                <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">{user.full_name}</p>
+                    <p className="text-sm text-gray-500">{user.email}</p>
+                  </div>
+                  <Badge variant="outline">
+                    {user.role}
+                  </Badge>
+                </div>
+              ))}
+              {users.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No users found</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Calendar Events Within 24 Hours */}
+        <Card className="parrot-card-dark">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Calendar className="h-5 w-5 mr-2" />
+              Calendar Events (Coming Soon)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-gray-500 py-8">
+              <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Calendar events integration coming soon!</p>
+              <p className="text-sm mt-2">This will show events within the next 24 hours</p>
+            </div>
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   )

@@ -17,6 +17,7 @@ import {
 import { createTask } from '@/lib/database-functions'
 import { Task } from '@/lib/supabase'
 import { useSession } from '@/components/providers/session-provider'
+import { formatDateForDatabase } from '@/lib/date-utils'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -71,7 +72,7 @@ export default function CreateTaskModal({
         status,
         priority,
         assigned_to: assignedTo === 'unassigned' ? undefined : assignedTo || undefined,
-        due_date: dueDate || undefined,
+        due_date: dueDate ? formatDateForDatabase(dueDate) : undefined,
         estimated_hours: estimatedHours,
         actual_hours: 0,
         position: 1, // Will be updated by the database

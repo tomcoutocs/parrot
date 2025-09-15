@@ -56,6 +56,7 @@ import {
   deleteTask,
   invalidateProjectCache
 } from '@/lib/simplified-database-functions'
+import { formatDateForDatabase } from '@/lib/date-utils'
 import type { Subscription } from '@/lib/performance-optimizations'
 import CreateProjectModal from '@/components/modals/create-project-modal'
 import CreateTaskModal from '@/components/modals/create-task-modal'
@@ -317,7 +318,13 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-      onQuickEdit(task, 'due_date', date.toISOString().split('T')[0])
+      // Convert the selected date to YYYY-MM-DD format for the input
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const dateString = `${year}-${month}-${day}`
+      
+      onQuickEdit(task, 'due_date', formatDateForDatabase(dateString))
     }
   }
 

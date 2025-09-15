@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Loader2 } from 'lucide-react'
 import type { TaskWithDetails, User } from '@/lib/supabase'
 import { updateTask, fetchUsers } from '@/lib/database-functions'
+import { formatDateForInput, formatDateForDatabase } from '@/lib/date-utils'
 
 interface EditTaskModalProps {
   task: TaskWithDetails | null
@@ -39,7 +40,7 @@ export function EditTaskModal({ task, isOpen, onClose, onTaskUpdated, users }: E
       setStatus(task.status)
       setPriority(task.priority)
       setAssignedTo(task.assigned_to || 'none')
-      setDueDate(task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '')
+      setDueDate(task.due_date ? formatDateForInput(task.due_date) : '')
       setEstimatedHours(task.estimated_hours?.toString() || '')
       setActualHours(task.actual_hours?.toString() || '')
       setError('')
@@ -64,7 +65,7 @@ export function EditTaskModal({ task, isOpen, onClose, onTaskUpdated, users }: E
         status,
         priority,
         assigned_to: assignedTo === 'none' ? undefined : assignedTo,
-        due_date: dueDate ? new Date(dueDate).toISOString() : undefined,
+        due_date: dueDate ? formatDateForDatabase(dueDate) : undefined,
         estimated_hours: estimatedHours ? parseInt(estimatedHours) : undefined,
         actual_hours: actualHours ? parseInt(actualHours) : undefined
       }
