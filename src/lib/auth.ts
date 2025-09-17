@@ -71,7 +71,11 @@ export async function signIn(email: string, password: string): Promise<{ user: A
   if (!supabase) {
     console.log('Supabase not configured, using demo authentication')
     // For demo mode, still use the simple password check
-    if (password === 'demo123' && DEMO_USERS[email]) {
+    // Admin users now use the new default password
+    const isAdminUser = email === 'admin@company.com'
+    const expectedPassword = isAdminUser ? '!Parrot2025' : 'demo123'
+    
+    if (password === expectedPassword && DEMO_USERS[email]) {
       return { user: DEMO_USERS[email], error: null }
     }
     return { user: null, error: 'Invalid credentials' }

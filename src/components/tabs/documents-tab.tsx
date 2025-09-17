@@ -725,6 +725,7 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
            {/* Removed selection functionality */}
 
           <Button 
+            variant="orange"
             onClick={() => setShowCreateFolderModal(true)}
             disabled={currentFolder === '/Setup Instructions'}
           >
@@ -732,6 +733,7 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
             New Folder
           </Button>
           <Button 
+            variant="orange"
             onClick={() => fileInputRef.current?.click()}
             disabled={currentFolder === '/Setup Instructions'}
           >
@@ -1187,7 +1189,7 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
             <Button variant="outline" onClick={() => setShowCreateFolderModal(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateFolder} disabled={!newFolderName.trim() || creatingFolder}>
+            <Button variant="orange" onClick={handleCreateFolder} disabled={!newFolderName.trim() || creatingFolder}>
               {creatingFolder ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Create Folder
             </Button>

@@ -80,13 +80,7 @@ yarn dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## 🔑 Demo Credentials
 
-The application comes with pre-configured demo users:
-
-- **Admin**: `admin@company.com` / `demo123`
-- **Manager**: `manager@company.com` / `demo123` 
-- **User**: `user@company.com` / `demo123`
 
 ## 🏗️ Architecture Overview
 

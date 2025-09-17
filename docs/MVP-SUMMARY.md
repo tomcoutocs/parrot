@@ -92,7 +92,7 @@
 ## 📱 User Experience
 
 ### Demo Credentials
-- **Admin**: `admin@company.com` / `demo123`
+- **Admin**: `admin@company.com` / `!Parrot2025`
 - **Manager**: `manager@company.com` / `demo123`
 - **User**: `user@company.com` / `demo123`
 

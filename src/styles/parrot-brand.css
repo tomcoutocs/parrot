@@ -2,8 +2,9 @@
 
 :root {
   /* Parrot Brand Colors */
-  --parrot-orange: #D2691E;        /* Warm orange-brown */
-  --parrot-orange-dark: #B8860B;  /* Darker orange-brown */
+  --parrot-orange: #FE4E03;        /* Bright orange */
+  --parrot-orange-dark: #E03E00;   /* Darker orange */
+  --parrot-orange-light: #FF6B1A;  /* Lighter orange */
   --parrot-teal: #2F4F4F;         /* Dark teal-blue */
   --parrot-teal-light: #4682B4;   /* Lighter teal-blue */
   --parrot-white: #FFFFFF;
@@ -12,7 +13,7 @@
   /* Brand Gradients */
   --parrot-gradient: linear-gradient(135deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
   --parrot-gradient-hover: linear-gradient(135deg, var(--parrot-orange-dark) 0%, var(--parrot-teal-light) 100%);
-  --parrot-gradient-subtle: linear-gradient(135deg, rgba(210, 105, 30, 0.1) 0%, rgba(47, 79, 79, 0.1) 100%);
+  --parrot-gradient-subtle: linear-gradient(135deg, rgba(254, 78, 3, 0.1) 0%, rgba(47, 79, 79, 0.1) 100%);
   
   /* Component Colors */
   --parrot-primary: var(--parrot-orange);
@@ -43,13 +44,52 @@
 .parrot-button-primary:hover {
   background: var(--parrot-gradient-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(210, 105, 30, 0.3);
+  box-shadow: 0 4px 12px rgba(254, 78, 3, 0.3);
 }
 
 /* Sidebar Gradient */
 .parrot-sidebar-gradient {
-  background: #f8f9fa;
+  background: rgba(211, 216, 219, 0.7);
   box-shadow: 4px 0 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Sidebar Section Separators */
+.parrot-sidebar-gradient .sidebar-section {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+}
+
+.parrot-sidebar-gradient .sidebar-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Logo Section Styling */
+.parrot-sidebar-gradient .logo-section {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* User Info Section Styling */
+.parrot-sidebar-gradient .user-section {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Navigation Section Styling */
+.parrot-sidebar-gradient .nav-section {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .parrot-sidebar-gradient .parrot-logo-text {
@@ -136,4 +176,51 @@
 
 .parrot-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--parrot-gradient-hover);
+}
+
+/* Orange Highlight Classes */
+.parrot-orange-text {
+  color: var(--parrot-orange);
+}
+
+.parrot-orange-bg {
+  background-color: var(--parrot-orange);
+}
+
+.parrot-orange-border {
+  border-color: var(--parrot-orange);
+}
+
+.parrot-orange-accent {
+  background-color: rgba(254, 78, 3, 0.1);
+  border-left: 3px solid var(--parrot-orange);
+}
+
+.parrot-orange-hover:hover {
+  color: var(--parrot-orange);
+  transition: color 0.2s ease;
+}
+
+.parrot-orange-button {
+  background-color: var(--parrot-orange);
+  color: white;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.parrot-orange-button:hover {
+  background-color: var(--parrot-orange-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(254, 78, 3, 0.3);
+}
+
+.parrot-orange-outline {
+  border: 2px solid var(--parrot-orange);
+  color: var(--parrot-orange);
+  background: transparent;
+}
+
+.parrot-orange-outline:hover {
+  background-color: var(--parrot-orange);
+  color: white;
 }

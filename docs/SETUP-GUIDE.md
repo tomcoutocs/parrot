@@ -142,7 +142,7 @@ yarn dev
 1. **Open your browser** to `http://localhost:3000`
 2. **You should be redirected** to `/auth/signin`
 3. **Try logging in** with demo credentials:
-   - **Admin**: `admin@company.com` / `demo123`
+   - **Admin**: `admin@company.com` / `!Parrot2025`
    - **Manager**: `manager@company.com` / `demo123`
    - **User**: `user@company.com` / `demo123`
 

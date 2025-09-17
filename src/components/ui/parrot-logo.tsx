@@ -14,9 +14,9 @@ export function ParrotLogo({ className = '', size = 'md' }: ParrotLogoProps) {
 
   return (
     <img
-      src="/parrot-logo.png"
+      src="/orange-logo.png"
       alt="Parrot Logo"
-      className={`${sizeClasses[size]} ${className}`}
+      className={`${sizeClasses[size]} ${className} object-contain`}
     />
   )
 }

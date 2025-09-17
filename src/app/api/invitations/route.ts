@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createUserInvitation, createBulkUserInvitations } from '@/lib/database-functions'
+import { createUserInvitation } from '@/lib/database-functions'
 import { sendInvitationEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {

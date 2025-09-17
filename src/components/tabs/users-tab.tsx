@@ -356,7 +356,7 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
               <List className="h-4 w-4" />
             </Button>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
+          <Button variant="orange" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create User
           </Button>
@@ -697,9 +697,14 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
                 </Label>
                 <Select
                   value={createUserData.role}
-                  onValueChange={(value: 'admin' | 'manager' | 'user' | 'internal') =>
-                    setCreateUserData({ ...createUserData, role: value })
-                  }
+                  onValueChange={(value: 'admin' | 'manager' | 'user' | 'internal') => {
+                    const newData = { ...createUserData, role: value }
+                    // Set default password for admin users
+                    if (value === 'admin') {
+                      newData.password = '!Parrot2025'
+                    }
+                    setCreateUserData(newData)
+                  }}
                 >
                   <SelectTrigger className="col-span-3">
                     <SelectValue />
@@ -923,7 +928,7 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
               <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Create User</Button>
+              <Button variant="orange" type="submit">Create User</Button>
             </DialogFooter>
           </form>
         </DialogContent>

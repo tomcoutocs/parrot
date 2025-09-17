@@ -207,7 +207,7 @@ This project includes comprehensive documentation organized in the `docs/` folde
 
 1. **Follow the [Setup Guide](./SETUP-GUIDE.md)** (30 minutes)
 2. **Test with demo accounts:**
-   - Admin: `admin@company.com` / `demo123`
+   - Admin: `admin@company.com` / `!Parrot2025`
    - Manager: `manager@company.com` / `demo123`  
    - User: `user@company.com` / `demo123`
 3. **Explore the analytics dashboard** and role-based features

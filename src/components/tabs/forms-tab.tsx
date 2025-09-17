@@ -208,7 +208,7 @@ export default function FormsTab() {
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setShowCreateModal(true)}>
+          <Button variant="orange" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create Form
           </Button>
@@ -353,6 +353,7 @@ export default function FormsTab() {
                       ) : (
                         <Button
                           size="sm"
+                          variant="orange"
                           onClick={() => handleFillForm(form)}
                         >
                           <FileText className="h-4 w-4 mr-1" />

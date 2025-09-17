@@ -490,7 +490,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
               <List className="h-4 w-4" />
             </Button>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
+          <Button variant="orange" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create Company
           </Button>
@@ -886,7 +886,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
               <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Create Company</Button>
+              <Button variant="orange" type="submit">Create Company</Button>
             </DialogFooter>
           </form>
         </DialogContent>

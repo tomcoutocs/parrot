@@ -104,7 +104,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
     <div className="flex h-screen parrot-page-bg">
       {/* Sidebar */}
       <div className={`${sidebarOpen ? 'w-64' : 'w-16'} parrot-sidebar-gradient shadow-lg transition-all duration-300 flex flex-col`}>
-        <div className="p-2 border-b">
+        <div className="p-2 border-b logo-section">
           <div className="flex items-center justify-between">
             <div className="parrot-logo-container-simple">
               <ParrotLogo size="sm" />
@@ -124,7 +124,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </div>
 
         {/* User Profile Section */}
-        <div className="p-2 border-b border-gray-300">
+        <div className="p-2 border-b border-gray-300 user-section">
           <div className="flex items-center space-x-2">
             <Avatar className="h-8 w-8">
               <AvatarImage src="" />
@@ -146,7 +146,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-1">
+        <nav className="flex-1 p-2 space-y-1 nav-section">
           <TooltipProvider>
             {filteredNavItems.map((item) => {
               const Icon = item.icon
@@ -159,7 +159,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
                       variant={isActive ? "default" : "ghost"}
                       className={`w-full justify-start h-8 text-sm ${!sidebarOpen && 'px-2'} ${
                         isActive
-                          ? 'bg-orange-600/60 text-gray-800 hover:bg-orange-600/80 border border-orange-500/40'
+                          ? 'bg-[#FE4E03]/20 text-[#FE4E03] hover:bg-[#FE4E03]/30 border border-[#FE4E03]/40'
                           : 'text-gray-700 hover:bg-gray-200'
                       }`}
                       onClick={() => onTabChange(item.id)}
@@ -180,7 +180,7 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </nav>
 
         {/* User Menu */}
-        <div className="p-2 border-t border-gray-300">
+        <div className="p-2 border-t border-gray-300 sidebar-section">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start text-gray-700 hover:bg-gray-200 h-8 text-sm">

@@ -36,7 +36,22 @@ export async function POST(request: NextRequest) {
     // Send invitation emails
     if (result.data && result.data.length > 0) {
       const emailData = result.data.map(invitation => ({
-        ...invitation,
+        recipientName: invitation.full_name,
+        recipientEmail: invitation.email,
+        companyName: company_name || 'Your Company',
+        invitationToken: invitation.invitation_token,
+        inviterName: inviter_name || 'Your Administrator',
+        role: invitation.role,
+        expiresAt: invitation.expires_at,
+        // Include all the original invitation data
+        id: invitation.id,
+        email: invitation.email,
+        full_name: invitation.full_name,
+        company_id: invitation.company_id,
+        invited_by: invitation.invited_by,
+        invitation_token: invitation.invitation_token,
+        expires_at: invitation.expires_at,
+        created_at: invitation.created_at,
         company_name: company_name || 'Your Company',
         inviter_name: inviter_name || 'Your Administrator'
       }))

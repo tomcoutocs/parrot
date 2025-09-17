@@ -1127,7 +1127,7 @@ export default function ProjectsTab() {
         
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {(userRole === 'admin' || userRole === 'manager') && (
-            <Button className="gap-2 w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>
+            <Button variant="orange" className="gap-2 w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4" />
               New Project
             </Button>
