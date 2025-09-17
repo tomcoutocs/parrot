@@ -1,4 +1,5 @@
 import React from 'react'
+import Image from 'next/image'
 
 interface ParrotLogoProps {
   className?: string
@@ -13,12 +14,14 @@ export function ParrotLogo({ className = '', size = 'md', variant = 'orange' }: 
     lg: 'h-12 w-12'
   }
 
-  const logoSrc = variant === 'white' ? '/parrot-logo.png' : '/orange-logo.png'
+  const logoSrc = variant === 'white' ? '/parrot-logo.png' : '/parrot-grad.png'
 
   return (
-    <img
+    <Image
       src={logoSrc}
       alt="Parrot Logo"
+      width={48}
+      height={48}
       className={`${sizeClasses[size]} ${className} object-contain`}
     />
   )

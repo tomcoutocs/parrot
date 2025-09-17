@@ -15,9 +15,9 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/parrot-logo.png', type: 'image/png' }
+      { url: '/parrot-grad.png', type: 'image/png' }
     ],
-    apple: '/parrot-logo.png',
+    apple: '/parrot-grad.png',
   },
 }
 

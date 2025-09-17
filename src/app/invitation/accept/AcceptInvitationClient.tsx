@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,19 +43,7 @@ export default function AcceptInvitationClient() {
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (!mounted) return
-    
-    if (!token) {
-      setError('No invitation token provided')
-      setLoading(false)
-      return
-    }
-
-    fetchInvitation()
-  }, [token, mounted])
-
-  const fetchInvitation = async () => {
+  const fetchInvitation = useCallback(async () => {
     try {
       const response = await fetch(`/api/invitations/accept?token=${token}`)
       const data = await response.json()
@@ -67,12 +55,25 @@ export default function AcceptInvitationClient() {
       }
 
       setInvitation(data.invitation)
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to load invitation:', err)
       setError('Failed to load invitation')
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
+
+  useEffect(() => {
+    if (!mounted) return
+    
+    if (!token) {
+      setError('No invitation token provided')
+      setLoading(false)
+      return
+    }
+
+    fetchInvitation()
+  }, [token, mounted, fetchInvitation])
 
   const handleAcceptInvitation = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -119,7 +120,8 @@ export default function AcceptInvitationClient() {
         router.push('/auth/signin')
       }, 3000)
 
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to accept invitation:', err)
       setError('Failed to accept invitation')
     } finally {
       setAccepting(false)

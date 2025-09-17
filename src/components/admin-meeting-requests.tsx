@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -7,8 +7,7 @@ import { Label } from '@/components/ui/label'
 import { 
   getPendingMeetingRequests, 
   updateMeetingRequestStatus, 
-  createConfirmedMeeting,
-  formatDateLocal
+  createConfirmedMeeting
 } from '@/lib/meeting-functions'
 import { triggerGlobalRefresh } from '@/lib/refresh-utils'
 import { MeetingRequest } from '@/lib/supabase'
@@ -31,7 +30,7 @@ interface AdminMeetingRequestsProps {
   onMeetingConfirmed?: () => void
 }
 
-export const AdminMeetingRequests: React.FC<AdminMeetingRequestsProps> = ({ userId, slotDuration, onMeetingConfirmed }) => {
+export const AdminMeetingRequests: React.FC<AdminMeetingRequestsProps> = ({ slotDuration, onMeetingConfirmed }) => {
   const [meetingRequests, setMeetingRequests] = useState<MeetingRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -55,6 +54,7 @@ export const AdminMeetingRequests: React.FC<AdminMeetingRequestsProps> = ({ user
 
       setMeetingRequests(data || [])
     } catch (err) {
+      console.error('Failed to load meeting requests:', err)
       setError('An unexpected error occurred')
     } finally {
       setLoading(false)
@@ -167,6 +167,7 @@ export const AdminMeetingRequests: React.FC<AdminMeetingRequestsProps> = ({ user
       setSelectedRequest(null)
       setAdminNotes('')
     } catch (err) {
+      console.error('Unexpected error in handleReject:', err)
       setError('An unexpected error occurred')
     } finally {
       setProcessing(null)
@@ -213,18 +214,6 @@ export const AdminMeetingRequests: React.FC<AdminMeetingRequestsProps> = ({ user
     return result
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <AlertCircle className="w-4 h-4 text-yellow-500" />
-      case 'approved':
-        return <CheckCircle className="w-4 h-4 text-green-500" />
-      case 'denied':
-        return <XCircle className="w-4 h-4 text-red-500" />
-      default:
-        return <AlertCircle className="w-4 h-4 text-gray-500" />
-    }
-  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {

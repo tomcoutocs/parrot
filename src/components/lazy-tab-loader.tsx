@@ -1,7 +1,7 @@
 // Lazy Loading Components for Performance Optimization
 // This module implements lazy loading for dashboard tabs to improve initial load times
 
-import React, { Suspense, ComponentType } from 'react'
+import React, { ComponentType } from 'react'
 
 // Temporarily disable lazy loading to debug runtime errors
 import DashboardLandingTab from '@/components/tabs/dashboard-landing-tab'
@@ -16,17 +16,6 @@ import DocumentsTab from '@/components/tabs/documents-tab'
 import ProjectOverviewTab from '@/components/tabs/project-overview-tab'
 import DebugTab from '@/components/tabs/debug-tab'
 
-// Loading component
-function TabLoadingSpinner() {
-  return (
-    <div className="flex items-center justify-center h-64">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="mt-2 text-gray-600">Loading...</p>
-      </div>
-    </div>
-  )
-}
 
 // Error boundary for lazy loaded components
 class TabErrorBoundary extends React.Component<

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Download, Eye, FileText, Image, File, FileVideo, FileAudio, FileSpreadsheet } from 'lucide-react'
+import Image from 'next/image'
+import { X, Download, Eye, FileText, Image as ImageIcon, File, FileVideo, FileAudio, FileSpreadsheet } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -168,7 +169,7 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
 
   const getFileIcon = (fileType: string) => {
     switch (fileType) {
-      case 'image': return <Image className="h-6 w-6" />
+      case 'image': return <ImageIcon className="h-6 w-6" />
       case 'pdf': return <FileText className="h-6 w-6" />
       case 'text': return <FileText className="h-6 w-6" />
       case 'video': return <FileVideo className="h-6 w-6" />
@@ -236,9 +237,11 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
             <div className="space-y-4">
               {previewContent.type === 'image' && (
                 <div className="flex justify-center">
-                  <img
+                  <Image
                     src={previewContent.url}
                     alt={doc.name}
+                    width={800}
+                    height={600}
                     className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-lg"
                     onError={() => setError('Failed to load image preview')}
                   />

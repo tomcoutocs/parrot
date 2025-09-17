@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -129,7 +129,7 @@ export default function CalendarTab() {
   }, [adminSettings.startHour, adminSettings.endHour, adminSettings.slotDuration])
 
   // Generate time slots for selected date
-  const generateTimeSlots = async (): Promise<TimeSlot[]> => {
+  const generateTimeSlots = useCallback(async (): Promise<TimeSlot[]> => {
     const slots: TimeSlot[] = []
     const { slotDuration, dailySettings } = adminSettings
 
@@ -184,7 +184,7 @@ export default function CalendarTab() {
       }
     }
     return slots
-  }
+  }, [selectedDate, adminSettings, timeFormat])
 
   // Initialize time slots and update when selected date or admin settings change
   useEffect(() => {
@@ -193,7 +193,7 @@ export default function CalendarTab() {
       setTimeSlots(slots)
     }
     updateTimeSlots()
-  }, [selectedDate, adminSettings, globalRefreshTrigger])
+  }, [selectedDate, adminSettings, globalRefreshTrigger, generateTimeSlots])
 
   // Initial time slots generation
   useEffect(() => {
@@ -202,7 +202,26 @@ export default function CalendarTab() {
       setTimeSlots(slots)
     }
     updateTimeSlots()
-  }, [])
+  }, [generateTimeSlots])
+
+  // Force a complete calendar refresh (more aggressive)
+  const forceCalendarRefresh = useCallback(async () => {
+    // Clear current time slots first
+    setTimeSlots([])
+    
+    // Wait a moment for state to update
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Regenerate time slots
+    const slots = await generateTimeSlots()
+    setTimeSlots(slots)
+    
+    // Also trigger admin calendar refresh
+    setAdminCalendarRefreshTrigger(prev => prev + 1)
+    
+    // Trigger global refresh
+    setGlobalRefreshTrigger(prev => prev + 1)
+  }, [generateTimeSlots])
 
   // Subscribe to global refresh events
   useEffect(() => {
@@ -211,16 +230,8 @@ export default function CalendarTab() {
     })
     
     return unsubscribe
-  }, [])
+  }, [forceCalendarRefresh])
 
-
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      setCurrentMonth(subMonths(currentMonth, 1))
-    } else {
-      setCurrentMonth(addMonths(currentMonth, 1))
-    }
-  }
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date)
@@ -242,30 +253,13 @@ export default function CalendarTab() {
     setTimeSlots(slots)
   }
 
-  // Force a complete calendar refresh (more aggressive)
-  const forceCalendarRefresh = async () => {
-    // Clear current time slots first
-    setTimeSlots([])
-    
-    // Wait a moment for state to update
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    // Regenerate time slots
-    const slots = await generateTimeSlots()
-    setTimeSlots(slots)
-    
-    // Also trigger admin calendar refresh
-    setAdminCalendarRefreshTrigger(prev => prev + 1)
-    
-    // Trigger global refresh
-    setGlobalRefreshTrigger(prev => prev + 1)
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setCurrentMonth(subMonths(currentMonth, 1))
+    } else {
+      setCurrentMonth(addMonths(currentMonth, 1))
+    }
   }
-
-  // Global refresh function that can be called from anywhere
-  // const triggerGlobalRefresh = () => {
-  //   setGlobalRefreshTrigger(prev => prev + 1)
-  // }
-
   const selectTimeSlot = (slotIndex: number) => {
     setTimeSlots(prev => prev.map((slot, index) => ({
       ...slot,

@@ -5,7 +5,6 @@ import { useSession } from '@/components/providers/session-provider'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
 import LazyTabComponent, { preloadCriticalTabs } from '@/components/lazy-tab-loader'
-import { Badge } from '@/components/ui/badge'
 import { loadDashboardData, cleanupSubscriptions } from '@/lib/simplified-database-functions'
 
 function DashboardContent() {
@@ -39,7 +38,7 @@ function DashboardContent() {
       console.log('Setting selected company to:', companyParam)
       setSelectedCompany(companyParam)
     }
-  }, [searchParams])
+  }, [searchParams, activeTab])
 
   // Initialize dashboard data and preload critical tabs
   useEffect(() => {

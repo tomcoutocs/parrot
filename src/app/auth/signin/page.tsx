@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { signIn } from '@/lib/auth'
 import { useAuth } from '@/components/providers/session-provider'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +11,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2 } from 'lucide-react'
-import ParrotLogo from '@/components/ui/parrot-logo'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -42,28 +42,32 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center parrot-page-bg py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen flex items-start justify-center px-4 sm:px-6 lg:px-8" style={{ backgroundColor: 'rgba(17, 55, 62, 0.1)' }}>
+      <div className="max-w-md w-full space-y-1">
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-full parrot-gradient-bg">
-            <ParrotLogo size="lg" variant="white" className="text-white" />
-          </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+          <Image
+            src="/parrot-grad-main.png"
+            alt="Parrot Logo"
+            width={512}
+            height={512}
+            className="mx-auto h-128 w-128 object-contain"
+          />
+          <h2 className="mt-0 text-2xl font-extrabold text-gray-900">
             Welcome to Parrot
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-0 text-sm text-gray-600">
             Sign in to access your business dashboard
           </p>
         </div>
 
-        <Card className="parrot-card-dark">
-          <CardHeader>
+        <Card className="parrot-card-dark p-6">
+          <CardHeader className="pb-4">
             <CardTitle className="text-gray-900">Sign In</CardTitle>
             <CardDescription>
               Enter your credentials to access your account
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email address</Label>
