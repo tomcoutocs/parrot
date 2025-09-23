@@ -2,6 +2,42 @@ import { supabase } from './supabase'
 import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation } from './supabase'
 import { getCurrentUser } from './auth'
 
+// Historical Metrics Types
+export interface SystemMetrics {
+  id?: string
+  timestamp: string
+  active_users: number
+  memory_usage: number
+  cpu_usage: number
+  request_count: number
+  disk_usage: number
+  network_latency: number
+  error_rate: number
+  response_time: number
+  cache_hits: number
+  cache_misses: number
+  total_requests: number
+  subscription_count: number
+  total_projects: number
+  total_tasks: number
+  completed_tasks: number
+  overdue_tasks: number
+  user_engagement: number
+  created_at?: string
+}
+
+export interface PerformanceMetrics {
+  id?: string
+  timestamp: string
+  cache_hits: number
+  cache_misses: number
+  total_requests: number
+  request_deduplications: number
+  subscription_count: number
+  active_subscriptions: string[]
+  created_at?: string
+}
+
 // Simple password hashing function (in production, use bcrypt)
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder()
@@ -370,6 +406,41 @@ export async function updateProject(projectId: string, projectData: Partial<Proj
     return { success: true, data }
   } catch (error) {
     return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
+export async function deleteProject(projectId: string, currentUserId?: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // First, delete all tasks associated with the project
+    const { error: tasksError } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('project_id', projectId)
+
+    if (tasksError) {
+      return { success: false, error: `Failed to delete project tasks: ${tasksError.message}` }
+    }
+
+
+    // Finally, delete the project itself
+    const { error: projectError } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', projectId)
+
+    if (projectError) {
+      return { success: false, error: `Failed to delete project: ${projectError.message}` }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while deleting project' }
   }
 }
 
@@ -3245,5 +3316,212 @@ export async function cancelInvitation(invitationId: string): Promise<{ success:
     return { success: true }
   } catch (error) {
     return { success: false, error: 'Failed to cancel invitation' }
+  }
+}
+
+// Historical Data Storage Functions
+
+export async function storeSystemMetrics(metrics: Omit<SystemMetrics, 'id' | 'created_at'>): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { error } = await supabase
+      .from('system_metrics')
+      .insert([metrics])
+
+    if (error) {
+      return { success: false, error: `Failed to store system metrics: ${error.message}` }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while storing system metrics' }
+  }
+}
+
+export async function storePerformanceMetrics(metrics: Omit<PerformanceMetrics, 'id' | 'created_at'>): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { error } = await supabase
+      .from('performance_metrics')
+      .insert([metrics])
+
+    if (error) {
+      return { success: false, error: `Failed to store performance metrics: ${error.message}` }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while storing performance metrics' }
+  }
+}
+
+export async function getSystemMetricsHistory(
+  hours: number = 24,
+  limit: number = 1000
+): Promise<{ success: boolean; data?: SystemMetrics[]; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+    
+    const { data, error } = await supabase
+      .from('system_metrics')
+      .select('*')
+      .gte('timestamp', cutoffTime)
+      .order('timestamp', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      return { success: false, error: `Failed to fetch system metrics: ${error.message}` }
+    }
+
+    return { success: true, data: data || [] }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while fetching system metrics' }
+  }
+}
+
+export async function getPerformanceMetricsHistory(
+  hours: number = 24,
+  limit: number = 1000
+): Promise<{ success: boolean; data?: PerformanceMetrics[]; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+    
+    const { data, error } = await supabase
+      .from('performance_metrics')
+      .select('*')
+      .gte('timestamp', cutoffTime)
+      .order('timestamp', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      return { success: false, error: `Failed to fetch performance metrics: ${error.message}` }
+    }
+
+    return { success: true, data: data || [] }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while fetching performance metrics' }
+  }
+}
+
+export async function cleanupOldMetrics(daysToKeep: number = 30): Promise<{ success: boolean; deletedCount?: number; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const cutoffTime = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000).toISOString()
+    
+    // Clean up system metrics
+    const { error: systemError } = await supabase
+      .from('system_metrics')
+      .delete()
+      .lt('timestamp', cutoffTime)
+
+    if (systemError) {
+      return { success: false, error: `Failed to cleanup system metrics: ${systemError.message}` }
+    }
+
+    // Clean up performance metrics
+    const { error: performanceError } = await supabase
+      .from('performance_metrics')
+      .delete()
+      .lt('timestamp', cutoffTime)
+
+    if (performanceError) {
+      return { success: false, error: `Failed to cleanup performance metrics: ${performanceError.message}` }
+    }
+
+    const totalDeleted = 0 // We can't get exact count with this approach
+    return { success: true, deletedCount: totalDeleted }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while cleaning up metrics' }
+  }
+}
+
+export async function getMetricsSummary(
+  hours: number = 24
+): Promise<{ 
+  success: boolean; 
+  data?: {
+    avgMemoryUsage: number
+    avgCpuUsage: number
+    avgResponseTime: number
+    avgErrorRate: number
+    totalRequests: number
+    cacheHitRate: number
+    peakActiveUsers: number
+    avgUserEngagement: number
+  }; 
+  error?: string 
+}> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+    
+    const { data, error } = await supabase
+      .from('system_metrics')
+      .select('memory_usage, cpu_usage, response_time, error_rate, total_requests, cache_hits, cache_misses, active_users, user_engagement')
+      .gte('timestamp', cutoffTime)
+
+    if (error) {
+      return { success: false, error: `Failed to fetch metrics summary: ${error.message}` }
+    }
+
+    if (!data || data.length === 0) {
+      return { success: true, data: {
+        avgMemoryUsage: 0,
+        avgCpuUsage: 0,
+        avgResponseTime: 0,
+        avgErrorRate: 0,
+        totalRequests: 0,
+        cacheHitRate: 0,
+        peakActiveUsers: 0,
+        avgUserEngagement: 0
+      }}
+    }
+
+    const summary = {
+      avgMemoryUsage: data.reduce((sum, m) => sum + m.memory_usage, 0) / data.length,
+      avgCpuUsage: data.reduce((sum, m) => sum + m.cpu_usage, 0) / data.length,
+      avgResponseTime: data.reduce((sum, m) => sum + m.response_time, 0) / data.length,
+      avgErrorRate: data.reduce((sum, m) => sum + m.error_rate, 0) / data.length,
+      totalRequests: Math.max(...data.map(m => m.total_requests)),
+      cacheHitRate: data.reduce((sum, m) => sum + (m.cache_hits / (m.cache_hits + m.cache_misses)), 0) / data.length * 100,
+      peakActiveUsers: Math.max(...data.map(m => m.active_users)),
+      avgUserEngagement: data.reduce((sum, m) => sum + m.user_engagement, 0) / data.length
+    }
+
+    return { success: true, data: summary }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while calculating metrics summary' }
   }
 }

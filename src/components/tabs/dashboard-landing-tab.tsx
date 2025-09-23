@@ -14,12 +14,16 @@ import {
   CheckCircle,
   AlertCircle,
   RefreshCw,
-  Eye
+  Eye,
+  HelpCircle
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import EmptyState from '@/components/ui/empty-state'
+import { LoadingGrid, DataLoadingState, InlineLoading } from '@/components/ui/loading-states'
+import { EnhancedTooltip, tooltipContent } from '@/components/ui/enhanced-tooltips'
 import { 
   fetchProjectsOptimized, 
   fetchTasksOptimized, 
@@ -125,10 +129,9 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading dashboard...</p>
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <LoadingGrid count={6} />
         </div>
       </div>
     )
@@ -174,17 +177,20 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Active Clients List */}
-        <Card className="parrot-card-dark">
+        <Card className="parrot-card-enhanced">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Building2 className="h-5 w-5 mr-2" />
               Active Clients ({getActiveClients().length})
+              <EnhancedTooltip content="View all companies and clients in your system" variant="info">
+                <HelpCircle className="h-4 w-4 ml-2 text-gray-400 hover:text-gray-600 cursor-help" />
+              </EnhancedTooltip>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {getActiveClients().map((client) => (
-                <div key={client.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={client.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div>
                     <p className="font-medium text-gray-900">{client.name}</p>
                     <p className="text-sm text-gray-500">{client.website || 'No website'}</p>
@@ -195,24 +201,32 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
                 </div>
               ))}
               {getActiveClients().length === 0 && (
-                <p className="text-gray-500 text-center py-4">No active clients</p>
+                <EmptyState
+                  icon={Building2}
+                  title="No active clients"
+                  description="No clients are currently active. Add some clients to get started."
+                  variant="compact"
+                />
               )}
             </div>
           </CardContent>
         </Card>
 
         {/* Tasks Due Within 24 Hours */}
-        <Card className="parrot-card-dark">
+        <Card className="parrot-card-enhanced">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Clock className="h-5 w-5 mr-2" />
               Tasks Due Within 24 Hours ({getTasksDueWithin24Hours().length})
+              <EnhancedTooltip content="Tasks that need to be completed within the next 24 hours" variant="warning">
+                <HelpCircle className="h-4 w-4 ml-2 text-gray-400 hover:text-gray-600 cursor-help" />
+              </EnhancedTooltip>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {getTasksDueWithin24Hours().map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                <div key={task.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
                   <div>
                     <p className="font-medium text-gray-900">{task.title}</p>
                     <p className="text-sm text-gray-500">
@@ -225,24 +239,32 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
                 </div>
               ))}
               {getTasksDueWithin24Hours().length === 0 && (
-                <p className="text-gray-500 text-center py-4">No tasks due within 24 hours</p>
+                <EmptyState
+                  icon={Clock}
+                  title="No tasks due soon"
+                  description="Great! No tasks are due within the next 24 hours. You're all caught up!"
+                  variant="compact"
+                />
               )}
             </div>
           </CardContent>
         </Card>
 
         {/* Preview of All Tasks */}
-        <Card className="parrot-card-dark">
+        <Card className="parrot-card-enhanced">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Kanban className="h-5 w-5 mr-2" />
               All Tasks Preview ({tasks.length})
+              <EnhancedTooltip content="Overview of all tasks across all projects" variant="info">
+                <HelpCircle className="h-4 w-4 ml-2 text-gray-400 hover:text-gray-600 cursor-help" />
+              </EnhancedTooltip>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {tasks.slice(0, 10).map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div>
                     <p className="font-medium text-gray-900">{task.title}</p>
                     <p className="text-sm text-gray-500">
@@ -260,24 +282,32 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
                 </p>
               )}
               {tasks.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No tasks found</p>
+                <EmptyState
+                  icon={Kanban}
+                  title="No tasks found"
+                  description="Create your first task to start organizing your work and tracking progress."
+                  variant="compact"
+                />
               )}
             </div>
           </CardContent>
         </Card>
 
         {/* Forms */}
-        <Card className="parrot-card-dark">
+        <Card className="parrot-card-enhanced">
           <CardHeader>
             <CardTitle className="flex items-center">
               <FileText className="h-5 w-5 mr-2" />
               Forms ({forms.length})
+              <EnhancedTooltip content="Create and manage forms for data collection" variant="info">
+                <HelpCircle className="h-4 w-4 ml-2 text-gray-400 hover:text-gray-600 cursor-help" />
+              </EnhancedTooltip>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {forms.map((form) => (
-                <div key={form.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={form.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div>
                     <p className="font-medium text-gray-900">{form.title}</p>
                     <p className="text-sm text-gray-500">{form.description}</p>
@@ -288,24 +318,32 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
                 </div>
               ))}
               {forms.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No forms found</p>
+                <EmptyState
+                  icon={FileText}
+                  title="No forms found"
+                  description="Create forms to collect information from clients and team members."
+                  variant="compact"
+                />
               )}
             </div>
           </CardContent>
         </Card>
 
         {/* Users */}
-        <Card className="parrot-card-dark">
+        <Card className="parrot-card-enhanced">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Users className="h-5 w-5 mr-2" />
               Users ({users.length})
+              <EnhancedTooltip content="Manage user accounts and team members" variant="info">
+                <HelpCircle className="h-4 w-4 ml-2 text-gray-400 hover:text-gray-600 cursor-help" />
+              </EnhancedTooltip>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {users.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                   <div>
                     <p className="font-medium text-gray-900">{user.full_name}</p>
                     <p className="text-sm text-gray-500">{user.email}</p>
@@ -316,18 +354,26 @@ export default function DashboardLandingTab({ onNavigateToTab }: DashboardLandin
                 </div>
               ))}
               {users.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No users found</p>
+                <EmptyState
+                  icon={Users}
+                  title="No users found"
+                  description="Invite team members to collaborate on projects and tasks."
+                  variant="compact"
+                />
               )}
             </div>
           </CardContent>
         </Card>
 
         {/* Calendar Events Within 24 Hours */}
-        <Card className="parrot-card-dark">
+        <Card className="parrot-card-enhanced">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Calendar className="h-5 w-5 mr-2" />
               Calendar Events (Coming Soon)
+              <EnhancedTooltip content="Calendar integration will show upcoming events and meetings" variant="info">
+                <HelpCircle className="h-4 w-4 ml-2 text-gray-400 hover:text-gray-600 cursor-help" />
+              </EnhancedTooltip>
             </CardTitle>
           </CardHeader>
           <CardContent>

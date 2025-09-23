@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import EmptyState from '@/components/ui/empty-state'
 import { useSession } from '@/components/providers/session-provider'
 import { fetchServicesWithCompanyStatus, updateCompanyServices, getCompanyServices } from '@/lib/database-functions'
 import type { ServiceWithCompanyStatus } from '@/lib/supabase'
@@ -331,7 +332,7 @@ export default function ServicesTab() {
                 {category.services.map((service) => (
                   <Card 
                     key={service.id} 
-                    className={`relative transition-all duration-200 hover:shadow-lg ${
+                    className={`parrot-card-enhanced relative transition-all duration-200 hover:shadow-lg ${
                       service.is_company_active 
                         ? 'ring-2 ring-green-500 bg-green-50 border-green-200 shadow-md' 
                         : 'hover:ring-1 hover:ring-gray-300'

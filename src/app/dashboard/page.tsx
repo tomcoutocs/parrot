@@ -14,6 +14,13 @@ function DashboardContent() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard')
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [breadcrumbContext, setBreadcrumbContext] = useState<{
+    projectName?: string
+    projectId?: string
+    taskTitle?: string
+    folderName?: string
+    folderPath?: string
+  }>({})
 
   useEffect(() => {
     if (status !== 'loading' && !session) {
@@ -104,10 +111,19 @@ function DashboardContent() {
   }
 
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={handleTabChange}>
+    <DashboardLayout 
+      activeTab={activeTab} 
+      onTabChange={handleTabChange}
+      breadcrumbContext={breadcrumbContext}
+    >
       <div className="min-h-full">
         {/* Lazy Loaded Tab Content */}
-        <LazyTabComponent tabName={activeTab} selectedCompany={selectedCompany} onNavigateToTab={handleNavigateToTab} />
+        <LazyTabComponent 
+          tabName={activeTab} 
+          selectedCompany={selectedCompany} 
+          onNavigateToTab={handleNavigateToTab}
+          onBreadcrumbContextChange={setBreadcrumbContext}
+        />
       </div>
     </DashboardLayout>
   )

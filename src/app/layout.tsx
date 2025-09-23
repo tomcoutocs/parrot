@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { SessionProvider } from '@/components/providers/session-provider'
+import { ThemeProvider } from '@/components/providers/theme-provider'
 import { Analytics } from '@vercel/analytics/react'
 
 const inter = Inter({ 
@@ -32,7 +33,9 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased`}
       >
         <SessionProvider>
-          {children}
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
         </SessionProvider>
         <Analytics />
       </body>

@@ -1,9 +1,13 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useSearchParams } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
+import EmptyState from '@/components/ui/empty-state'
+import { LoadingTaskGrid, DataLoadingState, InlineLoading } from '@/components/ui/loading-states'
+import TaskDetailSidebar from '@/components/task-detail-sidebar'
+import { EnhancedTooltip, HelpIcon, tooltipContent } from '@/components/ui/enhanced-tooltips'
 import { 
   Plus, 
   MoreVertical, 
@@ -39,6 +43,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar as CalendarIcon } from '@/components/ui/calendar'
 import { format } from 'date-fns'
@@ -54,6 +66,7 @@ import {
   subscribeToProjectsOptimized,
   testDatabaseConnection,
   deleteTask,
+  deleteProjectOptimized,
   invalidateProjectCache
 } from '@/lib/simplified-database-functions'
 import { formatDateForDatabase } from '@/lib/date-utils'
@@ -88,11 +101,32 @@ interface TaskCardProps {
   onEditTask: (task: TaskWithDetails) => void
   onDeleteTask: (taskId: string) => void
   onManageAssignments: (task: TaskWithDetails) => void
+  onTaskClick: (task: TaskWithDetails) => void
 }
 
-function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAssignments }: TaskCardProps) {
+function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAssignments, onTaskClick }: TaskCardProps) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date()
   const canEdit = true // Allow all users to edit tasks
+  
+  // Helper function to calculate task progress
+  const getTaskProgress = (task: TaskWithDetails) => {
+    if (task.status === 'done') return 100
+    if (task.status === 'review') return 75
+    if (task.status === 'in_progress') return 50
+    if (task.status === 'todo') return 0
+    return 0
+  }
+  
+  // Helper function to get due date CSS class
+  const getDueDateClass = (dueDate: string) => {
+    const due = new Date(dueDate)
+    const now = new Date()
+    const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays < 0) return 'overdue'
+    if (diffDays <= 1) return 'due-soon'
+    return ''
+  }
 
   return (
     <Draggable draggableId={task.id} index={index}>
@@ -103,20 +137,28 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
           {...provided.dragHandleProps}
           className={`mb-3 ${snapshot.isDragging ? 'rotate-3 scale-105' : ''}`}
         >
-          <Card className="cursor-move hover:shadow-md transition-shadow">
-            <CardHeader className="pb-2">
+          <Card 
+            className={`parrot-task-card cursor-pointer hover:shadow-md transition-shadow parrot-task-status-${task.status} parrot-task-priority-${task.priority}`}
+            onClick={(e) => {
+              // Prevent click when clicking on dropdown menu
+              if (!(e.target as HTMLElement).closest('[data-dropdown]')) {
+                onTaskClick(task)
+              }
+            }}
+          >
+            <CardHeader className="parrot-task-card-header pb-2">
               <div className="flex justify-between items-start gap-2">
-                <CardTitle className="text-sm font-medium leading-tight flex-1 min-w-0">
+                <CardTitle className="parrot-task-card-title text-sm font-medium leading-tight flex-1 min-w-0">
                   <span className="truncate block">{task.title}</span>
                 </CardTitle>
                 {canEdit && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-6 w-6 p-0 flex-shrink-0">
+                      <Button variant="ghost" className="h-6 w-6 p-0 flex-shrink-0" data-dropdown>
                         <MoreVertical className="h-3 w-3" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" data-dropdown>
                       <DropdownMenuItem onClick={() => onEditTask(task)}>
                         <Edit className="mr-2 h-4 w-4" />
                         Edit Task
@@ -137,7 +179,7 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
                 )}
               </div>
               {task.description && (
-                <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                <p className="parrot-task-card-description text-xs text-gray-600 mt-1 line-clamp-2">
                   {task.description.length > 60 
                     ? `${task.description.substring(0, 60)}...` 
                     : task.description
@@ -145,45 +187,59 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
                 </p>
               )}
             </CardHeader>
-            <CardContent className="pt-0">
-              <div className="flex flex-wrap gap-1 mb-2">
-                <Badge variant="secondary" className={priorityColors[task.priority]}>
-                  {task.priority}
-                </Badge>
-                {task.due_date && (
-                  <Badge 
-                    variant={isOverdue ? "destructive" : "outline"}
-                    className="text-xs"
-                  >
-                    <Calendar className="mr-1 h-3 w-3" />
-                    {format(new Date(task.due_date), 'MMM d')}
-                  </Badge>
-                )}
+            <CardContent className="parrot-task-card-content pt-0">
+              {/* Progress Bar */}
+              <div className="parrot-task-progress-bg mb-3">
+                <div 
+                  className="parrot-task-progress" 
+                  style={{ 
+                    width: `${getTaskProgress(task)}%` 
+                  }}
+                ></div>
               </div>
               
-              <div className="flex justify-between items-center text-xs text-gray-500">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {task.estimated_hours > 0 && (
-                    <span className="flex items-center">
-                      <Clock className="mr-1 h-3 w-3" />
-                      {task.actual_hours}h/{task.estimated_hours}h
-                    </span>
-                  )}
-                  {(task.comment_count ?? 0) > 0 && (
-                    <span className="flex items-center">
-                      <MessageSquare className="mr-1 h-3 w-3" />
-                      {task.comment_count}
-                    </span>
-                  )}
+              <div className="parrot-task-meta">
+                <div className="flex items-center gap-2">
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs parrot-task-priority-${task.priority}`}
+                  >
+                    {task.priority}
+                  </Badge>
+                  <Badge 
+                    variant="secondary" 
+                    className={`text-xs parrot-task-status-${task.status}`}
+                  >
+                    {task.status.replace('_', ' ')}
+                  </Badge>
                 </div>
                 
-                {task.assigned_to && (
-                  <Avatar className="h-6 w-6 flex-shrink-0">
-                    <AvatarFallback className="text-xs">
-                      {task.assigned_user?.full_name?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
+                <div className="flex items-center gap-3 text-xs parrot-task-meta ml-auto">
+                  {task.estimated_hours > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      <span>{task.actual_hours}h/{task.estimated_hours}h</span>
+                    </div>
+                  )}
+                  {task.assigned_user && (
+                    <div className="parrot-task-assignee">
+                      <UserIcon className="h-3 w-3" />
+                      <span className="truncate max-w-16">{task.assigned_user.full_name}</span>
+                    </div>
+                  )}
+                  {task.due_date && (
+                    <div className={`parrot-task-due-date ${getDueDateClass(task.due_date)}`}>
+                      <Calendar className="h-3 w-3" />
+                      <span>{format(new Date(task.due_date), 'MMM d')}</span>
+                    </div>
+                  )}
+                  {(task.comment_count ?? 0) > 0 && (
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      <span>{task.comment_count}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -201,16 +257,17 @@ interface KanbanColumnProps {
   onEditTask: (task: TaskWithDetails) => void
   onDeleteTask: (taskId: string) => void
   onManageAssignments: (task: TaskWithDetails) => void
+  onTaskClick: (task: TaskWithDetails) => void
 }
 
-function KanbanColumn({ column, tasks, userRole, onAddTask, onEditTask, onDeleteTask, onManageAssignments }: KanbanColumnProps) {
+function KanbanColumn({ column, tasks, userRole, onAddTask, onEditTask, onDeleteTask, onManageAssignments, onTaskClick }: KanbanColumnProps) {
   const canCreateTask = true // Allow all users to create tasks
 
   return (
     <div className="flex-1 min-w-0 xl:min-w-72">
-      <div className={`${column.bgColor} ${column.borderColor} border-2 border-dashed rounded-lg p-3 sm:p-4 h-full`}>
+      <div className={`kanban-column kanban-column-${column.id} ${column.bgColor} ${column.borderColor} border-2 border-dashed rounded-lg p-3 sm:p-4 h-full`}>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
+          <h3 className="kanban-column-title font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
             {column.title}
             <Badge variant="secondary" className="text-xs">
               {tasks.length}
@@ -220,7 +277,7 @@ function KanbanColumn({ column, tasks, userRole, onAddTask, onEditTask, onDelete
             <Button 
               size="sm" 
               variant="outline" 
-              className="h-6 px-2 w-full sm:w-auto"
+              className="kanban-add-button h-6 px-2 w-full sm:w-auto"
               onClick={() => onAddTask(column.id as Task['status'])}
             >
               <Plus className="h-3 w-3" />
@@ -244,8 +301,14 @@ function KanbanColumn({ column, tasks, userRole, onAddTask, onEditTask, onDelete
                   onEditTask={onEditTask}
                   onDeleteTask={onDeleteTask}
                   onManageAssignments={onManageAssignments}
+                  onTaskClick={onTaskClick}
                 />
               ))}
+              {tasks.length === 0 && (
+                <div className="kanban-empty-state text-center py-8 text-gray-500">
+                  <div className="text-sm">No tasks in {column.title.toLowerCase()}</div>
+                </div>
+              )}
               {provided.placeholder}
             </div>
           )}
@@ -264,13 +327,34 @@ interface TaskRowProps {
   onDeleteTask: (taskId: string) => void
   onManageAssignments: (task: TaskWithDetails) => void
   onQuickEdit: (task: TaskWithDetails, field: string, value: string | null) => void
+  onTaskClick: (task: TaskWithDetails) => void
 }
 
-function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssignments, onQuickEdit }: TaskRowProps) {
+function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssignments, onQuickEdit, onTaskClick }: TaskRowProps) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date()
   const canEdit = true // Allow all users to edit tasks
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
+  
+  // Helper function to calculate task progress
+  const getTaskProgress = (task: TaskWithDetails) => {
+    if (task.status === 'done') return 100
+    if (task.status === 'review') return 75
+    if (task.status === 'in_progress') return 50
+    if (task.status === 'todo') return 0
+    return 0
+  }
+  
+  // Helper function to get due date CSS class
+  const getDueDateClass = (dueDate: string) => {
+    const due = new Date(dueDate)
+    const now = new Date()
+    const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays < 0) return 'overdue'
+    if (diffDays <= 1) return 'due-soon'
+    return ''
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -339,9 +423,15 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`hidden sm:grid sm:grid-cols-12 gap-4 px-4 sm:px-6 py-3 border-b hover:bg-gray-50 cursor-move ${
+          className={`hidden sm:grid sm:grid-cols-12 gap-4 px-4 sm:px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
             snapshot.isDragging ? 'bg-blue-50 shadow-lg' : ''
           }`}
+          onClick={(e) => {
+            // Prevent click when clicking on interactive elements
+            if (!(e.target as HTMLElement).closest('[data-interactive]')) {
+              onTaskClick(task)
+            }
+          }}
         >
           {/* Desktop View */}
           {/* Name Column */}
@@ -354,11 +444,13 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                 onKeyDown={handleTitleKeyDown}
                 className="h-8 text-sm"
                 autoFocus
+                data-interactive
               />
             ) : (
               <span 
                 className="font-medium text-gray-900 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded truncate"
                 onClick={() => canEdit && setIsEditingTitle(true)}
+                data-interactive
               >
                 {task.title}
               </span>
@@ -373,6 +465,7 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                 size="sm"
                 className="h-6 px-2 text-xs hover:bg-gray-100"
                 onClick={() => onManageAssignments(task)}
+                data-interactive
               >
                 <div className="flex items-center space-x-2">
                   <Avatar className="h-6 w-6">
@@ -391,6 +484,7 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                 size="sm"
                 className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
                 onClick={() => onManageAssignments(task)}
+                data-interactive
               >
                 <UserIcon className="h-4 w-4" />
               </Button>
@@ -406,6 +500,7 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                     variant="ghost"
                     size="sm"
                     className="h-6 px-2 text-xs hover:bg-gray-100"
+                    data-interactive
                   >
                     <Badge 
                       variant={isOverdue ? "destructive" : "outline"}
@@ -431,6 +526,7 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                     variant="ghost"
                     size="sm"
                     className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                    data-interactive
                   >
                     <Calendar className="h-4 w-4" />
                   </Button>
@@ -454,6 +550,7 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                  data-interactive
                 >
                   {task.priority ? (
                     <div className="flex items-center space-x-1">
@@ -491,7 +588,7 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
             {canEdit && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-6 w-6 p-0">
+                  <Button variant="ghost" className="h-6 w-6 p-0" data-interactive>
                     <MoreVertical className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -529,9 +626,10 @@ interface ListViewProps {
   onDeleteTask: (taskId: string) => void
   onManageAssignments: (task: TaskWithDetails) => void
   onQuickEdit: (task: TaskWithDetails, field: string, value: string | null) => void
+  onTaskClick: (task: TaskWithDetails) => void
 }
 
-function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onManageAssignments, onQuickEdit }: ListViewProps) {
+function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onManageAssignments, onQuickEdit, onTaskClick }: ListViewProps) {
   const canCreateTask = true // Allow all users to create tasks
 
   // Group tasks by status
@@ -623,6 +721,7 @@ function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onMana
                     onDeleteTask={onDeleteTask}
                     onManageAssignments={onManageAssignments}
                     onQuickEdit={onQuickEdit}
+                    onTaskClick={onTaskClick}
                   />
                 ))}
                 
@@ -672,7 +771,17 @@ function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onMana
   )
   }
 
-export default function ProjectsTab() {
+export default function ProjectsTab({ 
+  onBreadcrumbContextChange 
+}: { 
+  onBreadcrumbContextChange?: (context: {
+    projectName?: string
+    projectId?: string
+    taskTitle?: string
+    folderName?: string
+    folderPath?: string
+  }) => void
+}) {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
   const [selectedProject, setSelectedProject] = useState<string>('')
@@ -693,6 +802,75 @@ export default function ProjectsTab() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [selectedCompany, setSelectedCompany] = useState<string | undefined>(undefined)
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list')
+  const [selectedTaskForSidebar, setSelectedTaskForSidebar] = useState<TaskWithDetails | null>(null)
+  const [isTaskSidebarOpen, setIsTaskSidebarOpen] = useState(false)
+  const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<ProjectWithDetails | null>(null)
+
+  // Handle project selection with breadcrumb context update
+  const handleProjectChange = useCallback(async (projectId: string) => {
+    setSelectedProject(projectId)
+    
+    // Load tasks for the selected project
+    try {
+      const tasksData = await fetchTasksOptimized(projectId)
+      setTasks(tasksData)
+    } catch (error) {
+      console.error('Failed to load tasks for project:', error)
+    }
+    
+    // Update breadcrumb context
+    if (onBreadcrumbContextChange) {
+      const project = projects.find(p => p.id === projectId)
+      onBreadcrumbContextChange({
+        projectName: project?.name,
+        projectId: projectId,
+        taskTitle: undefined,
+        folderName: undefined,
+        folderPath: undefined
+      })
+    }
+  }, [projects, onBreadcrumbContextChange])
+
+  // Handle project deletion
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return
+
+    try {
+      const result = await deleteProjectOptimized(projectToDelete.id)
+      
+      if (result.success) {
+        // Remove the project from the local state
+        setProjects(prevProjects => prevProjects.filter(p => p.id !== projectToDelete.id))
+        
+        // If the deleted project was selected, clear the selection
+        if (selectedProject === projectToDelete.id) {
+          setSelectedProject('')
+          setTasks([])
+          
+          // Update breadcrumb context
+          if (onBreadcrumbContextChange) {
+            onBreadcrumbContextChange({
+              projectName: undefined,
+              projectId: undefined,
+              taskTitle: undefined,
+              folderName: undefined,
+              folderPath: undefined
+            })
+          }
+        }
+        
+        // Close the modal
+        setShowDeleteProjectModal(false)
+        setProjectToDelete(null)
+      } else {
+        console.error('Failed to delete project:', result.error)
+        // You could add a toast notification here
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error)
+    }
+  }
 
   const userRole = session?.user?.role || 'user'
   const currentProject = projects.find(p => p.id === selectedProject)
@@ -705,9 +883,8 @@ export default function ProjectsTab() {
   // Get current company info
   const currentCompany = companies.find(c => c.id === selectedCompany)
   
-  // Filter tasks for selected project
+  // Filter tasks for selected project (tasks are already filtered by project when loaded)
   const projectTasks = tasks.filter(task => 
-    task.project_id === selectedProject &&
     (searchTerm === '' || task.title.toLowerCase().includes(searchTerm.toLowerCase())) &&
     (filterPriority === 'all' || task.priority === filterPriority)
   )
@@ -731,14 +908,12 @@ export default function ProjectsTab() {
         // Get user's company ID for filtering (only non-admin users should be filtered)
         const userCompanyId = session?.user?.role === 'admin' ? undefined : session?.user?.company_id
         
-        const [projectsData, tasksData, companiesData] = await Promise.all([
+        const [projectsData, companiesData] = await Promise.all([
           fetchProjectsOptimized(userCompanyId),
-          fetchTasksOptimized(),
           fetchCompaniesOptimized()
         ])
         
         setProjects(projectsData)
-        setTasks(tasksData)
         setCompanies(companiesData)
         
         // Check URL parameters first before setting default company
@@ -760,7 +935,16 @@ export default function ProjectsTab() {
         
         // Set first project as selected if available
         if (projectsData.length > 0 && !selectedProject) {
-          setSelectedProject(projectsData[0].id)
+          const firstProjectId = projectsData[0].id
+          setSelectedProject(firstProjectId)
+          
+          // Load tasks for the first project
+          try {
+            const tasksForProject = await fetchTasksOptimized(firstProjectId)
+            setTasks(tasksForProject)
+          } catch (error) {
+            console.error('Failed to load tasks for first project:', error)
+          }
         }
       } catch (error) {
         // Handle error silently
@@ -778,12 +962,13 @@ export default function ProjectsTab() {
       // Find first project in selected company
       const firstProjectInCompany = projects.find(p => p.company_id === selectedCompany)
       if (firstProjectInCompany) {
-        setSelectedProject(firstProjectInCompany.id)
+        handleProjectChange(firstProjectInCompany.id)
       } else {
         setSelectedProject('')
+        setTasks([])
       }
     }
-  }, [selectedCompany, projects])
+  }, [selectedCompany, projects, handleProjectChange])
 
   // Handle URL parameters for company selection - with better timing
   useEffect(() => {
@@ -1051,11 +1236,50 @@ export default function ProjectsTab() {
         // Refresh tasks
         const updatedTasks = await fetchTasksOptimized(selectedProject)
         setTasks(updatedTasks)
+        // Close sidebar if the deleted task was open
+        if (selectedTaskForSidebar?.id === taskId) {
+          setIsTaskSidebarOpen(false)
+          setSelectedTaskForSidebar(null)
+        }
       } else {
         // Handle error silently
       }
     } catch (error) {
       // Handle error silently
+    }
+  }
+
+  const handleTaskClick = (task: TaskWithDetails) => {
+    setSelectedTaskForSidebar(task)
+    setIsTaskSidebarOpen(true)
+    
+    // Update breadcrumb context for task detail
+    if (onBreadcrumbContextChange) {
+      const project = projects.find(p => p.id === selectedProject)
+      onBreadcrumbContextChange({
+        projectName: project?.name,
+        projectId: selectedProject,
+        taskTitle: task.title,
+        folderName: undefined,
+        folderPath: undefined
+      })
+    }
+  }
+
+  const handleCloseTaskSidebar = () => {
+    setIsTaskSidebarOpen(false)
+    setSelectedTaskForSidebar(null)
+    
+    // Clear task title from breadcrumb context
+    if (onBreadcrumbContextChange) {
+      const project = projects.find(p => p.id === selectedProject)
+      onBreadcrumbContextChange({
+        projectName: project?.name,
+        projectId: selectedProject,
+        taskTitle: undefined,
+        folderName: undefined,
+        folderPath: undefined
+      })
     }
   }
 
@@ -1096,11 +1320,14 @@ export default function ProjectsTab() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading projects...</p>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-semibold">Projects</h2>
+          <div className="flex gap-2">
+            <InlineLoading text="Loading projects..." />
+          </div>
         </div>
+        <LoadingTaskGrid count={6} />
       </div>
     )
   }
@@ -1127,23 +1354,27 @@ export default function ProjectsTab() {
         
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {(userRole === 'admin' || userRole === 'manager') && (
-            <Button variant="orange" className="gap-2 w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>
-              <Plus className="h-4 w-4" />
-              New Project
-            </Button>
+            <EnhancedTooltip content={tooltipContent.createProject} variant="help">
+              <Button variant="orange" className="gap-2 w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>
+                <Plus className="h-4 w-4" />
+                New Project
+              </Button>
+            </EnhancedTooltip>
           )}
           {selectedProject ? (
-            <Button 
-              variant="outline" 
-              className="gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 border-green-200 w-full sm:w-auto" 
-              onClick={() => {
-                setSelectedTaskStatus('todo')
-                setShowCreateTaskModal(true)
-              }}
-              title={`Create new task in ${currentProject?.name || 'selected project'}`}>
-              <CheckSquare className="h-4 w-4" />
-              New Task
-            </Button>
+            <EnhancedTooltip content={tooltipContent.createTask} variant="help">
+              <Button 
+                variant="outline" 
+                className="gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 border-green-200 w-full sm:w-auto" 
+                onClick={() => {
+                  setSelectedTaskStatus('todo')
+                  setShowCreateTaskModal(true)
+                }}
+              >
+                <CheckSquare className="h-4 w-4" />
+                New Task
+              </Button>
+            </EnhancedTooltip>
           ) : (
             <Button 
               variant="outline" 
@@ -1181,7 +1412,7 @@ export default function ProjectsTab() {
           </Select>
         )}
 
-        <Select value={selectedProject} onValueChange={setSelectedProject}>
+        <Select value={selectedProject} onValueChange={handleProjectChange}>
           <SelectTrigger className="w-full lg:w-64">
             <SelectValue placeholder="Select a project" />
           </SelectTrigger>
@@ -1198,6 +1429,27 @@ export default function ProjectsTab() {
             ))}
           </SelectContent>
         </Select>
+
+        {/* Delete Project Button - Only for admins */}
+        {userRole === 'admin' && selectedProject && (
+          <EnhancedTooltip content="Delete this project and all its tasks (users will not be deleted)" variant="warning">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-all duration-200 border-red-200"
+              onClick={() => {
+                const project = projects.find(p => p.id === selectedProject)
+                if (project) {
+                  setProjectToDelete(project)
+                  setShowDeleteProjectModal(true)
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Project
+            </Button>
+          </EnhancedTooltip>
+        )}
 
         <div className="flex-1 max-w-sm">
           <div className="relative">
@@ -1230,29 +1482,33 @@ export default function ProjectsTab() {
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">View:</span>
           <div className="flex items-center border rounded-lg">
-            <Button
-              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('kanban')}
-              className="rounded-r-none"
-            >
-              <Grid3X3 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('list')}
-              className="rounded-l-none"
-            >
-              <List className="h-4 w-4" />
-            </Button>
+            <EnhancedTooltip content="Switch to Kanban board view" variant="help">
+              <Button
+                variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('kanban')}
+                className="rounded-r-none"
+              >
+                <Grid3X3 className="h-4 w-4" />
+              </Button>
+            </EnhancedTooltip>
+            <EnhancedTooltip content="Switch to list view" variant="help">
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className="rounded-l-none"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </EnhancedTooltip>
           </div>
         </div>
       </div>
 
       {/* Project Info */}
       {currentProject && (
-        <Card>
+        <Card className="parrot-card-enhanced">
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
               <div className="flex-1 min-w-0">
@@ -1303,56 +1559,58 @@ export default function ProjectsTab() {
                 onEditTask={handleEditTask}
                 onDeleteTask={handleDeleteTask}
                 onManageAssignments={handleManageTaskAssignments}
+                onTaskClick={handleTaskClick}
               />
             ))}
           </div>
         </DragDropContext>
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
-          <ListView
-            tasks={projectTasks}
-            userRole={userRole}
-            onAddTask={handleAddTask}
-            onEditTask={handleEditTask}
-            onDeleteTask={handleDeleteTask}
-            onManageAssignments={handleManageTaskAssignments}
-            onQuickEdit={handleQuickEdit}
-          />
+        <ListView
+          tasks={projectTasks}
+          userRole={userRole}
+          onAddTask={handleAddTask}
+          onEditTask={handleEditTask}
+          onDeleteTask={handleDeleteTask}
+          onManageAssignments={handleManageTaskAssignments}
+          onQuickEdit={handleQuickEdit}
+          onTaskClick={handleTaskClick}
+        />
         </DragDropContext>
       )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="quick-stats-card">
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="quick-stats-number text-2xl font-bold text-blue-600">
               {tasksByStatus.todo?.length || 0}
             </div>
-            <div className="text-sm text-gray-600">To Do</div>
+            <div className="quick-stats-label text-sm text-gray-600">To Do</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="quick-stats-card">
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">
+            <div className="quick-stats-number text-2xl font-bold text-yellow-600">
               {tasksByStatus.in_progress?.length || 0}
             </div>
-            <div className="text-sm text-gray-600">In Progress</div>
+            <div className="quick-stats-label text-sm text-gray-600">In Progress</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="quick-stats-card">
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-orange-600">
+            <div className="quick-stats-number text-2xl font-bold text-orange-600">
               {tasksByStatus.review?.length || 0}
             </div>
-            <div className="text-sm text-gray-600">Review</div>
+            <div className="quick-stats-label text-sm text-gray-600">Review</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="quick-stats-card">
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">
+            <div className="quick-stats-number text-2xl font-bold text-green-600">
               {tasksByStatus.done?.length || 0}
             </div>
-            <div className="text-sm text-gray-600">Completed</div>
+            <div className="quick-stats-label text-sm text-gray-600">Completed</div>
           </CardContent>
         </Card>
       </div>
@@ -1408,6 +1666,56 @@ export default function ProjectsTab() {
         task={selectedTask}
         users={users}
       />
+
+      {/* Task Detail Sidebar */}
+      <TaskDetailSidebar
+        task={selectedTaskForSidebar}
+        isOpen={isTaskSidebarOpen}
+        onClose={handleCloseTaskSidebar}
+        onEditTask={handleEditTask}
+        onDeleteTask={handleDeleteTask}
+        projectTitle={currentProject?.name}
+      />
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog open={showDeleteProjectModal} onOpenChange={setShowDeleteProjectModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{projectToDelete?.name}&quot;? This action will permanently delete:
+              <br />
+              <br />
+              • The project and all its data
+              <br />
+              • All tasks in this project
+              <br />
+              <br />
+              <strong>Note:</strong> Users and managers will not be deleted, only their association with this project.
+              <br />
+              <br />
+              <strong>This action cannot be undone.</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteProjectModal(false)
+                setProjectToDelete(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteProject}
+            >
+              Delete Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 

@@ -78,7 +78,23 @@ const tabComponents: Record<string, ComponentType<any>> = {
 }
 
 // Lazy loaded tab wrapper
-export function LazyTabComponent({ tabName, selectedCompany, onNavigateToTab }: { tabName: string; selectedCompany?: string | null; onNavigateToTab?: (tab: string) => void }) {
+export function LazyTabComponent({ 
+  tabName, 
+  selectedCompany, 
+  onNavigateToTab,
+  onBreadcrumbContextChange 
+}: { 
+  tabName: string
+  selectedCompany?: string | null
+  onNavigateToTab?: (tab: string) => void
+  onBreadcrumbContextChange?: (context: {
+    projectName?: string
+    projectId?: string
+    taskTitle?: string
+    folderName?: string
+    folderPath?: string
+  }) => void
+}) {
   const TabComponent = tabComponents[tabName]
 
   if (!TabComponent) {
@@ -93,7 +109,10 @@ export function LazyTabComponent({ tabName, selectedCompany, onNavigateToTab }: 
   if (tabName === 'dashboard') {
     return (
       <TabErrorBoundary>
-        <TabComponent onNavigateToTab={onNavigateToTab} />
+        <TabComponent 
+          onNavigateToTab={onNavigateToTab}
+          onBreadcrumbContextChange={onBreadcrumbContextChange}
+        />
       </TabErrorBoundary>
     )
   }
@@ -103,7 +122,10 @@ export function LazyTabComponent({ tabName, selectedCompany, onNavigateToTab }: 
   if (componentsWithSelectedCompany.includes(tabName)) {
     return (
       <TabErrorBoundary>
-        <TabComponent selectedCompany={selectedCompany} />
+        <TabComponent 
+          selectedCompany={selectedCompany}
+          onBreadcrumbContextChange={onBreadcrumbContextChange}
+        />
       </TabErrorBoundary>
     )
   }
@@ -112,7 +134,10 @@ export function LazyTabComponent({ tabName, selectedCompany, onNavigateToTab }: 
   if (tabName === 'companies') {
     return (
       <TabErrorBoundary>
-        <TabComponent selectedCompanyId={selectedCompany} />
+        <TabComponent 
+          selectedCompanyId={selectedCompany}
+          onBreadcrumbContextChange={onBreadcrumbContextChange}
+        />
       </TabErrorBoundary>
     )
   }
@@ -120,7 +145,7 @@ export function LazyTabComponent({ tabName, selectedCompany, onNavigateToTab }: 
   // Handle components that don't accept selectedCompany prop
   return (
     <TabErrorBoundary>
-      <TabComponent />
+      <TabComponent onBreadcrumbContextChange={onBreadcrumbContextChange} />
     </TabErrorBoundary>
   )
 }

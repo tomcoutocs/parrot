@@ -80,6 +80,41 @@ export async function fetchProjectsOptimized(companyId?: string): Promise<Projec
   }
 }
 
+export async function deleteProjectOptimized(projectId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // First, delete all tasks associated with the project
+    const { error: tasksError } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('project_id', projectId)
+
+    if (tasksError) {
+      return { success: false, error: `Failed to delete project tasks: ${tasksError.message}` }
+    }
+
+
+    // Finally, delete the project itself
+    const { error: projectError } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', projectId)
+
+    if (projectError) {
+      return { success: false, error: `Failed to delete project: ${projectError.message}` }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while deleting project' }
+  }
+}
+
 export async function fetchTasksOptimized(projectId?: string): Promise<TaskWithDetails[]> {
   if (!supabase) return []
 

@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
+import EmptyState from '@/components/ui/empty-state'
 import { format } from 'date-fns'
 import { Form, FormField, FormSubmission } from '@/lib/supabase'
 import { 
@@ -258,22 +259,20 @@ export default function FormsTab() {
 
       {/* Forms Grid */}
       {filteredForms.length === 0 ? (
-        <div className="text-center py-12">
-          <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            {isAdmin ? 'No forms created yet' : 'No forms available'}
-          </h3>
-          <p className="text-gray-600">
-            {isAdmin 
-              ? 'Create your first form to start collecting information from clients'
-              : 'Check back later for forms from your company'
-            }
-          </p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title={isAdmin ? 'No forms created yet' : 'No forms available'}
+          description={isAdmin 
+            ? 'Create your first form to start collecting information from clients'
+            : 'Check back later for forms from your company'
+          }
+          actionLabel={isAdmin ? 'Create Form' : undefined}
+          onAction={isAdmin ? () => {/* Add create form logic */} : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredForms.map((form) => (
-            <Card key={form.id} className="hover:shadow-md transition-shadow">
+            <Card key={form.id} className="parrot-card-enhanced hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">

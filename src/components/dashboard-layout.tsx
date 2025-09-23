@@ -18,8 +18,6 @@ import {
   LayoutDashboard
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,12 +33,22 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import ParrotLogo from '@/components/ui/parrot-logo'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
+import { QuickThemeToggle } from '@/components/ui/settings-modal'
+import { Breadcrumb, useBreadcrumbs } from '@/components/ui/breadcrumb'
 
 
 interface DashboardLayoutProps {
   children: React.ReactNode
   activeTab: TabType
   onTabChange: (tab: TabType) => void
+  breadcrumbContext?: {
+    projectName?: string
+    projectId?: string
+    taskTitle?: string
+    folderName?: string
+    folderPath?: string
+  }
 }
 
 export type TabType = 'dashboard' | 'projects' | 'forms' | 'services' | 'calendar' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
@@ -60,11 +68,23 @@ const navigationItems = [
   { id: 'debug' as TabType, label: 'Debug', icon: Bug, roles: ['admin'] },
 ]
 
-export default function DashboardLayout({ children, activeTab, onTabChange }: DashboardLayoutProps) {
+export default function DashboardLayout({ 
+  children, 
+  activeTab, 
+  onTabChange, 
+  breadcrumbContext 
+}: DashboardLayoutProps) {
   const { data: session } = useSession()
   const auth = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const router = useRouter()
+  
+  // Generate breadcrumbs based on current tab and context
+  const breadcrumbs = useBreadcrumbs(activeTab, breadcrumbContext)
+  
+  const handleBreadcrumbNavigation = (href: string) => {
+    onTabChange(href as TabType)
+  }
 
   const handleSignOut = () => {
     auth.signOut()
@@ -101,7 +121,8 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
   }
 
   return (
-    <div className="flex h-screen parrot-page-bg">
+    <TooltipProvider>
+      <div className="flex h-screen parrot-page-bg">
       {/* Sidebar */}
       <div className={`${sidebarOpen ? 'w-64' : 'w-16'} parrot-sidebar-gradient shadow-lg transition-all duration-300 flex flex-col`}>
         <div className="p-2 border-b logo-section">
@@ -124,79 +145,108 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </div>
 
         {/* User Profile Section */}
-        <div className="p-2 border-b border-gray-300 user-section">
-          <div className="flex items-center space-x-2">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src="" />
-              <AvatarFallback className="bg-teal-900/60 text-white backdrop-blur-sm text-xs">{getInitials(session.user.name)}</AvatarFallback>
-            </Avatar>
-            {sidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-gray-700 truncate">
-                  {session.user.name}
-                </p>
-                <div className="flex items-center space-x-1 mt-0.5">
-                  <Badge className="bg-gray-200 text-gray-700 border-gray-300 backdrop-blur-sm text-xs px-1 py-0" variant="secondary">
-                    {userRole}
-                  </Badge>
-                </div>
-              </div>
-            )}
+        <div className="parrot-sidebar-user">
+          <div className="parrot-sidebar-user-avatar">
+            {getInitials(session.user.name)}
           </div>
+          {sidebarOpen && (
+            <div>
+              <div className="parrot-sidebar-user-name">
+                {session.user.name}
+              </div>
+              <div className="parrot-sidebar-user-role">
+                {userRole}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-1 nav-section">
-          <TooltipProvider>
-            {filteredNavItems.map((item) => {
-              const Icon = item.icon
-              const isActive = activeTab === item.id
-              
-              return (
-                <Tooltip key={item.id}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={isActive ? "default" : "ghost"}
-                      className={`w-full justify-start h-8 text-sm ${!sidebarOpen && 'px-2'} ${
-                        isActive
-                          ? 'bg-[#FE4E03]/20 text-[#FE4E03] hover:bg-[#FE4E03]/30 border border-[#FE4E03]/40'
-                          : 'text-gray-700 hover:bg-gray-200'
-                      }`}
-                      onClick={() => onTabChange(item.id)}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {sidebarOpen && <span className="ml-2">{item.label}</span>}
-                    </Button>
-                  </TooltipTrigger>
-                  {!sidebarOpen && (
-                    <TooltipContent side="right">
-                      <p>{item.label}</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              )
-            })}
-          </TooltipProvider>
-        </nav>
+             <nav className="flex-1 p-2 space-y-1 nav-section">
+               {filteredNavItems.map((item) => {
+                 const Icon = item.icon
+                 const isActive = activeTab === item.id
+
+                 const navItem = (
+                   <div
+                     key={item.id}
+                     className={`parrot-nav-item ${isActive ? 'active' : ''}`}
+                     onClick={() => onTabChange(item.id)}
+                   >
+                     <Icon className="parrot-nav-icon" />
+                     {sidebarOpen && <span>{item.label}</span>}
+                   </div>
+                 )
+
+                 // Show tooltip only when sidebar is minimized
+                 if (!sidebarOpen) {
+                   return (
+                     <Tooltip key={item.id}>
+                       <TooltipTrigger asChild>
+                         {navItem}
+                       </TooltipTrigger>
+                       <TooltipContent side="right" className="ml-2">
+                         <p>{item.label}</p>
+                       </TooltipContent>
+                     </Tooltip>
+                   )
+                 }
+
+                 return navItem
+               })}
+             </nav>
 
         {/* User Menu */}
-        <div className="p-2 border-t border-gray-300 sidebar-section">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start text-gray-700 hover:bg-gray-200 h-8 text-sm">
-                <Settings className="h-4 w-4" />
-                {sidebarOpen && <span className="ml-2">Settings</span>}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Sign out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="sidebar-section">
+          {!sidebarOpen ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <div className="parrot-nav-item">
+                      <Settings className="parrot-nav-icon" />
+                    </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <div className="px-2 py-1">
+                      <QuickThemeToggle />
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Sign out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="ml-2">
+                <p>Settings</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="parrot-nav-item">
+                  <Settings className="parrot-nav-icon" />
+                  <span>Settings</span>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1">
+                  <QuickThemeToggle />
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
@@ -204,11 +254,18 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="parrot-header-dark px-6 py-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-gray-800 capitalize">
-              {activeTab.replace('-', ' ')}
-            </h2>
+            <div className="flex flex-col space-y-2">
+              <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 capitalize">
+                {activeTab.replace('-', ' ')}
+              </h2>
+              <Breadcrumb 
+                items={breadcrumbs} 
+                onNavigate={handleBreadcrumbNavigation}
+                className="text-xs"
+              />
+            </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
                 Welcome to Parrot, {session.user.name}
               </span>
             </div>
@@ -216,9 +273,12 @@ export default function DashboardLayout({ children, activeTab, onTabChange }: Da
         </header>
 
         <main className="flex-1 overflow-auto p-6 parrot-scrollbar">
-          {children}
+          <ErrorBoundary showDetails={process.env.NODE_ENV === 'development'}>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>
+    </TooltipProvider>
   )
 } 

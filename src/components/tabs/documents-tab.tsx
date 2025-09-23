@@ -11,7 +11,6 @@ import {
   Plus, 
   Search, 
   ArrowLeft,
-  HardDrive,
   MoreVertical,
   File,
   FileText,
@@ -28,7 +27,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -849,9 +848,9 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
       ) : viewMode === 'list' ? (
-        <div className="bg-white rounded-lg border">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           {/* List Header */}
-          <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b bg-gray-50 text-sm font-medium text-gray-600">
+          <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300">
             <div className="col-span-6">Name</div>
             <div className="col-span-2">Owner</div>
             <div className="col-span-2">Modified</div>
@@ -863,14 +862,14 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           {sortedFolders.map((folder) => (
             <div
               key={folder.id}
-                             className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
-                 folder.is_system_folder ? 'bg-yellow-50' : ''
-               } ${favorites.has(folder.id) ? 'bg-yellow-50' : ''}`}
+                             className={`grid grid-cols-12 gap-4 px-6 py-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${
+                 folder.is_system_folder ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
+               } ${favorites.has(folder.id) ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}`}
               onClick={() => handleFolderClick(folder)}
             >
                              <div className="col-span-6 flex items-center space-x-3">
                  <Folder className={`h-5 w-5 ${folder.is_system_folder ? 'text-yellow-600' : 'text-blue-500'}`} />
-                 <span className="font-medium text-gray-900">{folder.name}</span>
+                 <span className="font-medium text-gray-900 dark:text-gray-100">{folder.name}</span>
                 {folder.is_system_folder && (
                   <Badge variant="outline" className="text-xs">
                     System
@@ -880,15 +879,15 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
                   <Star className="h-4 w-4 text-yellow-500 fill-current" />
                 )}
               </div>
-              <div className="col-span-2 flex items-center text-sm text-gray-600">
+              <div className="col-span-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
                 <User className="h-4 w-4 mr-1" />
                 {session.user.name}
               </div>
-              <div className="col-span-2 flex items-center text-sm text-gray-600">
+              <div className="col-span-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
                 <Clock className="h-4 w-4 mr-1" />
                 {formatDate(folder.created_at)}
               </div>
-              <div className="col-span-1 text-sm text-gray-600">-</div>
+              <div className="col-span-1 text-sm text-gray-600 dark:text-gray-400">-</div>
               <div className="col-span-1 flex justify-end space-x-1">
                 <Button
                   variant="ghost"
@@ -932,14 +931,14 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           {sortedDocuments.map((document) => (
             <div
               key={document.id}
-              className={`grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
-                favorites.has(document.id) ? 'bg-yellow-50' : ''
+              className={`grid grid-cols-12 gap-4 px-6 py-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${
+                favorites.has(document.id) ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
               }`}
               onClick={() => handlePreview(document)}
             >
               <div className="col-span-6 flex items-center space-x-3">
                 {getFileIconComponent(document.file_type)}
-                <span className="font-medium text-gray-900">{document.name}</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{document.name}</span>
                 {canPreview(document.file_type) && (
                   <Eye className="h-4 w-4 text-blue-500" />
                 )}
@@ -947,15 +946,15 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
                   <Star className="h-4 w-4 text-yellow-500 fill-current" />
                 )}
               </div>
-              <div className="col-span-2 flex items-center text-sm text-gray-600">
+              <div className="col-span-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
                 <User className="h-4 w-4 mr-1" />
                 {session.user.name}
               </div>
-              <div className="col-span-2 flex items-center text-sm text-gray-600">
+              <div className="col-span-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
                 <Clock className="h-4 w-4 mr-1" />
                 {formatDate(document.created_at)}
               </div>
-              <div className="col-span-1 text-sm text-gray-600">
+              <div className="col-span-1 text-sm text-gray-600 dark:text-gray-400">
                 {formatBytes(document.file_size)}
               </div>
               <div className="col-span-1 flex justify-end space-x-1">
@@ -1009,9 +1008,9 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {/* Folders */}
           {sortedFolders.map((folder) => (
-            <Card key={folder.id} className={`hover:shadow-md transition-shadow relative group ${
-              folder.is_system_folder ? 'border-yellow-200 bg-yellow-50' : ''
-            } ${favorites.has(folder.id) ? 'border-yellow-300 bg-yellow-50' : ''}`}>
+            <Card key={folder.id} className={`parrot-card-enhanced hover:shadow-md transition-shadow relative group ${
+              folder.is_system_folder ? 'border-yellow-200 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20' : ''
+            } ${favorites.has(folder.id) ? 'border-yellow-300 dark:border-yellow-600 bg-yellow-50 dark:bg-yellow-900/20' : ''}`}>
               <CardContent className="pt-6">
                 <div 
                   className="text-center cursor-pointer"
@@ -1020,8 +1019,8 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
                   <Folder className={`h-16 w-16 mx-auto mb-3 ${
                     folder.is_system_folder ? 'text-yellow-600' : 'text-blue-500'
                   }`} />
-                  <h3 className="font-medium text-gray-900 truncate">{folder.name}</h3>
-                  <p className="text-sm text-gray-500">Folder</p>
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">{folder.name}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Folder</p>
                   {folder.is_system_folder && (
                     <Badge variant="outline" className="text-xs mt-1">
                       System
@@ -1077,15 +1076,15 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
             <Card 
               key={document.id} 
               className={`hover:shadow-md transition-shadow group cursor-pointer ${
-                favorites.has(document.id) ? 'border-yellow-300 bg-yellow-50' : ''
+                favorites.has(document.id) ? 'border-yellow-300 dark:border-yellow-600 bg-yellow-50 dark:bg-yellow-900/20' : ''
               }`}
               onClick={() => handlePreview(document)}
             >
               <CardContent className="pt-6">
                 <div className="text-center mb-3">
                   <div className="text-3xl mb-2">{getFileIcon(document.file_type)}</div>
-                  <h3 className="font-medium text-gray-900 truncate text-sm">{document.name}</h3>
-                  <p className="text-xs text-gray-500">{formatBytes(document.file_size)}</p>
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm">{document.name}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{formatBytes(document.file_size)}</p>
                   {canPreview(document.file_type) && (
                     <Eye className="h-4 w-4 text-blue-500 mx-auto mt-1" />
                   )}
@@ -1094,7 +1093,7 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
                   )}
                 </div>
                 
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
                   <span>{formatDate(document.created_at)}</span>
                   <span>{document.file_type}</span>
                 </div>

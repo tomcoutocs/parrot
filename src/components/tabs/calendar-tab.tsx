@@ -369,7 +369,7 @@ export default function CalendarTab() {
 
         {/* Admin Settings Panel */}
         {adminSettings.showAdminPanel && (
-          <Card className="mb-6">
+          <Card className="parrot-card-enhanced mb-6">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">Meeting Availability Settings</h2>
@@ -690,7 +690,7 @@ export default function CalendarTab() {
         <div className="grid grid-cols-12 gap-6">
           {/* Left Panel - Meeting Details */}
           <div className="col-span-3">
-            <Card className="h-fit">
+            <Card className="parrot-card-enhanced h-fit">
               <CardContent className="p-6">
                 {/* Logo and Brand */}
                 <div className="flex items-center gap-3 mb-6">

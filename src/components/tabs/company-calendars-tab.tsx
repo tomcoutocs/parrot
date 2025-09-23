@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
-  Calendar, 
   Clock, 
   User, 
   Trash2, 
@@ -785,7 +784,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
   // Early return if session is not ready
   if (status === 'loading') {
     return (
-      <Card>
+      <Card className="parrot-card-enhanced">
         <CardContent className="p-6">
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
@@ -798,7 +797,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
 
   if (status !== 'authenticated' || !session?.user?.id) {
     return (
-      <Card>
+      <Card className="parrot-card-enhanced">
         <CardContent className="p-6">
           <div className="text-center py-8">
             <Building className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -812,7 +811,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
 
   if (loading) {
     return (
-      <Card>
+      <Card className="parrot-card-enhanced">
         <CardContent className="p-6">
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
@@ -825,7 +824,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
 
   if (!selectedCompanyId) {
     return (
-      <Card>
+      <Card className="parrot-card-enhanced">
         <CardContent className="p-6">
           <div className="text-center py-8">
             <Building className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -948,7 +947,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
       </div>
 
       {/* Calendar Grid */}
-      <Card>
+      <Card className="parrot-card-enhanced">
         <CardContent className="p-0">
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             {renderCalendarHeader()}

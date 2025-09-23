@@ -4,16 +4,8 @@ import { useState, useEffect } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { createProject, fetchUsers, fetchCompanies } from '@/lib/database-functions'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { TextField, TextAreaField, SelectField } from '@/components/ui/form-field'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Loader2, X } from 'lucide-react'
 import type { User, Company } from '@/lib/supabase'
+import { useFormValidation, formSchemas } from '@/lib/validation'
 
 interface CreateProjectModalProps {
   isOpen: boolean
@@ -33,14 +26,30 @@ interface CreateProjectModalProps {
 
 export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }: CreateProjectModalProps) {
   const { data: session } = useSession()
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [managerId, setManagerId] = useState('none')
-  const [companyId, setCompanyId] = useState('')
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Form validation
+  const {
+    values,
+    errors,
+    touched,
+    setValue,
+    setFieldTouched,
+    validateForm,
+    reset,
+    isValid
+  } = useFormValidation(
+    {
+      name: '',
+      description: '',
+      managerId: 'none',
+      companyId: ''
+    },
+    formSchemas.project
+  )
 
   // Load data when modal opens
   useEffect(() => {
@@ -68,7 +77,7 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
       // Set default company for non-admin users
       if (session?.user?.role !== 'admin' && session?.user?.company_id) {
         console.log('Setting default company for non-admin user:', session.user.company_id)
-        setCompanyId(session.user.company_id)
+        setValue('companyId', session.user.company_id)
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -77,31 +86,26 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     
-    if (!name.trim()) {
-      setError('Project name is required')
+    // Validate form before submission
+    if (!validateForm()) {
       return
     }
-
-    if (!companyId) {
-      setError('Company selection is required')
-      return
-    }
-
+    
     if (!session?.user?.id) {
-      setError('You must be logged in to create a project')
+      setError('User session not found')
       return
     }
 
     setLoading(true)
-    setError('')
 
     try {
       const projectData = {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        manager_id: managerId === 'none' ? null : managerId,
-        company_id: companyId || session.user.company_id,
+        name: values.name.trim(),
+        description: values.description.trim() || undefined,
+        manager_id: values.managerId === 'none' ? null : values.managerId,
+        company_id: values.companyId || session.user.company_id,
         status: 'active' as const,
         created_by: session.user.id
       }
@@ -113,9 +117,7 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
       
       if (result.success && result.data) {
         // Reset form
-        setName('')
-        setDescription('')
-        setManagerId('none')
+        reset()
         setError('')
         
         // Close modal and refresh projects
@@ -139,10 +141,7 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
       loadData()
     } else {
       // Reset form when closing
-      setName('')
-      setDescription('')
-      setManagerId('none')
-      setCompanyId('')
+      reset()
       setError('')
     }
     onClose()
@@ -159,48 +158,52 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Project Name *</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter project name"
-              disabled={loading}
-              required
-            />
-          </div>
+          <TextField
+            label="Project Name"
+            name="name"
+            value={values.name}
+            onChange={(value) => setValue('name', value)}
+            onBlur={() => setFieldTouched('name')}
+            error={errors.name}
+            touched={touched.name}
+            placeholder="Enter project name"
+            required
+            disabled={loading}
+          />
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the project goals and objectives"
-              rows={3}
-              disabled={loading}
-            />
-          </div>
+          <TextAreaField
+            label="Description"
+            name="description"
+            value={values.description}
+            onChange={(value) => setValue('description', value)}
+            onBlur={() => setFieldTouched('description')}
+            error={errors.description}
+            touched={touched.description}
+            placeholder="Describe the project goals and objectives"
+            rows={3}
+            disabled={loading}
+          />
 
-          <div className="space-y-2">
-            <Label htmlFor="manager">Project Manager</Label>
-            <Select value={managerId} onValueChange={setManagerId} disabled={loading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a manager (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No manager assigned</SelectItem>
-                {users
-                  .filter(user => user.role === 'manager' || user.role === 'admin')
-                  .map(user => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.full_name} ({user.role})
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <SelectField
+            label="Project Manager"
+            name="managerId"
+            value={values.managerId}
+            onChange={(value) => setValue('managerId', value)}
+            onBlur={() => setFieldTouched('managerId')}
+            error={errors.managerId}
+            touched={touched.managerId}
+            placeholder="Select a manager (optional)"
+            disabled={loading}
+            options={[
+              { value: 'none', label: 'No manager assigned' },
+              ...users
+                .filter(user => user.role === 'manager' || user.role === 'admin')
+                .map(user => ({
+                  value: user.id,
+                  label: `${user.full_name} (${user.role})`
+                }))
+            ]}
+          />
 
           <div className="space-y-2">
             <Label htmlFor="company">Company * ({companies.length} available)</Label>
@@ -222,19 +225,22 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
                 </Button>
               </div>
             )}
-            <Select value={companyId} onValueChange={setCompanyId} disabled={loading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a company" />
-              </SelectTrigger>
-              <SelectContent>
-                {/* Temporarily show all companies for debugging */}
-                {companies.map(company => (
-                  <SelectItem key={company.id} value={company.id}>
-                    {company.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SelectField
+              label="Company"
+              name="companyId"
+              value={values.companyId}
+              onChange={(value) => setValue('companyId', value)}
+              onBlur={() => setFieldTouched('companyId')}
+              error={errors.companyId}
+              touched={touched.companyId}
+              placeholder="Select a company"
+              required
+              disabled={loading}
+              options={companies.map(company => ({
+                value: company.id,
+                label: company.name
+              }))}
+            />
           </div>
 
           {error && (
@@ -252,7 +258,7 @@ export default function CreateProjectModal({ isOpen, onClose, onProjectCreated }
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || !name.trim() || !companyId}>
+            <Button type="submit" disabled={loading || !isValid}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

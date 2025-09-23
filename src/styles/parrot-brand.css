@@ -22,6 +22,62 @@
   --parrot-secondary-hover: var(--parrot-teal-light);
 }
 
+/* Enhanced Card Styling */
+.parrot-card-enhanced {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(254, 78, 3, 0.08);
+  box-shadow: 
+    0 1px 3px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px 0 rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(254, 78, 3, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.parrot-card-enhanced::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(254, 78, 3, 0.3) 50%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.parrot-card-enhanced:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 10px 25px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(254, 78, 3, 0.1);
+  border-color: rgba(254, 78, 3, 0.15);
+}
+
+.parrot-card-enhanced:hover::before {
+  opacity: 1;
+}
+
+/* Card Variants */
+.parrot-card-interactive {
+  cursor: pointer;
+}
+
+.parrot-card-interactive:hover {
+  transform: translateY(-3px) scale(1.01);
+}
+
+.parrot-card-featured {
+  background: linear-gradient(145deg, rgba(254, 78, 3, 0.02) 0%, rgba(47, 79, 79, 0.02) 100%);
+  border: 1px solid rgba(254, 78, 3, 0.15);
+}
+
+.parrot-card-featured:hover {
+  background: linear-gradient(145deg, rgba(254, 78, 3, 0.05) 0%, rgba(47, 79, 79, 0.05) 100%);
+}
+
 /* Parrot Branded Components */
 .parrot-gradient-bg {
   background: var(--parrot-gradient);
@@ -47,23 +103,842 @@
   box-shadow: 0 4px 12px rgba(254, 78, 3, 0.3);
 }
 
-/* Sidebar Gradient */
+/* Dark Mode Support */
+.dark {
+  --parrot-orange: #ff8c42;
+  --parrot-teal: #4fd1c7;
+  --parrot-gradient: linear-gradient(135deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+}
+
+/* Dark mode specific styles */
+.dark .parrot-page-bg {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+.dark .parrot-header-dark {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.dark .parrot-card-dark {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  color: #e2e8f0;
+}
+
+.dark .parrot-card-enhanced {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    0 2px 4px -1px rgba(0, 0, 0, 0.2);
+}
+
+.dark .parrot-card-enhanced:hover {
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.4),
+    0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  border-color: rgba(254, 78, 3, 0.3);
+}
+
+.dark .parrot-button-primary {
+  background: var(--parrot-gradient);
+  color: white;
+  border: 1px solid rgba(254, 78, 3, 0.3);
+}
+
+.dark .parrot-button-primary:hover {
+  background: linear-gradient(135deg, #ff6b1a 0%, #3dd4c4 100%);
+  box-shadow: 0 4px 12px rgba(254, 78, 3, 0.3);
+}
+
+/* Dark mode sidebar */
+.dark .parrot-sidebar-gradient {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+  backdrop-filter: blur(10px);
+  box-shadow:
+    4px 0 20px rgba(0, 0, 0, 0.3),
+    2px 0 8px rgba(0, 0, 0, 0.2);
+  border-right: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.dark .parrot-nav-item {
+  color: #cbd5e1;
+}
+
+.dark .parrot-nav-item:hover {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.15) 0%, rgba(47, 79, 79, 0.15) 100%);
+  color: #f1f5f9;
+}
+
+.dark .parrot-nav-item.active {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.2) 0%, rgba(47, 79, 79, 0.2) 100%);
+  color: #ffffff;
+}
+
+.dark .parrot-sidebar-user {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.1) 0%, rgba(47, 79, 79, 0.1) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.dark .parrot-sidebar-user-name {
+  color: #f1f5f9;
+}
+
+.dark .parrot-sidebar-user-role {
+  color: #94a3b8;
+}
+
+/* Dark mode task cards */
+.dark .parrot-task-card {
+  background: linear-gradient(145deg, #1e293b 0%, #2d3748 100%);
+  border: 1px solid rgba(71, 85, 105, 0.8);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.5),
+    0 2px 4px -1px rgba(0, 0, 0, 0.4);
+}
+
+.dark .parrot-task-card:hover {
+  box-shadow: 
+    0 8px 25px rgba(0, 0, 0, 0.6),
+    0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  border-color: rgba(254, 78, 3, 0.8);
+  transform: translateY(-1px);
+}
+
+.dark .parrot-task-status-todo {
+  border-left: 4px solid #64748b;
+}
+
+.dark .parrot-task-status-in-progress {
+  border-left: 4px solid #8b5cf6;
+}
+
+.dark .parrot-task-status-review {
+  border-left: 4px solid #f59e0b;
+}
+
+.dark .parrot-task-status-done {
+  border-left: 4px solid #10b981;
+}
+
+.dark .parrot-task-priority-low {
+  color: #94a3b8;
+}
+
+.dark .parrot-task-priority-medium {
+  color: #fbbf24;
+}
+
+.dark .parrot-task-priority-high {
+  color: #f97316;
+}
+
+.dark .parrot-task-priority-urgent {
+  color: #ef4444;
+}
+
+.dark .parrot-task-progress-bg {
+  background: rgba(71, 85, 105, 0.3);
+}
+
+.dark .parrot-task-progress {
+  background: var(--parrot-gradient);
+}
+
+/* Dark mode Kanban board columns */
+.dark .kanban-column {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border: 2px dashed rgba(71, 85, 105, 0.4);
+}
+
+.dark .kanban-column-todo {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border-color: rgba(100, 116, 139, 0.4);
+}
+
+.dark .kanban-column-in-progress {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.dark .kanban-column-review {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.dark .kanban-column-done {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.dark .kanban-column-title {
+  color: #f1f5f9;
+}
+
+.dark .kanban-empty-state {
+  color: #94a3b8;
+}
+
+.dark .kanban-add-button {
+  background: rgba(71, 85, 105, 0.3);
+  border-color: rgba(71, 85, 105, 0.5);
+  color: #f1f5f9;
+}
+
+.dark .kanban-add-button:hover {
+  background: rgba(71, 85, 105, 0.5);
+  border-color: rgba(254, 78, 3, 0.5);
+}
+
+/* Dark mode task card text improvements */
+.dark .parrot-task-card-header {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.05) 0%, rgba(47, 79, 79, 0.05) 100%);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.dark .parrot-task-card-title {
+  color: #f1f5f9;
+}
+
+.dark .parrot-task-card-description {
+  color: #cbd5e1;
+}
+
+.dark .parrot-task-card .parrot-task-meta {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-meta-icon {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-meta span {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-meta svg {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-assignee {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-assignee span {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-assignee svg {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-due-date {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-due-date span {
+  color: #ffffff !important;
+}
+
+.dark .parrot-task-card .parrot-task-due-date svg {
+  color: #ffffff !important;
+}
+
+/* Dark mode badge improvements */
+.dark .parrot-task-status-todo {
+  background: rgba(100, 116, 139, 0.5);
+  color: #ffffff;
+  border: 1px solid rgba(100, 116, 139, 0.8);
+}
+
+.dark .parrot-task-status-in-progress {
+  background: rgba(139, 92, 246, 0.5);
+  color: #ffffff;
+  border: 1px solid rgba(139, 92, 246, 0.8);
+}
+
+.dark .parrot-task-status-review {
+  background: rgba(245, 158, 11, 0.6);
+  color: #000000;
+  border: 1px solid rgba(245, 158, 11, 0.8);
+}
+
+.dark .parrot-task-status-done {
+  background: rgba(16, 185, 129, 0.5);
+  color: #ffffff;
+  border: 1px solid rgba(16, 185, 129, 0.8);
+}
+
+/* Dark mode priority badges */
+.dark .parrot-task-priority-low {
+  background: rgba(34, 197, 94, 0.5);
+  color: #ffffff;
+  border: 1px solid rgba(34, 197, 94, 0.8);
+}
+
+.dark .parrot-task-priority-medium {
+  background: rgba(245, 158, 11, 0.6);
+  color: #000000;
+  border: 1px solid rgba(245, 158, 11, 0.8);
+}
+
+.dark .parrot-task-priority-high {
+  background: rgba(249, 115, 22, 0.5);
+  color: #ffffff;
+  border: 1px solid rgba(249, 115, 22, 0.8);
+}
+
+.dark .parrot-task-priority-urgent {
+  background: rgba(239, 68, 68, 0.5);
+  color: #ffffff;
+  border: 1px solid rgba(239, 68, 68, 0.8);
+}
+
+/* Dark mode quick stats cards */
+.dark .quick-stats-card {
+  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.dark .quick-stats-number {
+  color: #f1f5f9;
+}
+
+.dark .quick-stats-label {
+  color: #94a3b8;
+}
+
+/* Dark mode scrollbar */
+.dark .parrot-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dark .parrot-scrollbar::-webkit-scrollbar-track {
+  background: rgba(71, 85, 105, 0.2);
+}
+
+.dark .parrot-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.5);
+  border-radius: 4px;
+}
+
+.dark .parrot-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.7);
+}
+
+/* Dark mode form elements */
+.dark input[type="text"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark textarea,
+.dark select {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  color: #e2e8f0;
+}
+
+.dark input[type="text"]:focus,
+.dark input[type="email"]:focus,
+.dark input[type="password"]:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: rgba(254, 78, 3, 0.5);
+  box-shadow: 0 0 0 3px rgba(254, 78, 3, 0.1);
+}
+
+/* Dark mode badges */
+.dark .bg-green-100 {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+  color: #6ee7b7 !important;
+}
+
+.dark .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+  color: #fca5a5 !important;
+}
+
+.dark .bg-yellow-100 {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  color: #fcd34d !important;
+}
+
+.dark .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+  color: #93c5fd !important;
+}
+
+/* Dark mode alerts */
+.dark .alert {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  color: #e2e8f0;
+}
+
+/* Dark mode dropdowns */
+.dark .dropdown-content {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+}
+
+.dark .dropdown-item {
+  color: #e2e8f0;
+}
+
+.dark .dropdown-item:hover {
+  background: rgba(71, 85, 105, 0.3);
+}
+
+/* Dark mode tooltips */
+.dark .tooltip-content {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  color: #e2e8f0;
+}
+
+/* Dark mode modals */
+.dark .modal-content {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+/* Dark mode loading states */
+.dark .skeleton {
+  background: rgba(71, 85, 105, 0.3);
+}
+
+/* Dark mode empty states */
+.dark .empty-state-icon {
+  background: rgba(71, 85, 105, 0.2);
+}
+
+/* Dark mode error boundaries */
+.dark .error-boundary {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+/* Dark mode confirmation dialogs */
+.dark .confirmation-dialog {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+/* Dark mode text colors */
+.dark .text-gray-900 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-gray-800 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-gray-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-gray-600 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-gray-500 {
+  color: #64748b !important;
+}
+
+.dark .text-gray-400 {
+  color: #475569 !important;
+}
+
+/* Dark mode background colors */
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+.dark .bg-gray-100 {
+  background-color: rgba(30, 41, 59, 0.7) !important;
+}
+
+.dark .bg-gray-200 {
+  background-color: rgba(71, 85, 105, 0.3) !important;
+}
+
+/* Dark mode border colors */
+.dark .border-gray-200 {
+  border-color: rgba(71, 85, 105, 0.3) !important;
+}
+
+.dark .border-gray-300 {
+  border-color: rgba(71, 85, 105, 0.5) !important;
+}
+
+/* Dark mode hover states */
+.dark .hover\:bg-gray-50:hover {
+  background-color: rgba(30, 41, 59, 0.7) !important;
+}
+
+.dark .hover\:bg-gray-100:hover {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+}
+
+.dark .hover\:bg-gray-200:hover {
+  background-color: rgba(71, 85, 105, 0.3) !important;
+}
+
+/* Dark mode focus states */
+.dark .focus\:ring-blue-500:focus {
+  --tw-ring-color: rgba(254, 78, 3, 0.5) !important;
+}
+
+/* Dark mode shadow colors */
+.dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .shadow {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark .shadow-md {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark .shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Dark mode documents tab specific styles */
+.dark .documents-list-container {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.dark .documents-list-header {
+  background: rgba(55, 65, 81, 0.8);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+  color: #cbd5e1;
+}
+
+.dark .documents-list-row {
+  border-bottom: 1px solid rgba(71, 85, 105, 0.2);
+}
+
+.dark .documents-list-row:hover {
+  background: rgba(55, 65, 81, 0.5);
+}
+
+.dark .documents-list-row.selected {
+  background: rgba(254, 78, 3, 0.1);
+}
+
+.dark .documents-grid-card {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.dark .documents-grid-card:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(254, 78, 3, 0.3);
+}
+
+.dark .documents-favorite-highlight {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.dark .documents-system-folder {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* Dark mode transitions */
+.dark * {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
 .parrot-sidebar-gradient {
-  background: rgba(211, 216, 219, 0.7);
-  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  backdrop-filter: blur(10px);
+  box-shadow: 
+    4px 0 20px rgba(0, 0, 0, 0.1),
+    2px 0 8px rgba(0, 0, 0, 0.05);
+  border-right: 1px solid rgba(254, 78, 3, 0.1);
+}
+
+/* Sidebar Navigation Items */
+.parrot-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  margin: 2px 6px;
+  border-radius: 6px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  color: #374151;
+  font-weight: 500;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.parrot-nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--parrot-gradient);
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.parrot-nav-item:hover {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.08) 0%, rgba(47, 79, 79, 0.08) 100%);
+  color: #1f2937;
+  transform: translateX(2px);
+}
+
+.parrot-nav-item:hover::before {
+  opacity: 1;
+}
+
+.parrot-nav-item.active {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.12) 0%, rgba(47, 79, 79, 0.12) 100%);
+  color: #111827;
+  font-weight: 600;
+}
+
+.parrot-nav-item.active::before {
+  opacity: 1;
 }
 
 /* Sidebar Section Separators */
 .parrot-sidebar-gradient .sidebar-section {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  margin-bottom: 8px;
-  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(254, 78, 3, 0.1);
+  margin-bottom: 12px;
+  padding-bottom: 12px;
 }
 
 .parrot-sidebar-gradient .sidebar-section:last-child {
   border-bottom: none;
   margin-bottom: 0;
   padding-bottom: 0;
+}
+
+/* Sidebar Icons */
+.parrot-nav-icon {
+  margin-right: 10px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.parrot-nav-item:hover .parrot-nav-icon {
+  transform: scale(1.1);
+}
+
+.parrot-nav-item.active .parrot-nav-icon {
+  color: var(--parrot-orange);
+}
+
+/* Sidebar Badges */
+.parrot-nav-badge {
+  margin-left: auto;
+  background: linear-gradient(135deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Sidebar User Profile */
+.parrot-sidebar-user {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.05) 0%, rgba(47, 79, 79, 0.05) 100%);
+  border: 1px solid rgba(254, 78, 3, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 6px;
+}
+
+.parrot-sidebar-user-avatar {
+  width: 32px;
+  height: 32px;
+  background: var(--parrot-gradient);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.parrot-sidebar-user-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.parrot-sidebar-user-role {
+  font-size: 10px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Enhanced Task Card Styling */
+.parrot-task-card {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(254, 78, 3, 0.08);
+  box-shadow: 
+    0 1px 3px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.parrot-task-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--parrot-gradient);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.parrot-task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 8px 25px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: rgba(254, 78, 3, 0.15);
+}
+
+.parrot-task-card:hover::before {
+  opacity: 1;
+}
+
+/* Task Status Colors */
+.parrot-task-status-todo {
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  border-left: 4px solid #6b7280;
+}
+
+.parrot-task-status-in-progress {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left: 4px solid #f59e0b;
+}
+
+.parrot-task-status-review {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-left: 4px solid #3b82f6;
+}
+
+.parrot-task-status-done {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 4px solid #10b981;
+}
+
+/* Task Priority Indicators */
+.parrot-task-priority-low {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-left: 4px solid #0ea5e9;
+}
+
+.parrot-task-priority-medium {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left: 4px solid #f59e0b;
+}
+
+.parrot-task-priority-high {
+  background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+  border-left: 4px solid #ef4444;
+}
+
+.parrot-task-priority-urgent {
+  background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+  border-left: 4px solid #dc2626;
+  animation: pulse-urgent 2s infinite;
+}
+
+@keyframes pulse-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+/* Task Progress Bar */
+.parrot-task-progress {
+  height: 4px;
+  background: linear-gradient(90deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.parrot-task-progress-bg {
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* Task Card Enhancements */
+.parrot-task-card-header {
+  background: linear-gradient(135deg, rgba(254, 78, 3, 0.02) 0%, rgba(47, 79, 79, 0.02) 100%);
+  border-bottom: 1px solid rgba(254, 78, 3, 0.1);
+}
+
+.parrot-task-card-content {
+  padding: 16px;
+}
+
+.parrot-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.parrot-task-assignee {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.parrot-task-due-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.parrot-task-due-date.overdue {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.parrot-task-due-date.due-soon {
+  color: #f59e0b;
+  font-weight: 500;
 }
 
 /* Logo Section Styling */
