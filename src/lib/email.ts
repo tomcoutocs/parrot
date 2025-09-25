@@ -1,8 +1,16 @@
 // Email functionality for sending invitations using Resend
 import { Resend } from 'resend'
 
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Initialize Resend with error handling
+let resend: Resend | null = null
+
+try {
+  if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY)
+  }
+} catch (error) {
+  console.warn('Failed to initialize Resend client:', error)
+}
 
 export interface InvitationEmailData {
   recipientName: string
@@ -48,8 +56,8 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
       companyName: data.companyName
     })
 
-    if (!process.env.RESEND_API_KEY) {
-      console.warn('⚠️ RESEND_API_KEY not configured, falling back to mock email')
+    if (!process.env.RESEND_API_KEY || !resend) {
+      console.warn('⚠️ RESEND_API_KEY not configured or Resend client not initialized, falling back to mock email')
       console.log('📧 Mock email sent:', {
         to: data.recipientEmail,
         subject: `Invitation to join ${data.companyName}`,
