@@ -95,8 +95,18 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
       </html>
     `
 
+    // Check if we have a valid from email configured
+    const fromEmail = process.env.RESEND_FROM_EMAIL
+    if (!fromEmail) {
+      console.error('❌ RESEND_FROM_EMAIL not configured. Please set a verified domain email.')
+      return {
+        success: false,
+        error: 'Email configuration error: RESEND_FROM_EMAIL not set'
+      }
+    }
+
     const result = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'noreply@yourdomain.com',
+      from: fromEmail,
       to: [data.recipientEmail],
       subject: `Invitation to join ${data.companyName}`,
       html: emailHtml,
@@ -104,6 +114,15 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
 
     if (result.error) {
       console.error('Resend API error:', result.error)
+      
+      // Handle specific domain verification errors
+      if (result.error.message?.includes('domain is not verified')) {
+        return {
+          success: false,
+          error: 'Domain verification error: Please verify your domain in Resend dashboard'
+        }
+      }
+      
       return {
         success: false,
         error: result.error.message || 'Failed to send email'
