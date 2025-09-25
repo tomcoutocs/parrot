@@ -96,12 +96,20 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
     `
 
     // Check if we have a valid from email configured
-    const fromEmail = process.env.RESEND_FROM_EMAIL
+    const fromEmail = process.env.FROM_EMAIL
+    console.log('🔍 Environment variables debug:', {
+      hasResendKey: !!process.env.RESEND_API_KEY,
+      resendKeyLength: process.env.RESEND_API_KEY?.length || 0,
+      hasFromEmail: !!process.env.FROM_EMAIL,
+      fromEmailValue: process.env.FROM_EMAIL,
+      allEnvKeys: Object.keys(process.env).filter(key => key.includes('RESEND') || key.includes('FROM_EMAIL'))
+    })
+    
     if (!fromEmail) {
-      console.error('❌ RESEND_FROM_EMAIL not configured. Please set a verified domain email.')
+      console.error('❌ FROM_EMAIL not configured. Please set a verified domain email.')
       return {
         success: false,
-        error: 'Email configuration error: RESEND_FROM_EMAIL not set'
+        error: 'Email configuration error: FROM_EMAIL not set'
       }
     }
 

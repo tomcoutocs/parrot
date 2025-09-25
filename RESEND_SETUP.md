@@ -47,7 +47,7 @@ Create/update your `.env.local` file:
 ```env
 # Resend Configuration
 RESEND_API_KEY=re_your_actual_api_key_here
-RESEND_FROM_EMAIL=noreply@yourdomain.com
+FROM_EMAIL=noreply@yourdomain.com
 ```
 
 **Important**: Replace `yourdomain.com` with your actual verified domain!
@@ -57,7 +57,7 @@ For testing, you can use Resend's built-in domain:
 
 ```env
 RESEND_API_KEY=re_your_actual_api_key_here
-RESEND_FROM_EMAIL=onboarding@resend.dev
+FROM_EMAIL=onboarding@resend.dev
 ```
 
 ## 🚨 **Common Issues**
