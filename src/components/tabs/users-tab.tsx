@@ -1235,7 +1235,7 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
         open={showInviteUsersModal}
         onOpenChange={setShowInviteUsersModal}
         companies={companies.map(c => ({ id: c.id, name: c.name }))}
-        selectedCompanyId={selectedCompany}
+        selectedCompanyId={selectedCompany || undefined}
       />
     </div>
   )
