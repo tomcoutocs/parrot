@@ -216,7 +216,8 @@ export async function sendBulkInvitationEmails(data: BulkInvitationEmailData[]):
 
 // Helper function to generate invitation URL
 export function generateInvitationUrl(token: string, baseUrl?: string): string {
-  const base = baseUrl || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  // Use NEXT_PUBLIC_APP_URL for production, fallback to NEXTAUTH_URL, then localhost
+  const base = baseUrl || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000'
   return `${base}/invite/${token}`
 }
 
