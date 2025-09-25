@@ -86,7 +86,6 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
   const [success, setSuccess] = useState('')
   const [viewMode, setViewMode] = useState<'card' | 'list'>('list')
   const [showInviteUsersModal, setShowInviteUsersModal] = useState(false)
-  const [selectedCompanyForInvitation, setSelectedCompanyForInvitation] = useState<Company | null>(null)
 
   // Check if current user is admin
   const isAdmin = session?.user?.role === 'admin'
@@ -362,10 +361,7 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
           </Button>
           <Button
             variant="outline"
-            onClick={() => {
-              setSelectedCompanyForInvitation(companies[0] || null)
-              setShowInviteUsersModal(true)
-            }}
+            onClick={() => setShowInviteUsersModal(true)}
             disabled={companies.length === 0}
           >
             <Settings className="h-4 w-4 mr-2" />
@@ -1235,14 +1231,12 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
       </Dialog>
 
       {/* User Invitation Modal */}
-      {selectedCompanyForInvitation && (
-        <UserInvitationModal
-          open={showInviteUsersModal}
-          onOpenChange={setShowInviteUsersModal}
-          companyId={selectedCompanyForInvitation.id}
-          companyName={selectedCompanyForInvitation.name}
-        />
-      )}
+      <UserInvitationModal
+        open={showInviteUsersModal}
+        onOpenChange={setShowInviteUsersModal}
+        companies={companies.map(c => ({ id: c.id, name: c.name }))}
+        selectedCompanyId={selectedCompany}
+      />
     </div>
   )
 } 

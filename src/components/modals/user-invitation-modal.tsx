@@ -14,8 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 interface UserInvitationModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  companyId: string
-  companyName: string
+  companies: Array<{ id: string; name: string }>
+  selectedCompanyId?: string
 }
 
 interface InvitationUser {
@@ -24,11 +24,12 @@ interface InvitationUser {
   role: 'admin' | 'manager' | 'user' | 'internal'
 }
 
-export default function UserInvitationModal({ open, onOpenChange, companyId, companyName }: UserInvitationModalProps) {
+export default function UserInvitationModal({ open, onOpenChange, companies, selectedCompanyId }: UserInvitationModalProps) {
   const { data: session } = useSession()
   const [users, setUsers] = useState<InvitationUser[]>([
     { email: '', full_name: '', role: 'user' }
   ])
+  const [selectedCompany, setSelectedCompany] = useState<string>(selectedCompanyId || companies[0]?.id || '')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -58,6 +59,10 @@ export default function UserInvitationModal({ open, onOpenChange, companyId, com
   }
 
   const validateUsers = () => {
+    if (!selectedCompany) {
+      return 'Please select a company'
+    }
+    
     for (const user of users) {
       if (!user.email || !user.full_name) {
         return 'All users must have an email and full name'
@@ -92,11 +97,18 @@ export default function UserInvitationModal({ open, onOpenChange, companyId, com
       const invitations = users.map(user => ({
         email: user.email,
         full_name: user.full_name,
-        company_id: companyId,
+        company_id: selectedCompany,
         role: user.role,
         invited_by: session.user.id,
         tab_permissions: defaultTabPermissions
       }))
+
+      console.log('🚀 Sending invitation request:', {
+        invitationCount: invitations.length,
+        selectedCompany: selectedCompany,
+        companyName: companies.find(c => c.id === selectedCompany)?.name || 'Company',
+        inviterName: session.user.name || 'Administrator'
+      })
 
       const response = await fetch('/api/invitations/bulk', {
         method: 'POST',
@@ -105,10 +117,12 @@ export default function UserInvitationModal({ open, onOpenChange, companyId, com
         },
         body: JSON.stringify({ 
           invitations,
-          company_name: companyName,
+          company_name: companies.find(c => c.id === selectedCompany)?.name || 'Company',
           inviter_name: session.user.name || 'Administrator'
         })
       })
+
+      console.log('📡 API response status:', response.status)
 
       const data = await response.json()
 
@@ -148,9 +162,9 @@ export default function UserInvitationModal({ open, onOpenChange, companyId, com
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Invite Users to {companyName}</DialogTitle>
+          <DialogTitle>Invite Users</DialogTitle>
           <DialogDescription>
-            Add users to your company. They will receive an email invitation to join the platform.
+            Add users to a company. They will receive an email invitation to join the platform.
           </DialogDescription>
         </DialogHeader>
 
@@ -168,6 +182,27 @@ export default function UserInvitationModal({ open, onOpenChange, companyId, com
               <AlertDescription>{success}</AlertDescription>
             </Alert>
           )}
+
+          {/* Company Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="company-select">Select Company *</Label>
+            <Select
+              value={selectedCompany}
+              onValueChange={setSelectedCompany}
+              disabled={sending}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a company" />
+              </SelectTrigger>
+              <SelectContent>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="space-y-4">
             {users.map((user, index) => (
@@ -269,7 +304,7 @@ export default function UserInvitationModal({ open, onOpenChange, companyId, com
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={sending || users.some(u => !u.email || !u.full_name)}
+            disabled={sending || users.some(u => !u.email || !u.full_name) || !selectedCompany}
           >
             {sending ? (
               <>

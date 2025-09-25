@@ -4,10 +4,18 @@ import { sendBulkInvitationEmails } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🚀 Bulk invitation API called')
     const body = await request.json()
     const { invitations, company_name, inviter_name } = body
 
+    console.log('📋 Invitation data received:', {
+      invitationCount: invitations?.length || 0,
+      companyName: company_name,
+      inviterName: inviter_name
+    })
+
     if (!invitations || !Array.isArray(invitations) || invitations.length === 0) {
+      console.error('❌ Invalid invitations data')
       return NextResponse.json(
         { error: 'Invalid invitations data' },
         { status: 400 }
@@ -35,6 +43,8 @@ export async function POST(request: NextRequest) {
 
     // Send invitation emails
     if (result.data && result.data.length > 0) {
+      console.log('📧 Preparing to send emails for', result.data.length, 'invitations')
+      
       const emailData = result.data.map(invitation => ({
         recipientName: invitation.full_name,
         recipientEmail: invitation.email,
@@ -56,12 +66,22 @@ export async function POST(request: NextRequest) {
         inviter_name: inviter_name || 'Your Administrator'
       }))
 
+      console.log('📤 Calling sendBulkInvitationEmails...')
       const emailResult = await sendBulkInvitationEmails(emailData)
       
+      console.log('📧 Email sending result:', {
+        success: emailResult.success,
+        totalResults: emailResult.results.length,
+        successfulEmails: emailResult.results.filter(r => r.success).length,
+        failedEmails: emailResult.results.filter(r => !r.success).length
+      })
+      
       if (!emailResult.success) {
-        console.warn('Some invitation emails failed to send:', emailResult.results.filter(r => !r.success))
+        console.warn('⚠️ Some invitation emails failed to send:', emailResult.results.filter(r => !r.success))
         // Don't fail the whole operation if some emails fail
       }
+    } else {
+      console.warn('⚠️ No invitation data to send emails for')
     }
 
     return NextResponse.json({

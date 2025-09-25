@@ -1,6 +1,8 @@
-// Email functionality for sending invitations
-// This is a placeholder implementation - in production, you would integrate with
-// a real email service like SendGrid, AWS SES, or similar
+// Email functionality for sending invitations using Resend
+import { Resend } from 'resend'
+
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export interface InvitationEmailData {
   recipientName: string
@@ -36,22 +38,84 @@ export interface BulkEmailResult {
   results: Array<{ success: boolean; email: string; error?: string }>
 }
 
-// Mock email sending function for single invitation
+// Email sending function for single invitation using Resend
 export async function sendInvitationEmail(data: InvitationEmailData): Promise<EmailResult> {
   try {
-    console.log('📧 Mock email sent:', {
-      to: data.recipientEmail,
-      subject: `Invitation to join ${data.companyName}`,
-      recipientName: data.recipientName,
-      companyName: data.companyName,
-      inviterName: data.inviterName,
-      role: data.role,
-      invitationToken: data.invitationToken,
-      expiresAt: data.expiresAt
+    console.log('🔍 Email sending debug info:', {
+      hasResendKey: !!process.env.RESEND_API_KEY,
+      resendKeyLength: process.env.RESEND_API_KEY?.length || 0,
+      recipientEmail: data.recipientEmail,
+      companyName: data.companyName
     })
 
-    // In production, this would send a real email
-    // For now, we'll just log the email details and return success
+    if (!process.env.RESEND_API_KEY) {
+      console.warn('⚠️ RESEND_API_KEY not configured, falling back to mock email')
+      console.log('📧 Mock email sent:', {
+        to: data.recipientEmail,
+        subject: `Invitation to join ${data.companyName}`,
+        recipientName: data.recipientName,
+        companyName: data.companyName,
+        inviterName: data.inviterName,
+        role: data.role,
+        invitationToken: data.invitationToken,
+        expiresAt: data.expiresAt
+      })
+      return { success: true }
+    }
+
+    const invitationUrl = generateInvitationUrl(data.invitationToken)
+    const expiresDate = new Date(data.expiresAt).toLocaleDateString()
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Invitation to join ${data.companyName}</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
+            <h1 style="color: #2563eb; margin-bottom: 20px;">You're Invited!</h1>
+            <p style="font-size: 18px; margin-bottom: 20px;">Hello ${data.recipientName},</p>
+            <p style="font-size: 16px; margin-bottom: 30px;">
+              ${data.inviterName} has invited you to join <strong>${data.companyName}</strong> as a <strong>${data.role}</strong>.
+            </p>
+            <a href="${invitationUrl}" 
+               style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-bottom: 20px;">
+              Accept Invitation
+            </a>
+            <p style="font-size: 14px; color: #666; margin-top: 30px;">
+              This invitation will expire on ${expiresDate}.<br>
+              If the button doesn't work, copy and paste this link into your browser:<br>
+              <a href="${invitationUrl}" style="color: #2563eb;">${invitationUrl}</a>
+            </p>
+          </div>
+        </body>
+      </html>
+    `
+
+    const result = await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || 'noreply@yourdomain.com',
+      to: [data.recipientEmail],
+      subject: `Invitation to join ${data.companyName}`,
+      html: emailHtml,
+    })
+
+    if (result.error) {
+      console.error('Resend API error:', result.error)
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email'
+      }
+    }
+
+    console.log('📧 Email sent successfully via Resend:', {
+      id: result.data?.id,
+      to: data.recipientEmail,
+      subject: `Invitation to join ${data.companyName}`
+    })
+
     return {
       success: true
     }
@@ -64,27 +128,27 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
   }
 }
 
-// Mock email sending function for bulk invitations
+// Email sending function for bulk invitations using Resend
 export async function sendBulkInvitationEmails(data: BulkInvitationEmailData[]): Promise<BulkEmailResult> {
   const results: Array<{ success: boolean; email: string; error?: string }> = []
 
   try {
     for (const invitation of data) {
       try {
-        console.log('📧 Mock bulk email sent:', {
-          to: invitation.email,
-          subject: `Invitation to join ${invitation.company_name}`,
+        const emailResult = await sendInvitationEmail({
           recipientName: invitation.full_name,
+          recipientEmail: invitation.email,
           companyName: invitation.company_name,
+          invitationToken: invitation.invitation_token,
           inviterName: invitation.inviter_name,
           role: invitation.role,
-          invitationToken: invitation.invitation_token,
           expiresAt: invitation.expires_at
         })
 
         results.push({
-          success: true,
-          email: invitation.email
+          success: emailResult.success,
+          email: invitation.email,
+          error: emailResult.error
         })
       } catch (error) {
         console.error(`Failed to send email to ${invitation.email}:`, error)
