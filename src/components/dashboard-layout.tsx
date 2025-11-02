@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import { 
   FileText, 
   Settings, 
-  Calendar, 
   FolderOpen, 
   Users,
   Menu,
@@ -51,7 +50,7 @@ interface DashboardLayoutProps {
   }
 }
 
-export type TabType = 'dashboard' | 'projects' | 'forms' | 'services' | 'calendar' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
+export type TabType = 'dashboard' | 'projects' | 'forms' | 'services' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
 
 const navigationItems = [
   { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'user'] },
@@ -59,7 +58,6 @@ const navigationItems = [
   { id: 'project-overview' as TabType, label: 'Project Overview', icon: TrendingUp, roles: ['admin', 'manager'] },
   { id: 'forms' as TabType, label: 'Forms', icon: FileText, roles: ['admin', 'manager', 'user'] },
   { id: 'services' as TabType, label: 'Services', icon: Settings, roles: ['admin', 'manager', 'user'] },
-  { id: 'calendar' as TabType, label: 'Calendar', icon: Calendar, roles: ['admin', 'manager', 'user'] },
   { id: 'company-calendars' as TabType, label: 'Company Calendars', icon: Building2, roles: ['admin', 'manager', 'user'] },
   { id: 'documents' as TabType, label: 'Documents', icon: FolderOpen, roles: ['admin', 'manager', 'user'] },
 
@@ -150,7 +148,7 @@ export default function DashboardLayout({
             {getInitials(session.user.name)}
           </div>
           {sidebarOpen && (
-            <div>
+            <div className="flex flex-col justify-center">
               <div className="parrot-sidebar-user-name">
                 {session.user.name}
               </div>

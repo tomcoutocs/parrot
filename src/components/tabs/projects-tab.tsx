@@ -1579,42 +1579,6 @@ export default function ProjectsTab({
         </DragDropContext>
       )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="quick-stats-card">
-          <CardContent className="p-4">
-            <div className="quick-stats-number text-2xl font-bold text-blue-600">
-              {tasksByStatus.todo?.length || 0}
-            </div>
-            <div className="quick-stats-label text-sm text-gray-600">To Do</div>
-          </CardContent>
-        </Card>
-        <Card className="quick-stats-card">
-          <CardContent className="p-4">
-            <div className="quick-stats-number text-2xl font-bold text-yellow-600">
-              {tasksByStatus.in_progress?.length || 0}
-            </div>
-            <div className="quick-stats-label text-sm text-gray-600">In Progress</div>
-          </CardContent>
-        </Card>
-        <Card className="quick-stats-card">
-          <CardContent className="p-4">
-            <div className="quick-stats-number text-2xl font-bold text-orange-600">
-              {tasksByStatus.review?.length || 0}
-            </div>
-            <div className="quick-stats-label text-sm text-gray-600">Review</div>
-          </CardContent>
-        </Card>
-        <Card className="quick-stats-card">
-          <CardContent className="p-4">
-            <div className="quick-stats-number text-2xl font-bold text-green-600">
-              {tasksByStatus.done?.length || 0}
-            </div>
-            <div className="quick-stats-label text-sm text-gray-600">Completed</div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Create Project Modal */}
       <CreateProjectModal
         isOpen={showCreateModal}

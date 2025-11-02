@@ -10,7 +10,6 @@ import FormsTab from '@/components/tabs/forms-tab'
 import UsersTab from '@/components/tabs/users-tab'
 import CompaniesTab from '@/components/tabs/companies-tab'
 import ServicesTab from '@/components/tabs/services-tab'
-import CalendarTab from '@/components/tabs/calendar-tab'
 import CompanyCalendarsTab from '@/components/tabs/company-calendars-tab'
 import DocumentsTab from '@/components/tabs/documents-tab'
 import ProjectOverviewTab from '@/components/tabs/project-overview-tab'
@@ -68,7 +67,6 @@ const tabComponents: Record<string, ComponentType<any>> = {
   projects: ProjectsTab,
   forms: FormsTab,
   services: ServicesTab,
-  calendar: CalendarTab,
   'company-calendars': CompanyCalendarsTab,
   documents: DocumentsTab,
   admin: UsersTab,

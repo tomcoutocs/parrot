@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
 import { 
   Folder, 
@@ -23,7 +23,8 @@ import {
   Star,
   Clock,
   User,
-  Eye
+  Eye,
+  FileEdit
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,7 +55,9 @@ import {
   getUserFavorites,
   isFavorited,
   type Document,
-  type DocumentFolder
+  type DocumentFolder,
+  getCompanyRichDocuments,
+  type RichDocument
 } from '@/lib/database-functions'
 import { supabase } from '@/lib/supabase'
 import { formatBytes, formatDate } from '@/lib/utils'
@@ -70,8 +73,10 @@ interface BreadcrumbItem {
 export default function DocumentsTab({ selectedCompany }: { selectedCompany?: string | null }) {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [documents, setDocuments] = useState<Document[]>([])
   const [folders, setFolders] = useState<DocumentFolder[]>([])
+  const [richDocuments, setRichDocuments] = useState<RichDocument[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
   const [currentFolder, setCurrentFolder] = useState<string>('/')
@@ -137,9 +142,10 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
 
     setIsLoading(true)
     try {
-      const [docsResult, foldersResult] = await Promise.all([
+      const [docsResult, foldersResult, richDocsResult] = await Promise.all([
         getCompanyDocuments(selectedCompanyId, currentFolder),
-        getCompanyFolders(selectedCompanyId, currentFolder)
+        getCompanyFolders(selectedCompanyId, currentFolder),
+        getCompanyRichDocuments(selectedCompanyId, currentFolder)
       ])
 
       if (docsResult.success) {
@@ -152,6 +158,12 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
         setFolders(foldersResult.folders || [])
       } else {
         setError(foldersResult.error || 'Failed to load folders')
+      }
+
+      if (richDocsResult.success) {
+        setRichDocuments(richDocsResult.documents || [])
+      } else {
+        console.error('Failed to load rich documents:', richDocsResult.error)
       }
     } catch (error) {
       console.error('Error loading documents and folders:', error)
@@ -533,6 +545,10 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
     return <File className="h-5 w-5 text-gray-600" />
   }
 
+  const handleViewRichDocument = (doc: RichDocument) => {
+    router.push(`/documents/${doc.id}`)
+  }
+
   const canPreview = (fileType: string) => {
     const extension = fileType.split('.').pop()?.toLowerCase()
     return (
@@ -723,6 +739,14 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
                      {/* Selection Actions */}
            {/* Removed selection functionality */}
 
+          <Button 
+            variant="orange"
+            onClick={() => router.push('/documents/new')}
+            disabled={currentFolder === '/Setup Instructions'}
+          >
+            <FileEdit className="h-4 w-4 mr-2" />
+            New Document
+          </Button>
           <Button 
             variant="orange"
             onClick={() => setShowCreateFolderModal(true)}
@@ -995,8 +1019,36 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
             </div>
           ))}
 
+          {/* Rich Documents */}
+          {richDocuments.map((doc) => (
+            <div
+              key={doc.id}
+              className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+              onClick={() => handleViewRichDocument(doc)}
+            >
+              <div className="col-span-6 flex items-center space-x-3">
+                <FileEdit className="h-5 w-5 text-purple-600" />
+                <span className="font-medium text-gray-900 dark:text-gray-100">{doc.title}</span>
+              </div>
+              <div className="col-span-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
+                <User className="h-4 w-4 mr-1" />
+                {session.user.name}
+              </div>
+              <div className="col-span-2 flex items-center text-sm text-gray-600 dark:text-gray-400">
+                <Clock className="h-4 w-4 mr-1" />
+                {formatDate(doc.created_at)}
+              </div>
+              <div className="col-span-1 text-sm text-gray-600 dark:text-gray-400">Rich Text</div>
+              <div className="col-span-1 flex justify-end">
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <FileEdit className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+
           {/* Empty State */}
-          {folders.length === 0 && documents.length === 0 && !searchTerm && (
+          {folders.length === 0 && documents.length === 0 && richDocuments.length === 0 && !searchTerm && (
             <div className="text-center py-12">
               <Folder className="h-16 w-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No documents or folders</h3>
@@ -1152,8 +1204,40 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
             </Card>
           ))}
 
+          {/* Rich Documents */}
+          {richDocuments.map((doc) => (
+            <Card 
+              key={doc.id} 
+              className="hover:shadow-md transition-shadow group cursor-pointer"
+              onClick={() => handleViewRichDocument(doc)}
+            >
+              <CardContent className="pt-6">
+                <div className="text-center mb-3">
+                  <div className="text-3xl mb-2">📝</div>
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm">{doc.title}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Rich Text Document</p>
+                </div>
+                
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  <span>{formatDate(doc.created_at)}</span>
+                </div>
+
+                <div className="flex items-center justify-between space-x-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleViewRichDocument(doc)}
+                  >
+                    <FileEdit className="h-3 w-3 mr-1" />
+                    Open
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
           {/* Empty State */}
-          {folders.length === 0 && documents.length === 0 && !searchTerm && (
+          {folders.length === 0 && documents.length === 0 && richDocuments.length === 0 && !searchTerm && (
             <div className="col-span-full text-center py-12">
               <Folder className="h-16 w-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No documents or folders</h3>
@@ -1227,6 +1311,8 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
         isOpen={showPreview}
         onClose={handleClosePreview}
       />
+
+      {/* Rich Document Creation Modal */}
     </div>
   )
 }

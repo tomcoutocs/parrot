@@ -19,6 +19,7 @@ async function setAppContext() {
       })
     } catch (error) {
       console.warn('set_user_context RPC function not available, falling back to basic auth')
+      // Don't throw error, just continue without setting context
     }
   }
 }

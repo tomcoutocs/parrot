@@ -1,35 +1,14 @@
 /* Parrot Brand Colors and Gradients */
 
-:root {
-  /* Parrot Brand Colors */
-  --parrot-orange: #FE4E03;        /* Bright orange */
-  --parrot-orange-dark: #E03E00;   /* Darker orange */
-  --parrot-orange-light: #FF6B1A;  /* Lighter orange */
-  --parrot-teal: #2F4F4F;         /* Dark teal-blue */
-  --parrot-teal-light: #4682B4;   /* Lighter teal-blue */
-  --parrot-white: #FFFFFF;
-  --parrot-gray: #F8F9FA;
-  
-  /* Brand Gradients */
-  --parrot-gradient: linear-gradient(135deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
-  --parrot-gradient-hover: linear-gradient(135deg, var(--parrot-orange-dark) 0%, var(--parrot-teal-light) 100%);
-  --parrot-gradient-subtle: linear-gradient(135deg, rgba(254, 78, 3, 0.1) 0%, rgba(47, 79, 79, 0.1) 100%);
-  
-  /* Component Colors */
-  --parrot-primary: var(--parrot-orange);
-  --parrot-primary-hover: var(--parrot-orange-dark);
-  --parrot-secondary: var(--parrot-teal);
-  --parrot-secondary-hover: var(--parrot-teal-light);
-}
+/* Using theme colors from globals.css */
 
 /* Enhanced Card Styling */
 .parrot-card-enhanced {
-  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid rgba(254, 78, 3, 0.08);
+  background: oklch(from var(--background) l c h);
+  border: 1px solid oklch(from var(--border) l c h / 0.5);
   box-shadow: 
     0 1px 3px 0 rgba(0, 0, 0, 0.1),
-    0 1px 2px 0 rgba(0, 0, 0, 0.06),
-    0 0 0 1px rgba(254, 78, 3, 0.05);
+    0 1px 2px 0 rgba(0, 0, 0, 0.06);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -42,7 +21,7 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, rgba(254, 78, 3, 0.3) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, oklch(from var(--primary) l c h / 0.3) 50%, transparent 100%);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -51,9 +30,8 @@
   transform: translateY(-2px);
   box-shadow: 
     0 10px 25px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -2px rgba(0, 0, 0, 0.05),
-    0 0 0 1px rgba(254, 78, 3, 0.1);
-  border-color: rgba(254, 78, 3, 0.15);
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: oklch(from var(--primary) l c h / 0.3);
 }
 
 .parrot-card-enhanced:hover::before {
@@ -70,12 +48,13 @@
 }
 
 .parrot-card-featured {
-  background: linear-gradient(145deg, rgba(254, 78, 3, 0.02) 0%, rgba(47, 79, 79, 0.02) 100%);
-  border: 1px solid rgba(254, 78, 3, 0.15);
+  background: oklch(from var(--accent) l c h);
+  border: 1px solid oklch(from var(--primary) l c h / 0.3);
 }
 
 .parrot-card-featured:hover {
-  background: linear-gradient(145deg, rgba(254, 78, 3, 0.05) 0%, rgba(47, 79, 79, 0.05) 100%);
+  background: oklch(from var(--accent) calc(l + 0.05) c h);
+  border-color: oklch(from var(--primary) l c h / 0.5);
 }
 
 /* Parrot Branded Components */
@@ -91,120 +70,53 @@
 }
 
 .parrot-button-primary {
-  background: var(--parrot-gradient);
-  color: white;
+  background: oklch(var(--color-primary));
+  color: oklch(var(--color-primary-foreground));
   border: none;
   transition: all 0.2s ease;
 }
 
 .parrot-button-primary:hover {
-  background: var(--parrot-gradient-hover);
+  background: oklch(from var(--color-primary) calc(l - 0.05) c h);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(254, 78, 3, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 /* Dark Mode Support */
-.dark {
-  --parrot-orange: #ff8c42;
-  --parrot-teal: #4fd1c7;
-  --parrot-gradient: linear-gradient(135deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
-}
+/* Using theme dark mode colors from globals.css */
 
-/* Dark mode specific styles */
+/* Dark mode specific styles - now using theme variables */
 .dark .parrot-page-bg {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: oklch(var(--color-background));
 }
 
 .dark .parrot-header-dark {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
-  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+  background: oklch(var(--color-background));
+  border-bottom: 1px solid oklch(from var(--color-border) l c h / 0.5);
 }
 
 .dark .parrot-card-dark {
-  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
-  border: 1px solid rgba(71, 85, 105, 0.3);
-  color: #e2e8f0;
+  background: oklch(var(--color-card));
+  border: 1px solid oklch(from var(--color-border) l c h / 0.5);
+  color: oklch(var(--color-card-foreground));
 }
 
-.dark .parrot-card-enhanced {
-  background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
-  border: 1px solid rgba(71, 85, 105, 0.3);
-  box-shadow: 
-    0 4px 6px -1px rgba(0, 0, 0, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.2);
-}
-
-.dark .parrot-card-enhanced:hover {
-  box-shadow: 
-    0 10px 15px -3px rgba(0, 0, 0, 0.4),
-    0 4px 6px -2px rgba(0, 0, 0, 0.3);
-  border-color: rgba(254, 78, 3, 0.3);
-}
+/* Dark mode cards use the theme automatically */
 
 .dark .parrot-button-primary {
-  background: var(--parrot-gradient);
-  color: white;
-  border: 1px solid rgba(254, 78, 3, 0.3);
+  background: oklch(var(--color-primary));
+  color: oklch(var(--color-primary-foreground));
+  border: 1px solid oklch(from var(--color-primary) l c h / 0.5);
 }
 
 .dark .parrot-button-primary:hover {
-  background: linear-gradient(135deg, #ff6b1a 0%, #3dd4c4 100%);
-  box-shadow: 0 4px 12px rgba(254, 78, 3, 0.3);
+  background: oklch(from var(--color-primary) calc(l - 0.05) c h);
+  box-shadow: var(--shadow-lg);
 }
 
-/* Dark mode sidebar */
-.dark .parrot-sidebar-gradient {
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
-  backdrop-filter: blur(10px);
-  box-shadow:
-    4px 0 20px rgba(0, 0, 0, 0.3),
-    2px 0 8px rgba(0, 0, 0, 0.2);
-  border-right: 1px solid rgba(71, 85, 105, 0.3);
-}
+/* Dark mode sidebar uses theme variables automatically */
 
-.dark .parrot-nav-item {
-  color: #cbd5e1;
-}
-
-.dark .parrot-nav-item:hover {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.15) 0%, rgba(47, 79, 79, 0.15) 100%);
-  color: #f1f5f9;
-}
-
-.dark .parrot-nav-item.active {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.2) 0%, rgba(47, 79, 79, 0.2) 100%);
-  color: #ffffff;
-}
-
-.dark .parrot-sidebar-user {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.1) 0%, rgba(47, 79, 79, 0.1) 100%);
-  border: 1px solid rgba(71, 85, 105, 0.3);
-}
-
-.dark .parrot-sidebar-user-name {
-  color: #f1f5f9;
-}
-
-.dark .parrot-sidebar-user-role {
-  color: #94a3b8;
-}
-
-/* Dark mode task cards */
-.dark .parrot-task-card {
-  background: linear-gradient(145deg, #1e293b 0%, #2d3748 100%);
-  border: 1px solid rgba(71, 85, 105, 0.8);
-  box-shadow: 
-    0 4px 6px -1px rgba(0, 0, 0, 0.5),
-    0 2px 4px -1px rgba(0, 0, 0, 0.4);
-}
-
-.dark .parrot-task-card:hover {
-  box-shadow: 
-    0 8px 25px rgba(0, 0, 0, 0.6),
-    0 4px 6px -1px rgba(0, 0, 0, 0.5);
-  border-color: rgba(254, 78, 3, 0.8);
-  transform: translateY(-1px);
-}
+/* Dark mode task cards use theme automatically */
 
 .dark .parrot-task-status-todo {
   border-left: 4px solid #64748b;
@@ -464,8 +376,8 @@
 }
 
 .dark .bg-blue-100 {
-  background-color: rgba(59, 130, 246, 0.2) !important;
-  color: #93c5fd !important;
+  background-color: oklch(from var(--color-primary) l c h / 0.2) !important;
+  color: oklch(var(--color-primary)) !important;
 }
 
 /* Dark mode alerts */
@@ -660,12 +572,13 @@
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 .parrot-sidebar-gradient {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  background: oklch(var(--color-sidebar));
   backdrop-filter: blur(10px);
   box-shadow: 
-    4px 0 20px rgba(0, 0, 0, 0.1),
+    -4px 0 12px rgba(0, 0, 0, 0.1),
+    -2px 0 6px rgba(0, 0, 0, 0.08),
     2px 0 8px rgba(0, 0, 0, 0.05);
-  border-right: 1px solid rgba(254, 78, 3, 0.1);
+  position: relative;
 }
 
 /* Sidebar Navigation Items */
@@ -678,7 +591,7 @@
   border-radius: 6px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
-  color: #374151;
+  color: oklch(var(--color-sidebar-foreground));
   font-weight: 500;
   text-decoration: none;
   font-size: 14px;
@@ -691,15 +604,15 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--parrot-gradient);
+  background: oklch(var(--color-sidebar-primary));
   border-radius: 0 2px 2px 0;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
 .parrot-nav-item:hover {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.08) 0%, rgba(47, 79, 79, 0.08) 100%);
-  color: #1f2937;
+  background: oklch(from var(--color-sidebar-accent) l c h);
+  color: oklch(var(--color-sidebar-accent-foreground));
   transform: translateX(2px);
 }
 
@@ -708,8 +621,8 @@
 }
 
 .parrot-nav-item.active {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.12) 0%, rgba(47, 79, 79, 0.12) 100%);
-  color: #111827;
+  background: oklch(from var(--color-sidebar-primary) l c h / 0.2);
+  color: oklch(var(--color-sidebar-primary-foreground));
   font-weight: 600;
 }
 
@@ -719,15 +632,23 @@
 
 /* Sidebar Section Separators */
 .parrot-sidebar-gradient .sidebar-section {
-  border-bottom: 1px solid rgba(254, 78, 3, 0.1);
+  position: relative;
   margin-bottom: 12px;
   padding-bottom: 12px;
 }
 
-.parrot-sidebar-gradient .sidebar-section:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
+.parrot-sidebar-gradient .sidebar-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.parrot-sidebar-gradient .sidebar-section:last-child::after {
+  display: none;
 }
 
 /* Sidebar Icons */
@@ -744,14 +665,14 @@
 }
 
 .parrot-nav-item.active .parrot-nav-icon {
-  color: var(--parrot-orange);
+  color: oklch(var(--color-sidebar-primary));
 }
 
 /* Sidebar Badges */
 .parrot-nav-badge {
   margin-left: auto;
-  background: linear-gradient(135deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
-  color: white;
+  background: oklch(var(--color-sidebar-primary));
+  color: oklch(var(--color-sidebar-primary-foreground));
   font-size: 11px;
   font-weight: 600;
   padding: 2px 6px;
@@ -762,48 +683,54 @@
 
 /* Sidebar User Profile */
 .parrot-sidebar-user {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.05) 0%, rgba(47, 79, 79, 0.05) 100%);
-  border: 1px solid rgba(254, 78, 3, 0.1);
+  background: oklch(from var(--color-sidebar-accent) l c h);
+  border: 1px solid oklch(from var(--color-sidebar-border) l c h / 0.5);
   border-radius: 8px;
   padding: 12px;
   margin: 12px 6px;
 }
 
 .parrot-sidebar-user-avatar {
-  width: 32px;
-  height: 32px;
-  background: var(--parrot-gradient);
+  width: 40px;
+  height: 40px;
+  background: oklch(var(--color-sidebar-primary));
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: oklch(var(--color-sidebar-primary-foreground));
   font-weight: 600;
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom: 0;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.parrot-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-direction: row;
 }
 
 .parrot-sidebar-user-name {
   font-weight: 600;
-  color: #1f2937;
+  color: oklch(var(--color-sidebar-foreground));
   margin-bottom: 2px;
   font-size: 13px;
 }
 
 .parrot-sidebar-user-role {
   font-size: 10px;
-  color: #6b7280;
+  color: oklch(var(--color-muted-foreground));
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 /* Enhanced Task Card Styling */
 .parrot-task-card {
-  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid rgba(254, 78, 3, 0.08);
-  box-shadow: 
-    0 1px 3px 0 rgba(0, 0, 0, 0.1),
-    0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  background: oklch(var(--color-card));
+  border: 1px solid oklch(from var(--color-border) l c h / 0.8);
+  box-shadow: var(--shadow);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -816,17 +743,15 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--parrot-gradient);
+  background: oklch(var(--color-primary));
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
 .parrot-task-card:hover {
   transform: translateY(-2px);
-  box-shadow: 
-    0 8px 25px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  border-color: rgba(254, 78, 3, 0.15);
+  box-shadow: var(--shadow-lg);
+  border-color: oklch(from var(--color-primary) l c h / 0.3);
 }
 
 .parrot-task-card:hover::before {
@@ -845,8 +770,8 @@
 }
 
 .parrot-task-status-review {
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-  border-left: 4px solid #3b82f6;
+  background: linear-gradient(135deg, oklch(from var(--color-primary) l c h / 0.15) 0%, oklch(from var(--color-primary) l c h / 0.25) 100%);
+  border-left: 4px solid oklch(var(--color-primary));
 }
 
 .parrot-task-status-done {
@@ -856,8 +781,8 @@
 
 /* Task Priority Indicators */
 .parrot-task-priority-low {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-left: 4px solid #0ea5e9;
+  background: linear-gradient(135deg, oklch(from var(--color-primary) l c h / 0.1) 0%, oklch(from var(--color-primary) l c h / 0.2) 100%);
+  border-left: 4px solid oklch(var(--color-primary));
 }
 
 .parrot-task-priority-medium {
@@ -884,7 +809,7 @@
 /* Task Progress Bar */
 .parrot-task-progress {
   height: 4px;
-  background: linear-gradient(90deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+  background: linear-gradient(90deg, oklch(var(--color-primary)) 0%, oklch(var(--color-secondary)) 100%);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -898,8 +823,8 @@
 
 /* Task Card Enhancements */
 .parrot-task-card-header {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.02) 0%, rgba(47, 79, 79, 0.02) 100%);
-  border-bottom: 1px solid rgba(254, 78, 3, 0.1);
+  background: oklch(from var(--color-accent) l c h);
+  border-bottom: 1px solid oklch(from var(--color-border) l c h / 0.5);
 }
 
 .parrot-task-card-content {
@@ -943,49 +868,50 @@
 
 /* Logo Section Styling */
 .parrot-sidebar-gradient .logo-section {
-  background: rgba(255, 255, 255, 0.3);
+  background: oklch(from var(--color-sidebar-accent) l c h);
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 /* User Info Section Styling */
 .parrot-sidebar-gradient .user-section {
-  background: rgba(255, 255, 255, 0.2);
+  background: oklch(from var(--color-sidebar-accent) l c h / 0.8);
   border-radius: 8px;
   padding: 8px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  margin-bottom: 4px;
+  margin-top: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 /* Navigation Section Styling */
 .parrot-sidebar-gradient .nav-section {
-  background: rgba(255, 255, 255, 0.1);
+  background: oklch(from var(--color-sidebar-accent) l c h / 0.6);
   border-radius: 8px;
   padding: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .parrot-sidebar-gradient .parrot-logo-text {
-  color: #2F4F4F;
+  color: oklch(var(--color-sidebar-foreground));
   text-shadow: none;
 }
 
 .parrot-sidebar-gradient .text-white {
-  color: #2F4F4F;
+  color: oklch(var(--color-sidebar-foreground));
   text-shadow: none;
 }
 
 /* Active tab styling */
 .parrot-sidebar-gradient .bg-teal-900\/80 {
-  background: rgba(47, 79, 79, 0.8) !important;
+  background: oklch(from var(--color-sidebar-primary) l c h / 0.8) !important;
   backdrop-filter: blur(10px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow);
 }
 
 .parrot-header-gradient {
-  background: linear-gradient(90deg, var(--parrot-orange) 0%, var(--parrot-teal) 100%);
+  background: linear-gradient(90deg, oklch(var(--color-primary)) 0%, oklch(var(--color-secondary)) 100%);
 }
 
 /* Logo Container */
@@ -1053,49 +979,49 @@
   background: var(--parrot-gradient-hover);
 }
 
-/* Orange Highlight Classes */
+/* Theme-based Highlight Classes */
 .parrot-orange-text {
-  color: var(--parrot-orange);
+  color: oklch(var(--color-primary));
 }
 
 .parrot-orange-bg {
-  background-color: var(--parrot-orange);
+  background-color: oklch(var(--color-primary));
 }
 
 .parrot-orange-border {
-  border-color: var(--parrot-orange);
+  border-color: oklch(var(--color-primary));
 }
 
 .parrot-orange-accent {
-  background-color: rgba(254, 78, 3, 0.1);
-  border-left: 3px solid var(--parrot-orange);
+  background-color: oklch(from var(--color-primary) l c h / 0.1);
+  border-left: 3px solid oklch(var(--color-primary));
 }
 
 .parrot-orange-hover:hover {
-  color: var(--parrot-orange);
+  color: oklch(var(--color-primary));
   transition: color 0.2s ease;
 }
 
 .parrot-orange-button {
-  background-color: var(--parrot-orange);
-  color: white;
+  background-color: oklch(var(--color-primary));
+  color: oklch(var(--color-primary-foreground));
   border: none;
   transition: all 0.2s ease;
 }
 
 .parrot-orange-button:hover {
-  background-color: var(--parrot-orange-dark);
+  background-color: oklch(from var(--color-primary) calc(l - 0.05) c h);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(254, 78, 3, 0.3);
+  box-shadow: oklch(from var(--color-primary) l c h / 0.3);
 }
 
 .parrot-orange-outline {
-  border: 2px solid var(--parrot-orange);
-  color: var(--parrot-orange);
+  border: 2px solid oklch(var(--color-primary));
+  color: oklch(var(--color-primary));
   background: transparent;
 }
 
 .parrot-orange-outline:hover {
-  background-color: var(--parrot-orange);
-  color: white;
+  background-color: oklch(var(--color-primary));
+  color: oklch(var(--color-primary-foreground));
 }

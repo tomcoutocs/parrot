@@ -4,10 +4,42 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 
-// Create a mock client if we're using placeholder values
-export const supabase = supabaseUrl.includes('placeholder') 
-  ? null // We'll handle this in components by checking if supabase is null
-  : createClient(supabaseUrl, supabaseAnonKey)
+// Create Supabase client with error handling
+let supabaseClient = null
+
+try {
+  if (!supabaseUrl.includes('placeholder') && supabaseAnonKey !== 'placeholder-key') {
+    console.log('Initializing Supabase client with URL:', supabaseUrl)
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      },
+      db: {
+        schema: 'public'
+      },
+      global: {
+        headers: {
+          'x-application-name': 'parrot-portal'
+        }
+      }
+    })
+    console.log('Supabase client initialized successfully')
+  } else {
+    console.warn('Supabase not configured - using placeholder values')
+  }
+} catch (error) {
+  console.error('Failed to initialize Supabase client:', error)
+  supabaseClient = null
+}
+
+export const supabase = supabaseClient
+
+// Debug function to check if Supabase is properly initialized
+export function isSupabaseInitialized() {
+  return supabase !== null && supabaseUrl !== 'https://placeholder.supabase.co'
+}
 
 // Types for our database tables
 export interface Company {

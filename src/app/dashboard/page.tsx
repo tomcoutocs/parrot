@@ -36,7 +36,7 @@ function DashboardContent() {
     console.log('Dashboard URL params - tab:', tabParam, 'company:', companyParam)
     console.log('Current activeTab:', activeTab)
     
-    if (tabParam && ['dashboard', 'projects', 'forms', 'services', 'calendar', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug'].includes(tabParam)) {
+    if (tabParam && ['dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug'].includes(tabParam)) {
       console.log('Setting active tab to:', tabParam)
       setActiveTab(tabParam)
     }

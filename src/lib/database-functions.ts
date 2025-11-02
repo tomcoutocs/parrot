@@ -3525,3 +3525,248 @@ export async function getMetricsSummary(
     return { success: false, error: 'An unexpected error occurred while calculating metrics summary' }
   }
 }
+
+// ============================================================================
+// RICH DOCUMENT FUNCTIONS
+// ============================================================================
+
+export interface RichDocument {
+  id: string
+  title: string
+  content: string
+  company_id: string
+  created_by: string
+  folder_path: string
+  created_at: string
+  updated_at: string
+}
+
+// Create or update a rich document
+export async function saveRichDocument(
+  title: string,
+  content: string,
+  companyId: string,
+  userId: string,
+  folderPath: string = '/',
+  documentId?: string
+): Promise<{ success: boolean; document?: RichDocument; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Get current user for validation
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    // Application-level security: Verify user has access to this company
+    if (documentId) {
+      // For updates, verify the document exists and user created it
+      const { data: existingDoc } = await supabase
+        .from('rich_documents')
+        .select('*')
+        .eq('id', documentId)
+        .single()
+
+      if (!existingDoc) {
+        return { success: false, error: 'Document not found' }
+      }
+
+      if (existingDoc.created_by !== currentUser.id) {
+        return { success: false, error: 'You can only edit documents you created' }
+      }
+
+      // Update existing document
+      const { data, error } = await supabase
+        .from('rich_documents')
+        .update({
+          title,
+          content,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', documentId)
+        .select()
+        .single()
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, document: data }
+    } else {
+      // For new documents, verify user has access to this company
+      // Admins can create documents in any company
+      const hasAccess = 
+        currentUser.role === 'admin' ||
+        currentUser.companyId === companyId ||
+        (currentUser.role === 'internal' && currentUser.companyIds?.includes(companyId)) ||
+        (currentUser.role === 'manager' && currentUser.companyId === companyId)
+
+      if (!hasAccess) {
+        return { success: false, error: 'Access denied to this company' }
+      }
+
+      // Create new document
+      const { data, error } = await supabase
+        .from('rich_documents')
+        .insert({
+          title,
+          content,
+          company_id: companyId,
+          created_by: userId,
+          folder_path: folderPath
+        })
+        .select()
+        .single()
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, document: data }
+    }
+  } catch (error) {
+    return { success: false, error: 'Failed to save rich document' }
+  }
+}
+
+// Get rich documents for a company
+export async function getCompanyRichDocuments(
+  companyId: string,
+  folderPath: string = '/'
+): Promise<{ success: boolean; documents?: RichDocument[]; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Get current user for validation
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    // Application-level security: Verify user has access to this company
+    // Admins can access any company
+    // Users can access their own company
+    // Internal users can access companies they're assigned to
+    const hasAccess = 
+      currentUser.role === 'admin' ||
+      currentUser.companyId === companyId ||
+      (currentUser.role === 'internal' && currentUser.companyIds?.includes(companyId)) ||
+      (currentUser.role === 'manager' && currentUser.companyId === companyId)
+
+    if (!hasAccess) {
+      return { success: false, error: 'Access denied to this company' }
+    }
+
+    const { data, error } = await supabase
+      .from('rich_documents')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('folder_path', folderPath)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, documents: data || [] }
+  } catch (error) {
+    return { success: false, error: 'Failed to fetch rich documents' }
+  }
+}
+
+// Get a single rich document by ID
+export async function getRichDocument(
+  documentId: string
+): Promise<{ success: boolean; document?: RichDocument; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Get current user for validation
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    const { data, error } = await supabase
+      .from('rich_documents')
+      .select('*')
+      .eq('id', documentId)
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    if (!data) {
+      return { success: false, error: 'Document not found' }
+    }
+
+    // Application-level security: Verify user has access to this company
+    // Admins can view any document
+    const hasAccess = 
+      currentUser.role === 'admin' ||
+      currentUser.companyId === data.company_id ||
+      (currentUser.role === 'internal' && currentUser.companyIds?.includes(data.company_id)) ||
+      (currentUser.role === 'manager' && currentUser.companyId === data.company_id)
+
+    if (!hasAccess) {
+      return { success: false, error: 'Access denied to this document' }
+    }
+
+    return { success: true, document: data }
+  } catch (error) {
+    return { success: false, error: 'Failed to fetch rich document' }
+  }
+}
+
+// Delete a rich document
+export async function deleteRichDocument(
+  documentId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Get current user for validation
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    // Verify the document exists and user created it
+    const { data: existingDoc } = await supabase
+      .from('rich_documents')
+      .select('*')
+      .eq('id', documentId)
+      .single()
+
+    if (!existingDoc) {
+      return { success: false, error: 'Document not found' }
+    }
+
+    if (existingDoc.created_by !== currentUser.id) {
+      return { success: false, error: 'You can only delete documents you created' }
+    }
+
+    const { error } = await supabase
+      .from('rich_documents')
+      .delete()
+      .eq('id', documentId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to delete rich document' }
+  }
+}

@@ -15,7 +15,9 @@ import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices, fetchCompaniesWithServices } from '@/lib/simplified-database-functions'
 import { fetchCompanyDetails, testCompanyAccess, simpleCompanyTest, fetchCompaniesDirect } from '@/lib/company-detail-functions'
+import { fetchUsers } from '@/lib/database-functions'
 import type { Company, Service } from '@/lib/supabase'
+import type { User } from '@/lib/supabase'
 
 interface CreateCompanyData {
   name: string
@@ -25,6 +27,7 @@ interface CreateCompanyData {
     full_name: string
     role: 'admin' | 'manager' | 'user' | 'internal'
   }>
+  existingUserIds?: string[]
 }
 
 interface EditCompanyData {
@@ -85,6 +88,8 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     full_name: '',
     role: 'user' as 'admin' | 'manager' | 'user' | 'internal'
   })
+  const [allUsers, setAllUsers] = useState<User[]>([])
+  const [userSearchTerm, setUserSearchTerm] = useState('')
 
   // Company detail modal state
   const [showCompanyDetailModal, setShowCompanyDetailModal] = useState(false)
@@ -114,6 +119,15 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     } catch (error) {
       console.error('Error loading services:', error)
       setError('Failed to load services')
+    }
+  }
+
+  const loadUsers = async () => {
+    try {
+      const usersData = await fetchUsers()
+      setAllUsers(usersData)
+    } catch (error) {
+      console.error('Error loading users:', error)
     }
   }
 
@@ -147,6 +161,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     if (isAdmin) {
       loadCompanies()
       loadServices()
+      loadUsers()
     }
   }, [isAdmin])
 
@@ -181,14 +196,35 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     }
 
     try {
+      // Create the company
       const result = await createCompany(createCompanyData)
-      if (result.success) {
+      if (result.success && result.data) {
+        const companyId = result.data.id
+        
+        // If there are existing users to add, assign them to the company
+        if (createCompanyData.existingUserIds && createCompanyData.existingUserIds.length > 0) {
+          try {
+            // Update each user's company_id
+            for (const userId of createCompanyData.existingUserIds) {
+              await fetch('/api/users/' + userId, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ company_id: companyId }),
+              })
+            }
+          } catch (userAssignmentError) {
+            console.error('Error assigning existing users to company:', userAssignmentError)
+          }
+        }
+        
         // If there are user invitations, create them
-        if (createCompanyData.userInvitations && createCompanyData.userInvitations.length > 0 && result.data) {
+        if (createCompanyData.userInvitations && createCompanyData.userInvitations.length > 0) {
           try {
             const invitationData = createCompanyData.userInvitations.map(invitation => ({
               ...invitation,
-              company_id: result.data!.id,
+              company_id: companyId,
               invited_by: session?.user?.id || '',
               tab_permissions: ['projects', 'forms', 'services', 'calendar', 'documents'] // Default permissions
             }))
@@ -210,7 +246,8 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
         }
 
         setSuccess('Company created successfully')
-        setCreateCompanyData({ name: '', is_partner: false, userInvitations: [] })
+        setCreateCompanyData({ name: '', is_partner: false, userInvitations: [], existingUserIds: [] })
+        setUserSearchTerm('')
         setShowCreateModal(false)
         await loadCompanies()
       } else {
@@ -778,7 +815,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
             {/* User Invitations Section */}
             <div className="border-t pt-4 mt-4">
               <div className="flex items-center justify-between mb-4">
-                <h4 className="text-sm font-medium">Invite Users to Company</h4>
+                <h4 className="text-sm font-medium">Add Users to Company</h4>
                 <Button
                   type="button"
                   variant="outline"
@@ -791,9 +828,84 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
               
               {showInviteUsersInCreateModal && (
                 <div className="space-y-4">
-                  <div className="text-sm text-gray-600">
-                    Add users who will be invited to join this company. They will receive an email invitation to set up their account.
+                  {/* Add Existing Users Section */}
+                  <div className="space-y-3">
+                    <h5 className="text-sm font-medium">Add Existing Users</h5>
+                    <Input
+                      placeholder="Search users..."
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      className="text-sm"
+                    />
+                    <div className="max-h-40 overflow-y-auto border rounded-md p-2">
+                      {allUsers
+                        .filter(user => 
+                          !createCompanyData.existingUserIds?.includes(user.id) &&
+                          (userSearchTerm === '' || 
+                           user.full_name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                           user.email.toLowerCase().includes(userSearchTerm.toLowerCase()))
+                        )
+                        .map(user => (
+                          <div
+                            key={user.id}
+                            className="flex items-center justify-between p-2 hover:bg-gray-100 rounded cursor-pointer"
+                            onClick={() => {
+                              const existingIds = createCompanyData.existingUserIds || []
+                              setCreateCompanyData(prev => ({
+                                ...prev,
+                                existingUserIds: [...existingIds, user.id]
+                              }))
+                            }}
+                          >
+                            <div>
+                              <div className="text-sm font-medium">{user.full_name}</div>
+                              <div className="text-xs text-gray-500">{user.email}</div>
+                            </div>
+                            <Plus className="h-4 w-4 text-gray-400" />
+                          </div>
+                        ))}
+                      {allUsers.filter(user => !createCompanyData.existingUserIds?.includes(user.id) && (userSearchTerm === '' || user.full_name.toLowerCase().includes(userSearchTerm.toLowerCase()) || user.email.toLowerCase().includes(userSearchTerm.toLowerCase()))).length === 0 && (
+                        <div className="text-sm text-gray-500 text-center py-2">No users found</div>
+                      )}
+                    </div>
+                    
+                    {createCompanyData.existingUserIds && createCompanyData.existingUserIds.length > 0 && (
+                      <div className="space-y-2 mt-3">
+                        <h5 className="text-sm font-medium">Existing Users Added:</h5>
+                        {createCompanyData.existingUserIds.map(userId => {
+                          const user = allUsers.find(u => u.id === userId)
+                          if (!user) return null
+                          return (
+                            <div key={userId} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                              <div>
+                                <div className="text-sm font-medium">{user.full_name}</div>
+                                <div className="text-xs text-gray-500">{user.email}</div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setCreateCompanyData(prev => ({
+                                    ...prev,
+                                    existingUserIds: prev.existingUserIds?.filter(id => id !== userId)
+                                  }))
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
+                  
+                  <div className="border-t pt-3 mt-3">
+                    <h5 className="text-sm font-medium mb-2">Invite New Users</h5>
+                    <div className="text-sm text-gray-600 mb-3">
+                      Add users who will be invited to join this company. They will receive an email invitation to set up their account.
+                    </div>
                   
                   {createCompanyData.userInvitations && createCompanyData.userInvitations.length > 0 && (
                     <div className="space-y-2">
@@ -877,6 +989,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
                     >
                       Add User
                     </Button>
+                  </div>
                   </div>
                 </div>
               )}
