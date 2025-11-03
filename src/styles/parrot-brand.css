@@ -4,14 +4,62 @@
 
 /* Enhanced Card Styling */
 .parrot-card-enhanced {
-  background: oklch(from var(--background) l c h);
+  background: oklch(var(--color-card)) !important;
   border: 1px solid oklch(from var(--border) l c h / 0.5);
   box-shadow: 
     0 1px 3px 0 rgba(0, 0, 0, 0.1),
     0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.05s ease, box-shadow 0.05s ease;
   position: relative;
   overflow: hidden;
+}
+
+/* Ensure bg-card utility also uses the updated card color */
+.bg-card {
+  background-color: oklch(var(--color-card)) !important;
+}
+
+/* Direct selector for cards to ensure they use card color, not background */
+[data-slot="card"] {
+  background-color: oklch(var(--color-card)) !important;
+}
+
+/* More specific card selectors */
+[data-slot="card"].bg-card {
+  background-color: oklch(var(--color-card)) !important;
+}
+
+[data-slot="card"].parrot-card-enhanced {
+  background-color: oklch(var(--color-card)) !important;
+}
+
+/* Ensure main element specifically uses background color */
+main.flex-1.overflow-auto,
+main.parrot-scrollbar,
+main {
+  background-color: oklch(var(--color-background)) !important;
+}
+
+/* Force background vs card contrast - using direct values for testing */
+.dark main {
+  background-color: oklch(0.1200 0.0036 106.6427) !important;
+}
+
+.dark [data-slot="card"],
+.dark .bg-card,
+.dark .parrot-card-enhanced {
+  background-color: oklch(0.1800 0.0036 106.6427) !important;
+}
+
+/* Light mode contrast */
+:root:not(.dark) main {
+  background-color: oklch(0.9000 0.0054 95.0986) !important;
+}
+
+:root:not(.dark) [data-slot="card"],
+:root:not(.dark) .bg-card,
+:root:not(.dark) .parrot-card-enhanced {
+  background-color: oklch(0.9400 0.0054 95.0986) !important;
 }
 
 .parrot-card-enhanced::before {
@@ -23,11 +71,10 @@
   height: 1px;
   background: linear-gradient(90deg, transparent 0%, oklch(from var(--primary) l c h / 0.3) 50%, transparent 100%);
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.05s ease;
 }
 
 .parrot-card-enhanced:hover {
-  transform: translateY(-2px);
   box-shadow: 
     0 10px 25px -3px rgba(0, 0, 0, 0.1),
     0 4px 6px -2px rgba(0, 0, 0, 0.05);
@@ -41,10 +88,6 @@
 /* Card Variants */
 .parrot-card-interactive {
   cursor: pointer;
-}
-
-.parrot-card-interactive:hover {
-  transform: translateY(-3px) scale(1.01);
 }
 
 .parrot-card-featured {
@@ -86,8 +129,17 @@
 /* Using theme dark mode colors from globals.css */
 
 /* Dark mode specific styles - now using theme variables */
+.parrot-page-bg {
+  background: oklch(var(--color-background)) !important;
+}
+
 .dark .parrot-page-bg {
-  background: oklch(var(--color-background));
+  background: oklch(var(--color-background)) !important;
+}
+
+/* Ensure main element uses darker background */
+main {
+  background-color: oklch(var(--color-background)) !important;
 }
 
 .dark .parrot-header-dark {
@@ -731,7 +783,7 @@
   background: oklch(var(--color-card));
   border: 1px solid oklch(from var(--color-border) l c h / 0.8);
   box-shadow: var(--shadow);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.05s ease, box-shadow 0.05s ease;
   position: relative;
   overflow: hidden;
 }
@@ -745,11 +797,10 @@
   height: 3px;
   background: oklch(var(--color-primary));
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.05s ease;
 }
 
 .parrot-task-card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
   border-color: oklch(from var(--color-primary) l c h / 0.3);
 }
