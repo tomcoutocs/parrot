@@ -37,29 +37,42 @@
 main.flex-1.overflow-auto,
 main.parrot-scrollbar,
 main {
-  background-color: oklch(var(--color-background)) !important;
+  background-color: var(--color-background) !important;
+  color: var(--color-foreground) !important;
 }
 
-/* Force background vs card contrast - using direct values for testing */
+/* Dark mode - use CSS variables for consistency */
+html.dark main.flex-1.overflow-auto,
+html.dark main.parrot-scrollbar,
+html.dark main,
+.dark main.flex-1.overflow-auto,
+.dark main.parrot-scrollbar,
 .dark main {
-  background-color: oklch(0.1200 0.0036 106.6427) !important;
+  background-color: var(--color-background) !important;
+  color: var(--color-foreground) !important;
 }
 
 .dark [data-slot="card"],
 .dark .bg-card,
 .dark .parrot-card-enhanced {
-  background-color: oklch(0.1800 0.0036 106.6427) !important;
+  background-color: oklch(var(--color-card)) !important;
 }
 
 /* Light mode contrast */
+html:not(.dark) main.flex-1.overflow-auto,
+html:not(.dark) main.parrot-scrollbar,
+html:not(.dark) main,
+:root:not(.dark) main.flex-1.overflow-auto,
+:root:not(.dark) main.parrot-scrollbar,
 :root:not(.dark) main {
-  background-color: oklch(0.9000 0.0054 95.0986) !important;
+  background-color: var(--color-background) !important;
+  color: var(--color-foreground) !important;
 }
 
 :root:not(.dark) [data-slot="card"],
 :root:not(.dark) .bg-card,
 :root:not(.dark) .parrot-card-enhanced {
-  background-color: oklch(0.9400 0.0054 95.0986) !important;
+  background-color: oklch(var(--color-card)) !important;
 }
 
 .parrot-card-enhanced::before {
@@ -129,17 +142,19 @@ main {
 /* Using theme dark mode colors from globals.css */
 
 /* Dark mode specific styles - now using theme variables */
+html,
+body {
+  background-color: var(--color-background) !important;
+  color: var(--color-foreground) !important;
+}
+
 .parrot-page-bg {
-  background: oklch(var(--color-background)) !important;
+  background: var(--color-background) !important;
 }
 
+html.dark .parrot-page-bg,
 .dark .parrot-page-bg {
-  background: oklch(var(--color-background)) !important;
-}
-
-/* Ensure main element uses darker background */
-main {
-  background-color: oklch(var(--color-background)) !important;
+  background: var(--color-background) !important;
 }
 
 .dark .parrot-header-dark {
@@ -1003,7 +1018,7 @@ main {
 }
 
 .parrot-page-bg {
-  background: #f8f9fa;
+  background: oklch(var(--color-background)) !important;
 }
 
 .parrot-header-dark {

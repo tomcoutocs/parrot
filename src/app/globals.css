@@ -171,10 +171,12 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-color: oklch(var(--color-background)) !important;
+    background-color: var(--color-background) !important;
+    color: var(--color-foreground) !important;
   }
   main {
-    background-color: oklch(var(--color-background)) !important;
+    background-color: var(--color-background) !important;
+    color: var(--color-foreground) !important;
   }
 }
 

@@ -14,6 +14,7 @@ import CompanyCalendarsTab from '@/components/tabs/company-calendars-tab'
 import DocumentsTab from '@/components/tabs/documents-tab'
 import ProjectOverviewTab from '@/components/tabs/project-overview-tab'
 import DebugTab from '@/components/tabs/debug-tab'
+import SpacesTab from '@/components/tabs/spaces-tab'
 
 
 // Error boundary for lazy loaded components
@@ -63,6 +64,7 @@ class TabErrorBoundary extends React.Component<
 // Tab component mapping with proper typing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tabComponents: Record<string, ComponentType<any>> = {
+  spaces: SpacesTab,
   dashboard: DashboardLandingTab,
   projects: ProjectsTab,
   forms: FormsTab,
@@ -80,7 +82,9 @@ export function LazyTabComponent({
   tabName, 
   selectedCompany, 
   onNavigateToTab,
-  onBreadcrumbContextChange 
+  onBreadcrumbContextChange,
+  currentSpaceId,
+  onSelectSpace
 }: { 
   tabName: string
   selectedCompany?: string | null
@@ -92,6 +96,8 @@ export function LazyTabComponent({
     folderName?: string
     folderPath?: string
   }) => void
+  currentSpaceId?: string | null
+  onSelectSpace?: (spaceId: string) => void
 }) {
   const TabComponent = tabComponents[tabName]
 
@@ -100,6 +106,18 @@ export function LazyTabComponent({
       <div className="flex items-center justify-center h-64">
         <p className="text-gray-600">Tab not found</p>
       </div>
+    )
+  }
+
+  // Handle spaces tab with space selection prop
+  if (tabName === 'spaces') {
+    return (
+      <TabErrorBoundary>
+        <TabComponent 
+          onSelectSpace={onSelectSpace || (() => {})}
+          currentSpaceId={currentSpaceId}
+        />
+      </TabErrorBoundary>
     )
   }
 
@@ -135,6 +153,18 @@ export function LazyTabComponent({
         <TabComponent 
           selectedCompanyId={selectedCompany}
           onBreadcrumbContextChange={onBreadcrumbContextChange}
+        />
+      </TabErrorBoundary>
+    )
+  }
+
+  // Handle projects tab with currentSpaceId prop
+  if (tabName === 'projects') {
+    return (
+      <TabErrorBoundary>
+        <TabComponent 
+          onBreadcrumbContextChange={onBreadcrumbContextChange}
+          currentSpaceId={currentSpaceId}
         />
       </TabErrorBoundary>
     )

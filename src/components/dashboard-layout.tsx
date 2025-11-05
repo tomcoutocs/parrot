@@ -17,6 +17,7 @@ import {
   LayoutDashboard
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,29 +49,38 @@ interface DashboardLayoutProps {
     folderName?: string
     folderPath?: string
   }
+  currentSpaceId?: string | null
+  onSpaceChange?: (spaceId: string | null) => void
 }
 
-export type TabType = 'dashboard' | 'projects' | 'forms' | 'services' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
+export type TabType = 'spaces' | 'dashboard' | 'projects' | 'forms' | 'services' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug'
 
-const navigationItems = [
+// Admin-only navigation items (shown when not in a space)
+const adminNavItems = [
+  { id: 'spaces' as TabType, label: 'Spaces', icon: Building2, roles: ['admin'] },
+  { id: 'admin' as TabType, label: 'Users', icon: Users, roles: ['admin'] },
+  { id: 'companies' as TabType, label: 'Companies', icon: Building2, roles: ['admin'] },
+  { id: 'project-overview' as TabType, label: 'Project Overview', icon: TrendingUp, roles: ['admin'] },
+  { id: 'debug' as TabType, label: 'Debug', icon: Bug, roles: ['admin'] },
+]
+
+// Space navigation items (shown when in a space)
+const spaceNavItems = [
   { id: 'dashboard' as TabType, label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'user'] },
   { id: 'projects' as TabType, label: 'Projects', icon: Kanban, roles: ['admin', 'manager', 'user'] },
-  { id: 'project-overview' as TabType, label: 'Project Overview', icon: TrendingUp, roles: ['admin', 'manager'] },
   { id: 'forms' as TabType, label: 'Forms', icon: FileText, roles: ['admin', 'manager', 'user'] },
   { id: 'services' as TabType, label: 'Services', icon: Settings, roles: ['admin', 'manager', 'user'] },
   { id: 'company-calendars' as TabType, label: 'Company Calendars', icon: Building2, roles: ['admin', 'manager', 'user'] },
   { id: 'documents' as TabType, label: 'Documents', icon: FolderOpen, roles: ['admin', 'manager', 'user'] },
-
-  { id: 'admin' as TabType, label: 'Users', icon: Users, roles: ['admin'] },
-  { id: 'companies' as TabType, label: 'Companies', icon: Building2, roles: ['admin'] },
-  { id: 'debug' as TabType, label: 'Debug', icon: Bug, roles: ['admin'] },
 ]
 
 export default function DashboardLayout({ 
   children, 
   activeTab, 
   onTabChange, 
-  breadcrumbContext 
+  breadcrumbContext,
+  currentSpaceId,
+  onSpaceChange
 }: DashboardLayoutProps) {
   const { data: session } = useSession()
   const auth = useAuth()
@@ -96,8 +106,12 @@ export default function DashboardLayout({
   const userRole = session.user.role
   const userTabPermissions = session.user.tab_permissions || []
   
+  // Determine which navigation items to show based on space context
+  const isInSpace = currentSpaceId !== null && currentSpaceId !== undefined
+  const baseNavItems = isInSpace ? spaceNavItems : adminNavItems
+  
   // Filter navigation items based on role and tab permissions
-  const filteredNavItems = navigationItems.filter(item => {
+  const filteredNavItems = baseNavItems.filter(item => {
     // Admin users can see all tabs
     if (userRole === 'admin') return true
     
@@ -107,6 +121,11 @@ export default function DashboardLayout({
     
     return hasRoleAccess && hasTabPermission
   })
+  
+  // Add "Spaces" nav item when in a space (for switching spaces)
+  const finalNavItems = isInSpace && userRole === 'admin' 
+    ? [{ id: 'spaces' as TabType, label: 'Spaces', icon: Building2, roles: ['admin'] }, ...filteredNavItems]
+    : filteredNavItems
 
 
   const getInitials = (name: string) => {
@@ -161,15 +180,24 @@ export default function DashboardLayout({
 
         {/* Navigation */}
              <nav className="flex-1 p-2 space-y-1 nav-section">
-               {filteredNavItems.map((item) => {
+               {finalNavItems.map((item) => {
                  const Icon = item.icon
                  const isActive = activeTab === item.id
+                 
+                 const handleNavClick = () => {
+                   // If clicking Spaces while in a space, exit the space
+                   if (item.id === 'spaces' && currentSpaceId && onSpaceChange) {
+                     onSpaceChange(null)
+                   } else {
+                     onTabChange(item.id)
+                   }
+                 }
 
                  const navItem = (
                    <div
                      key={item.id}
                      className={`parrot-nav-item ${isActive ? 'active' : ''}`}
-                     onClick={() => onTabChange(item.id)}
+                     onClick={handleNavClick}
                    >
                      <Icon className="parrot-nav-icon" />
                      {sidebarOpen && <span>{item.label}</span>}
@@ -263,6 +291,11 @@ export default function DashboardLayout({
               />
             </div>
             <div className="flex items-center space-x-4">
+              {currentSpaceId && (
+                <Badge variant="secondary" className="text-sm">
+                  Space Active
+                </Badge>
+              )}
               <span className="text-sm text-gray-600 dark:text-gray-400">
                 Welcome to Parrot, {session.user.name}
               </span>

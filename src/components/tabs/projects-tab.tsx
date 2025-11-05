@@ -60,7 +60,6 @@ import {
   fetchProjectsOptimized, 
   fetchTasksOptimized, 
   fetchUsersOptimized,
-  fetchCompaniesOptimized,
   updateTaskPosition, 
   subscribeToTasksOptimized, 
   subscribeToProjectsOptimized,
@@ -772,7 +771,8 @@ function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onMana
   }
 
 export default function ProjectsTab({ 
-  onBreadcrumbContextChange 
+  onBreadcrumbContextChange,
+  currentSpaceId
 }: { 
   onBreadcrumbContextChange?: (context: {
     projectName?: string
@@ -781,6 +781,7 @@ export default function ProjectsTab({
     folderName?: string
     folderPath?: string
   }) => void
+  currentSpaceId?: string | null
 }) {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
@@ -799,8 +800,6 @@ export default function ProjectsTab({
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null)
   const [selectedTaskStatus, setSelectedTaskStatus] = useState<Task['status']>('todo')
   const [users, setUsers] = useState<User[]>([])
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [selectedCompany, setSelectedCompany] = useState<string | undefined>(undefined)
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list')
   const [selectedTaskForSidebar, setSelectedTaskForSidebar] = useState<TaskWithDetails | null>(null)
   const [isTaskSidebarOpen, setIsTaskSidebarOpen] = useState(false)
@@ -875,13 +874,10 @@ export default function ProjectsTab({
   const userRole = session?.user?.role || 'user'
   const currentProject = projects.find(p => p.id === selectedProject)
   
-  // Filter projects by selected company
+  // Filter projects by current space (company)
   const filteredProjects = projects.filter(project => 
-    selectedCompany ? project.company_id === selectedCompany : true
+    currentSpaceId ? project.company_id === currentSpaceId : true
   )
-  
-  // Get current company info
-  const currentCompany = companies.find(c => c.id === selectedCompany)
   
   // Filter tasks for selected project (tasks are already filtered by project when loaded)
   const projectTasks = tasks.filter(task => 
@@ -905,33 +901,12 @@ export default function ProjectsTab({
         // Test database connection first
         await testDatabaseConnection()
         
-        // Get user's company ID for filtering (only non-admin users should be filtered)
-        const userCompanyId = session?.user?.role === 'admin' ? undefined : session?.user?.company_id
+        // Get user's company ID for filtering (use currentSpaceId if available, otherwise user's company)
+        const companyId = currentSpaceId || (session?.user?.role === 'admin' ? undefined : session?.user?.company_id)
         
-        const [projectsData, companiesData] = await Promise.all([
-          fetchProjectsOptimized(userCompanyId),
-          fetchCompaniesOptimized()
-        ])
+        const projectsData = await fetchProjectsOptimized(companyId)
         
         setProjects(projectsData)
-        setCompanies(companiesData)
-        
-        // Check URL parameters first before setting default company
-        const companyParam = searchParams.get('company')
-        if (companyParam && companiesData.find(c => c.id === companyParam)) {
-          console.log('Setting company from URL parameter:', companyParam)
-          setSelectedCompany(companyParam)
-        } else {
-          // Set first company as selected if available (for admin users)
-          if (session?.user?.role === 'admin' && companiesData.length > 0 && !selectedCompany) {
-            setSelectedCompany(companiesData[0].id)
-          }
-          
-          // For non-admin users, set their company automatically
-          if (session?.user?.role !== 'admin' && session?.user?.company_id) {
-            setSelectedCompany(session.user.company_id)
-          }
-        }
         
         // Set first project as selected if available
         if (projectsData.length > 0 && !selectedProject) {
@@ -954,43 +929,23 @@ export default function ProjectsTab({
     }
 
     loadData()
-  }, [session?.user?.role, session?.user?.company_id])
+  }, [session?.user?.role, session?.user?.company_id, currentSpaceId])
 
-  // Handle company selection change
+  // Handle space change - auto-select first project
   useEffect(() => {
-    if (selectedCompany) {
-      // Find first project in selected company
-      const firstProjectInCompany = projects.find(p => p.company_id === selectedCompany)
-      if (firstProjectInCompany) {
-        handleProjectChange(firstProjectInCompany.id)
-      } else {
-        setSelectedProject('')
-        setTasks([])
+    if (currentSpaceId && projects.length > 0 && !selectedProject) {
+      const firstProjectInSpace = projects.find(p => p.company_id === currentSpaceId)
+      if (firstProjectInSpace) {
+        handleProjectChange(firstProjectInSpace.id)
       }
     }
-  }, [selectedCompany, projects, handleProjectChange])
+  }, [currentSpaceId, projects, handleProjectChange, selectedProject])
 
   // Handle URL parameters for company selection - with better timing
   useEffect(() => {
-    const companyParam = searchParams.get('company')
-    console.log('URL company parameter:', companyParam)
-    console.log('Available companies:', companies.map(c => ({ id: c.id, name: c.name })))
-    
-    if (companyParam) {
-      // Wait for companies to be loaded
-      if (companies.length > 0) {
-        // Check if the company exists in our companies list
-        const companyExists = companies.find(c => c.id === companyParam)
-        console.log('Company exists:', companyExists)
-        if (companyExists) {
-          console.log('Setting selected company to:', companyParam)
-          setSelectedCompany(companyParam)
-        }
-      } else {
-        console.log('Companies not loaded yet, will retry when loaded')
-      }
-    }
-  }, [searchParams, companies])
+    // Company selection is now handled via currentSpaceId prop
+    // No URL parameter handling needed
+  }, [searchParams, currentSpaceId])
 
   // Set up real-time subscriptions
   useEffect(() => {
@@ -1355,17 +1310,30 @@ export default function ProjectsTab({
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {(userRole === 'admin' || userRole === 'manager') && (
             <EnhancedTooltip content={tooltipContent.createProject} variant="help">
-              <Button variant="orange" className="gap-2 w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>
+              <Button variant="orange" size="sm" className="gap-2 w-full sm:w-[140px]" onClick={() => setShowCreateModal(true)}>
                 <Plus className="h-4 w-4" />
                 New Project
               </Button>
             </EnhancedTooltip>
           )}
+          {currentProject && (userRole === 'admin' || userRole === 'manager') && (
+            <>
+              <Button variant="outline" size="sm" onClick={handleEditProject} className="w-full sm:w-[140px]">
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Project
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleManageUsers} className="w-full sm:w-[140px]">
+                <Users className="h-4 w-4 mr-2" />
+                Manage Users
+              </Button>
+            </>
+          )}
           {selectedProject ? (
             <EnhancedTooltip content={tooltipContent.createTask} variant="help">
               <Button 
                 variant="outline" 
-                className="gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 border-green-200 w-full sm:w-auto" 
+                size="sm"
+                className="gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all duration-200 border-green-200 w-full sm:w-[140px]" 
                 onClick={() => {
                   setSelectedTaskStatus('todo')
                   setShowCreateTaskModal(true)
@@ -1377,8 +1345,9 @@ export default function ProjectsTab({
             </EnhancedTooltip>
           ) : (
             <Button 
-              variant="outline" 
-              className="gap-2 opacity-50 cursor-not-allowed transition-all duration-200 w-full sm:w-auto" 
+              variant="outline"
+              size="sm"
+              className="gap-2 opacity-50 cursor-not-allowed transition-all duration-200 w-full sm:w-[140px]" 
               disabled
               title="Select a project first to create tasks">
               <CheckSquare className="h-4 w-4" />
@@ -1389,46 +1358,27 @@ export default function ProjectsTab({
       </div>
 
       {/* Project Selection & Filters */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Company Selector - Only show for admin users */}
-        {session?.user?.role === 'admin' && (
-          <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+      <div className="flex flex-col lg:flex-row gap-4 items-end lg:items-center">
+        <div className="flex items-center gap-2 w-full lg:w-auto">
+          <label className="text-sm font-medium text-foreground whitespace-nowrap">Projects</label>
+          <Select value={selectedProject} onValueChange={handleProjectChange}>
             <SelectTrigger className="w-full lg:w-64">
-              <SelectValue placeholder="Select a company" />
+              <SelectValue placeholder="Select a project" />
             </SelectTrigger>
             <SelectContent>
-              {companies.map(company => (
-                <SelectItem key={company.id} value={company.id}>
+              {filteredProjects.map(project => (
+                <SelectItem key={project.id} value={project.id}>
                   <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    <span>{company.name}</span>
+                    <span>{project.name}</span>
                     <Badge variant="secondary" className="text-xs">
-                      {projects.filter(p => p.company_id === company.id).length} projects
+                      {project.task_count || 0} tasks
                     </Badge>
                   </div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        )}
-
-        <Select value={selectedProject} onValueChange={handleProjectChange}>
-          <SelectTrigger className="w-full lg:w-64">
-            <SelectValue placeholder="Select a project" />
-          </SelectTrigger>
-          <SelectContent>
-            {filteredProjects.map(project => (
-              <SelectItem key={project.id} value={project.id}>
-                <div className="flex items-center gap-2">
-                  <span>{project.name}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {project.task_count || 0} tasks
-                  </Badge>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        </div>
 
         {/* Delete Project Button - Only for admins */}
         {userRole === 'admin' && selectedProject && (
@@ -1451,7 +1401,7 @@ export default function ProjectsTab({
           </EnhancedTooltip>
         )}
 
-        <div className="flex-1 max-w-sm">
+        <div className="flex-1 max-w-sm w-full lg:w-auto">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
@@ -1505,45 +1455,6 @@ export default function ProjectsTab({
           </div>
         </div>
       </div>
-
-      {/* Project Info */}
-      {currentProject && (
-        <Card className="parrot-card-enhanced">
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-              <div className="flex-1 min-w-0">
-                <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                  <span className="truncate">{currentProject.name}</span>
-                  <Badge variant={currentProject.status === 'active' ? 'default' : 'secondary'}>
-                    {currentProject.status}
-                  </Badge>
-                </CardTitle>
-                {currentCompany && session?.user?.role === 'admin' && (
-                  <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
-                    <Building2 className="h-4 w-4" />
-                    <span className="truncate">{currentCompany.name}</span>
-                  </div>
-                )}
-                {currentProject.description && (
-                  <p className="text-gray-600 mt-1 text-sm">{currentProject.description}</p>
-                )}
-              </div>
-              {(userRole === 'admin' || userRole === 'manager') && (
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  <Button variant="outline" size="sm" onClick={handleEditProject} className="w-full sm:w-auto">
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit Project
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleManageUsers} className="w-full sm:w-auto">
-                    <Users className="h-4 w-4 mr-2" />
-                    Manage Users
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardHeader>
-        </Card>
-      )}
 
       {/* Content */}
       {viewMode === 'kanban' ? (
