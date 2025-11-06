@@ -121,13 +121,14 @@ export function LazyTabComponent({
     )
   }
 
-  // Handle dashboard tab with navigation prop
+  // Handle dashboard tab with navigation prop and currentSpaceId
   if (tabName === 'dashboard') {
     return (
       <TabErrorBoundary>
         <TabComponent 
           onNavigateToTab={onNavigateToTab}
           onBreadcrumbContextChange={onBreadcrumbContextChange}
+          currentSpaceId={currentSpaceId}
         />
       </TabErrorBoundary>
     )

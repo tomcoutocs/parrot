@@ -1,5 +1,13 @@
 /* Parrot Brand Colors and Gradients */
 
+/* Delete Dialog Centering Fix */
+.delete-dialog-centered {
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  position: fixed !important;
+}
+
 /* Using theme colors from globals.css */
 
 /* Enhanced Card Styling */
@@ -119,10 +127,21 @@ html:not(.dark) main,
 }
 
 .parrot-gradient-text {
-  background: var(--parrot-gradient);
+  background: linear-gradient(135deg, oklch(var(--color-primary)) 0%, oklch(from var(--color-primary) calc(l - 0.1) c h) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  color: oklch(var(--color-primary)); /* Fallback color for browsers that don't support background-clip */
+}
+
+/* Dark mode: Use visible color instead of transparent gradient */
+.dark .parrot-gradient-text,
+html.dark .parrot-gradient-text {
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: unset;
+  background-clip: unset;
+  color: oklch(var(--color-foreground)); /* Use foreground color for maximum visibility in dark mode */
 }
 
 .parrot-button-primary {

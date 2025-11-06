@@ -307,4 +307,57 @@ export interface ConfirmedMeeting {
   meeting_description?: string
   created_at: string
   updated_at: string
+}
+
+// Dashboard Customization Types
+export interface DashboardWidget {
+  id: string
+  widget_key: string
+  name: string
+  description?: string
+  icon_name?: string
+  default_enabled: boolean
+  default_config: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface SpaceDashboardConfig {
+  id: string
+  company_id: string
+  widget_key: string
+  enabled: boolean
+  position: number
+  config: Record<string, unknown>
+  created_at: string
+  updated_at: string
+  widget?: DashboardWidget
+}
+
+export interface DashboardNote {
+  id: string
+  company_id: string
+  title?: string
+  content: string
+  created_by: string
+  updated_by?: string
+  is_pinned: boolean
+  created_at: string
+  updated_at: string
+  created_user?: User
+  updated_user?: User
+}
+
+export interface DashboardLink {
+  id: string
+  company_id: string
+  title: string
+  url: string
+  description?: string
+  icon_name?: string
+  display_order: number
+  created_by: string
+  created_at: string
+  updated_at: string
+  created_user?: User
 } 

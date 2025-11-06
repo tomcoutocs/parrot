@@ -705,7 +705,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
                        <Building2 className="h-6 w-6 text-blue-600" />
                      </div>
                                          <div className="flex-1">
-                       <div className="flex items-center gap-3">
+                       <div className="flex items-center gap-3 flex-wrap">
                          <h3 className="font-semibold text-lg">{company.name}</h3>
                          {company.is_partner && (
                            <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
@@ -715,12 +715,12 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
                          <Badge variant={company.is_active ? 'default' : 'secondary'}>
                            {company.is_active ? 'Active' : 'Inactive'}
                          </Badge>
-                       </div>
-                       <div className="flex items-center gap-6 mt-1 text-sm text-gray-600">
-                         <div className="line-clamp-1">
+                         <span className="text-sm text-gray-600">
                            {company.is_partner ? 'Partner Company' : 'Client Company'}
-                         </div>
-                         <div>Created: {new Date(company.created_at).toLocaleDateString()}</div>
+                         </span>
+                         <span className="text-sm text-gray-600">
+                           Created: {new Date(company.created_at).toLocaleDateString()}
+                         </span>
                        </div>
                        {company.services && company.services.length > 0 && (
                          <div className="flex items-center gap-2 mt-2">

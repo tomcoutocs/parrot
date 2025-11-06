@@ -2,7 +2,7 @@
 // This file temporarily disables some performance optimizations to fix loading issues
 
 import { supabase } from './supabase'
-import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation } from './supabase'
+import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation, DashboardWidget, SpaceDashboardConfig, DashboardNote, DashboardLink } from './supabase'
 import { getCurrentUser } from './auth'
 
 // Helper function to set application context for RLS
@@ -323,5 +323,338 @@ export async function testDatabaseConnection() {
   } catch (error) {
     console.error('Database connection test failed:', error)
     return false
+  }
+}
+
+// Dashboard Customization Functions
+export async function fetchDashboardWidgets(): Promise<DashboardWidget[]> {
+  if (!supabase) return []
+
+  try {
+    await setAppContext()
+    const { data, error } = await supabase
+      .from('dashboard_widgets')
+      .select('*')
+      .order('name', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching dashboard widgets:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error fetching dashboard widgets:', error)
+    return []
+  }
+}
+
+export async function fetchSpaceDashboardConfig(companyId: string): Promise<SpaceDashboardConfig[]> {
+  if (!supabase) return []
+
+  try {
+    await setAppContext()
+    const { data, error } = await supabase
+      .from('space_dashboard_config')
+      .select(`
+        *,
+        widget:dashboard_widgets(*)
+      `)
+      .eq('company_id', companyId)
+      .eq('enabled', true)
+      .order('position', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching space dashboard config:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error fetching space dashboard config:', error)
+    return []
+  }
+}
+
+export async function saveSpaceDashboardConfig(
+  companyId: string,
+  configs: Array<{ widget_key: string; enabled: boolean; position: number; config?: Record<string, unknown> }>
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Delete existing configs for this company
+    const { error: deleteError } = await supabase
+      .from('space_dashboard_config')
+      .delete()
+      .eq('company_id', companyId)
+
+    if (deleteError) {
+      return { success: false, error: deleteError.message }
+    }
+
+    // Insert new configs
+    const configsToInsert = configs
+      .filter(c => c.enabled)
+      .map(c => ({
+        company_id: companyId,
+        widget_key: c.widget_key,
+        enabled: c.enabled,
+        position: c.position,
+        config: c.config || {}
+      }))
+
+    if (configsToInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from('space_dashboard_config')
+        .insert(configsToInsert)
+
+      if (insertError) {
+        return { success: false, error: insertError.message }
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error saving space dashboard config:', error)
+    return { success: false, error: 'Failed to save dashboard configuration' }
+  }
+}
+
+export async function fetchDashboardNotes(companyId: string): Promise<DashboardNote[]> {
+  if (!supabase) return []
+
+  try {
+    await setAppContext()
+    const { data, error } = await supabase
+      .from('dashboard_notes')
+      .select(`
+        *,
+        created_user:users!dashboard_notes_created_by_fkey(id, full_name, email),
+        updated_user:users!dashboard_notes_updated_by_fkey(id, full_name, email)
+      `)
+      .eq('company_id', companyId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching dashboard notes:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error fetching dashboard notes:', error)
+    return []
+  }
+}
+
+export async function createDashboardNote(
+  companyId: string,
+  note: { title?: string; content: string; is_pinned?: boolean },
+  userId: string
+): Promise<{ success: boolean; data?: DashboardNote; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    const { data, error } = await supabase
+      .from('dashboard_notes')
+      .insert({
+        company_id: companyId,
+        title: note.title,
+        content: note.content,
+        is_pinned: note.is_pinned || false,
+        created_by: userId
+      })
+      .select(`
+        *,
+        created_user:users!dashboard_notes_created_by_fkey(id, full_name, email)
+      `)
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error creating dashboard note:', error)
+    return { success: false, error: 'Failed to create note' }
+  }
+}
+
+export async function updateDashboardNote(
+  noteId: string,
+  note: { title?: string; content?: string; is_pinned?: boolean },
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    const { error } = await supabase
+      .from('dashboard_notes')
+      .update({
+        ...note,
+        updated_by: userId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', noteId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error updating dashboard note:', error)
+    return { success: false, error: 'Failed to update note' }
+  }
+}
+
+export async function deleteDashboardNote(noteId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    const { error } = await supabase
+      .from('dashboard_notes')
+      .delete()
+      .eq('id', noteId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error deleting dashboard note:', error)
+    return { success: false, error: 'Failed to delete note' }
+  }
+}
+
+export async function fetchDashboardLinks(companyId: string): Promise<DashboardLink[]> {
+  if (!supabase) return []
+
+  try {
+    await setAppContext()
+    const { data, error } = await supabase
+      .from('dashboard_links')
+      .select(`
+        *,
+        created_user:users!dashboard_links_created_by_fkey(id, full_name, email)
+      `)
+      .eq('company_id', companyId)
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching dashboard links:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error fetching dashboard links:', error)
+    return []
+  }
+}
+
+export async function createDashboardLink(
+  companyId: string,
+  link: { title: string; url: string; description?: string; icon_name?: string; display_order?: number },
+  userId: string
+): Promise<{ success: boolean; data?: DashboardLink; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    const { data, error } = await supabase
+      .from('dashboard_links')
+      .insert({
+        company_id: companyId,
+        title: link.title,
+        url: link.url,
+        description: link.description,
+        icon_name: link.icon_name,
+        display_order: link.display_order || 0,
+        created_by: userId
+      })
+      .select(`
+        *,
+        created_user:users!dashboard_links_created_by_fkey(id, full_name, email)
+      `)
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error creating dashboard link:', error)
+    return { success: false, error: 'Failed to create link' }
+  }
+}
+
+export async function updateDashboardLink(
+  linkId: string,
+  link: { title?: string; url?: string; description?: string; icon_name?: string; display_order?: number }
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    const { error } = await supabase
+      .from('dashboard_links')
+      .update(link)
+      .eq('id', linkId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error updating dashboard link:', error)
+    return { success: false, error: 'Failed to update link' }
+  }
+}
+
+export async function deleteDashboardLink(linkId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    const { error } = await supabase
+      .from('dashboard_links')
+      .delete()
+      .eq('id', linkId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error deleting dashboard link:', error)
+    return { success: false, error: 'Failed to delete link' }
   }
 }
