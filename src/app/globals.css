@@ -214,10 +214,49 @@
 .ProseMirror ol {
   margin-bottom: 1rem;
   padding-left: 1.5rem;
+  color: oklch(var(--foreground));
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  list-style-position: outside;
 }
 
 .ProseMirror li {
   margin-bottom: 0.25rem;
+  color: oklch(var(--foreground));
+  padding-left: 0.25rem;
+}
+
+/* Dark mode list styling - ensure bullets and numbers are visible */
+.dark .ProseMirror ul,
+.dark .ProseMirror ol {
+  color: oklch(var(--foreground));
+}
+
+.dark .ProseMirror ul {
+  list-style-color: oklch(var(--foreground));
+}
+
+.dark .ProseMirror ol {
+  list-style-color: oklch(var(--foreground));
+}
+
+.dark .ProseMirror ul li::marker {
+  color: oklch(var(--foreground)) !important;
+}
+
+.dark .ProseMirror ol li::marker {
+  color: oklch(var(--foreground)) !important;
+}
+
+.dark .ProseMirror li {
+  color: oklch(var(--foreground));
 }
 
 .ProseMirror blockquote {

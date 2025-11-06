@@ -219,8 +219,26 @@ export default function ViewRichDocumentModal({
     { label: 'Heading 1', action: () => editor?.chain().focus().toggleHeading({ level: 1 }).run() },
     { label: 'Heading 2', action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
     { label: 'Heading 3', action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
-    { label: 'Bullet List', action: () => editor?.chain().focus().toggleBulletList().run() },
-    { label: 'Numbered List', action: () => editor?.chain().focus().toggleOrderedList().run() },
+    { label: 'Bullet List', action: () => {
+      if (!editor) return
+      // If already in a bullet list, toggle it off
+      if (editor.isActive('bulletList')) {
+        editor.chain().focus().toggleBulletList().run()
+      } else {
+        // Insert a bullet list with one item
+        editor.chain().focus().insertContent('<ul><li></li></ul>').run()
+      }
+    }},
+    { label: 'Numbered List', action: () => {
+      if (!editor) return
+      // If already in an ordered list, toggle it off
+      if (editor.isActive('orderedList')) {
+        editor.chain().focus().toggleOrderedList().run()
+      } else {
+        // Insert an ordered list with one item
+        editor.chain().focus().insertContent('<ol><li></li></ol>').run()
+      }
+    }},
     { label: 'To-do List', action: () => editor?.chain().focus().toggleTaskList().run() },
     { label: 'Quote', action: () => editor?.chain().focus().toggleBlockquote().run() },
     { label: 'Code Block', action: () => editor?.chain().focus().toggleCodeBlock().run() },

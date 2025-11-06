@@ -562,7 +562,10 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
   }
 
   const handleViewRichDocument = (doc: RichDocument) => {
-    router.push(`/documents/${doc.id}`)
+    // Preserve space context when viewing/editing a document
+    const spaceId = selectedCompanyId || selectedCompany
+    const spaceQuery = spaceId ? `?space=${spaceId}` : ''
+    router.push(`/documents/${doc.id}${spaceQuery}`)
   }
 
   const canPreview = (fileType: string) => {
@@ -759,7 +762,12 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
 
           <Button 
             variant="orange"
-            onClick={() => router.push('/documents/new')}
+            onClick={() => {
+              // Use selectedCompanyId if available, otherwise fall back to selectedCompany prop
+              const spaceId = selectedCompanyId || selectedCompany
+              const spaceQuery = spaceId ? `?space=${spaceId}` : ''
+              router.push(`/documents/new${spaceQuery}`)
+            }}
             disabled={currentFolder === '/Setup Instructions'}
           >
             <FileEdit className="h-4 w-4 mr-2" />
