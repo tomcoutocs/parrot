@@ -637,7 +637,7 @@ export default function CalendarTab() {
                                         }
                                       }
                                     }))}
-                                    className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
+                                    className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-100"
                                   >
                                     ×
                                   </Button>

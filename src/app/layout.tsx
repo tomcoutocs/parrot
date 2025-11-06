@@ -4,6 +4,7 @@ import "./globals.css"
 import { SessionProvider } from '@/components/providers/session-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import { Analytics } from '@vercel/analytics/react'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -37,6 +38,12 @@ export default function RootLayout({
             {children}
           </ThemeProvider>
         </SessionProvider>
+        <Toaster 
+          position="top-right"
+          expand={true}
+          richColors={true}
+          closeButton={true}
+        />
         <Analytics />
       </body>
     </html>

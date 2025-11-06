@@ -63,7 +63,7 @@ html.dark main,
 .dark [data-slot="card"],
 .dark .bg-card,
 .dark .parrot-card-enhanced {
-  background-color: oklch(var(--color-card)) !important;
+  background-color: oklch(0.1800 0.0036 106.6427) !important;
 }
 
 /* Light mode contrast */
@@ -889,6 +889,20 @@ html.dark .parrot-page-bg,
 @keyframes pulse-urgent {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }
+}
+
+/* Shimmer animation for skeleton loaders */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
 }
 
 /* Task Progress Bar */

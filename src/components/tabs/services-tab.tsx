@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { Settings, CheckCircle, Building2, Search, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Settings, CheckCircle, Building2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,12 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import EmptyState from '@/components/ui/empty-state'
 import { useSession } from '@/components/providers/session-provider'
 import { fetchServicesWithCompanyStatus, updateCompanyServices, getCompanyServices } from '@/lib/database-functions'
 import type { ServiceWithCompanyStatus } from '@/lib/supabase'
+import { toastSuccess, toastError } from '@/lib/toast'
 
 interface ServiceCategory {
   name: string
@@ -33,9 +33,6 @@ export default function ServicesTab() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [isUpdating, setIsUpdating] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Check if current user is admin
   const userCompanyId = session?.user?.company_id
@@ -48,45 +45,6 @@ export default function ServicesTab() {
     filterServices()
   }, [services, searchTerm, categoryFilter, showOnlyActive])
 
-  // Debug useEffect to log state changes
-  useEffect(() => {
-    console.log('Alert state changed - Error:', error, 'Success:', success)
-  }, [error, success])
-
-  // Auto-clear alerts after 5 seconds - temporarily disabled for testing
-  // useEffect(() => {
-  //   // Clear any existing timeout
-  //   if (alertTimeoutRef.current) {
-  //     clearTimeout(alertTimeoutRef.current)
-  //   }
-
-  //   // Set new timeout if there's an alert
-  //   if (error || success) {
-  //     alertTimeoutRef.current = setTimeout(() => {
-  //       setError('')
-  //       setSuccess('')
-  //       alertTimeoutRef.current = null
-  //     }, 5000)
-  //   }
-
-  //   // Cleanup on unmount
-  //   return () => {
-  //     if (alertTimeoutRef.current) {
-  //       clearTimeout(alertTimeoutRef.current)
-  //     }
-  //   }
-  // }, [error, success])
-
-  const clearAlerts = () => {
-    console.log('Clearing alerts...')
-    if (alertTimeoutRef.current) {
-      clearTimeout(alertTimeoutRef.current)
-      alertTimeoutRef.current = null
-    }
-    setError('')
-    setSuccess('')
-  }
-
   const loadServices = async () => {
     setIsLoading(true)
     try {
@@ -94,7 +52,9 @@ export default function ServicesTab() {
       setServices(servicesData)
     } catch (error) {
       console.error('Error loading services:', error)
-      setError('Failed to load services')
+      toastError('Failed to load services', {
+        description: error instanceof Error ? error.message : 'Please try again later'
+      })
     } finally {
       setIsLoading(false)
     }
@@ -137,13 +97,11 @@ export default function ServicesTab() {
 
   const handleUpdateServices = async () => {
     if (!userCompanyId) {
-      setError('No company assigned to user')
+      toastError('No company assigned to user')
       return
     }
 
     setIsUpdating(true)
-    setError('')
-    setSuccess('')
 
     try {
       console.log('Updating company services for company:', userCompanyId)
@@ -152,17 +110,19 @@ export default function ServicesTab() {
       const result = await updateCompanyServices(userCompanyId, selectedServices)
       
       if (result.success) {
-        setSuccess('Services updated successfully')
+        toastSuccess('Services updated successfully')
         setShowEditModal(false)
         loadServices() // Reload services to reflect changes
       } else {
         console.error('Failed to update services:', result.error)
-        setError(result.error || 'Failed to update services')
+        toastError(result.error || 'Failed to update services')
       }
     } catch (error) {
       console.error('Error updating services:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      setError(`Failed to update services: ${errorMessage}`)
+      toastError('Failed to update services', {
+        description: errorMessage
+      })
     } finally {
       setIsUpdating(false)
     }
@@ -239,36 +199,6 @@ export default function ServicesTab() {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* Alerts */}
-      {error && (
-        <Alert variant="destructive" className="relative">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="pr-8">{error}</AlertDescription>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute right-2 top-2 h-6 w-6 p-0 hover:bg-destructive/20"
-            onClick={clearAlerts}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </Alert>
-      )}
-      {success && (
-        <Alert className="relative">
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription className="pr-8">{success}</AlertDescription>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute right-2 top-2 h-6 w-6 p-0 hover:bg-muted"
-            onClick={clearAlerts}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </Alert>
       )}
 
       {/* Filters */}
@@ -387,10 +317,6 @@ export default function ServicesTab() {
 
       {/* Edit Services Modal */}
       <Dialog open={showEditModal} onOpenChange={(open) => {
-        if (!open) {
-          setError('')
-          setSuccess('')
-        }
         setShowEditModal(open)
       }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">

@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toastSuccess, toastError } from '@/lib/toast'
 import { 
   fetchDashboardWidgets, 
   fetchSpaceDashboardConfig, 
@@ -47,7 +48,6 @@ export default function DashboardConfigModal({
   const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfigItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
 
   useEffect(() => {
@@ -58,7 +58,6 @@ export default function DashboardConfigModal({
 
   const loadConfig = async () => {
     setLoading(true)
-    setError('')
     try {
       const [allWidgets, spaceConfig] = await Promise.all([
         fetchDashboardWidgets(),
@@ -85,7 +84,9 @@ export default function DashboardConfigModal({
       setWidgetConfigs(configs)
     } catch (err) {
       console.error('Error loading dashboard config:', err)
-      setError('Failed to load dashboard configuration')
+      toastError('Failed to load dashboard configuration', {
+        description: err instanceof Error ? err.message : 'Please try again'
+      })
     } finally {
       setLoading(false)
     }
@@ -129,7 +130,6 @@ export default function DashboardConfigModal({
 
   const handleSave = async () => {
     setSaving(true)
-    setError('')
 
     try {
       const configsToSave = widgetConfigs.map((item) => ({
@@ -142,14 +142,17 @@ export default function DashboardConfigModal({
       const result = await saveSpaceDashboardConfig(companyId, configsToSave)
 
       if (result.success) {
+        toastSuccess('Dashboard configuration saved successfully')
         onConfigSaved?.()
         onClose()
       } else {
-        setError(result.error || 'Failed to save configuration')
+        toastError(result.error || 'Failed to save configuration')
       }
     } catch (err) {
       console.error('Error saving dashboard config:', err)
-      setError('An error occurred while saving')
+      toastError('An error occurred while saving', {
+        description: err instanceof Error ? err.message : 'Please try again'
+      })
     } finally {
       setSaving(false)
     }
@@ -176,12 +179,6 @@ export default function DashboardConfigModal({
           </div>
         ) : (
           <div className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             <div className="space-y-2">
               {widgetConfigs.map((item, index) => (
                 <Card

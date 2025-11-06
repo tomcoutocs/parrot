@@ -419,7 +419,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-4 w-4 p-0 text-red-600 hover:text-red-800 hover:bg-red-100"
+                          className="h-4 w-4 p-0 text-red-500 hover:text-red-600 hover:bg-red-100"
                           onClick={(e) => {
                             e.stopPropagation()
                             setDeleteTarget(event.id)
@@ -428,7 +428,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
                           disabled={deleting}
                         >
                           {deleting && deleteTarget === event.id ? (
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-500"></div>
                           ) : (
                             <Trash2 className="w-3 h-3" />
                           )}
@@ -584,11 +584,11 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
                               setDeleteTarget(event.id)
                               setShowDeleteDialog(true)
                             }}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-6 px-2 text-xs flex-shrink-0 ml-2"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50 h-6 px-2 text-xs flex-shrink-0 ml-2"
                             disabled={deleting}
                           >
                             {deleting && deleteTarget === event.id ? (
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-500"></div>
                             ) : (
                               <Trash2 className="w-3 h-3" />
                             )}
@@ -1103,7 +1103,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
             </Button>
             <Button
               onClick={() => deleteEvent(deleteTarget!)}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-500 hover:bg-red-600"
               disabled={deleting}
             >
               {deleting ? 'Deleting...' : 'Delete'}

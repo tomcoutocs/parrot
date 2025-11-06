@@ -12,13 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { createUser, updateUser, deleteUser, fetchCompanies, fetchUsersWithCompanies } from '@/lib/database-functions'
 import type { Company, UserWithCompanies } from '@/lib/supabase'
 import { Checkbox } from '@/components/ui/checkbox'
 import UserInvitationModal from '@/components/modals/user-invitation-modal'
+import { toastSuccess, toastError } from '@/lib/toast'
 
 // Available tabs for user permissions
 const availableTabs = [
@@ -82,8 +82,6 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
     is_active: true,
     tab_permissions: []
   })
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [viewMode, setViewMode] = useState<'card' | 'list'>('list')
   const [showInviteUsersModal, setShowInviteUsersModal] = useState(false)
 
@@ -166,7 +164,9 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
       setCompanies(companiesData)
     } catch (error) {
       console.error('Error loading users:', error)
-      setError('Failed to load users')
+      toastError('Failed to load users', {
+        description: error instanceof Error ? error.message : 'Please try again later'
+      })
     } finally {
       setIsLoading(false)
     }
@@ -176,18 +176,16 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
 
     if (!createUserData.email || !createUserData.full_name || !createUserData.password) {
-      setError('Please fill in all required fields')
+      toastError('Please fill in all required fields')
       return
     }
 
     try {
       const result = await createUser(createUserData)
       if (result.success) {
-        setSuccess('User created successfully')
+        toastSuccess('User created successfully')
         setCreateUserData({ 
           email: '', 
           full_name: '', 
@@ -204,64 +202,69 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
       } else {
         // Check if it's a company assignment error
         if (result.error && result.error.includes('company assignments')) {
-          setError('Failed to create company assignments. Please ensure the internal user support is properly set up in the database.')
+          toastError('Failed to create company assignments', {
+            description: 'Please ensure the internal user support is properly set up in the database.'
+          })
         } else {
-          setError(result.error || 'Failed to create user')
+          toastError(result.error || 'Failed to create user')
         }
       }
     } catch (error) {
       console.error('Error creating user:', error)
-      setError('An error occurred while creating the user')
+      toastError('An error occurred while creating the user', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
   const handleEditUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
 
     if (!selectedUser) return
 
     try {
       const result = await updateUser(selectedUser.id, editUserData)
       if (result.success) {
-        setSuccess('User updated successfully')
+        toastSuccess('User updated successfully')
         setShowEditModal(false)
         setSelectedUser(null)
         await loadUsers()
       } else {
         // Check if it's a company assignment error
         if (result.error && result.error.includes('company assignments')) {
-          setError('Failed to update company assignments. Please ensure the internal user support is properly set up in the database.')
+          toastError('Failed to update company assignments', {
+            description: 'Please ensure the internal user support is properly set up in the database.'
+          })
         } else {
-          setError(result.error || 'Failed to update user')
+          toastError(result.error || 'Failed to update user')
         }
       }
     } catch (error) {
       console.error('Error updating user:', error)
-      setError('An error occurred while updating the user')
+      toastError('An error occurred while updating the user', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
   const handleDeleteUser = async () => {
     if (!selectedUser) return
 
-    setError('')
-    setSuccess('')
-
     try {
       const result = await deleteUser(selectedUser.id)
       if (result.success) {
-        setSuccess('User deleted successfully')
+        toastSuccess('User deleted successfully')
         setShowDeleteModal(false)
         setSelectedUser(null)
         await loadUsers()
       } else {
-        setError(result.error || 'Failed to delete user')
+        toastError(result.error || 'Failed to delete user')
       }
     } catch (error) {
       console.error('Error deleting user:', error)
-      setError('An error occurred while deleting the user')
+      toastError('An error occurred while deleting the user', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
@@ -411,20 +414,6 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
           </Select>
         </div>
       </div>
-
-      {/* Success/Error Messages */}
-      {success && (
-        <Alert>
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
 
       {/* Results Count */}
       <div className="flex items-center justify-between text-sm text-gray-600">

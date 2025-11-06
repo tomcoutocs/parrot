@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
 import { 
@@ -11,6 +11,7 @@ import {
   Plus, 
   Search, 
   ArrowLeft,
+  ChevronRight,
   MoreVertical,
   File,
   FileText,
@@ -33,8 +34,8 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
+import { toastSuccess, toastError } from '@/lib/toast'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,8 +90,6 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
   const [deleting, setDeleting] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingFolder, setCreatingFolder] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [storageUsage, setStorageUsage] = useState<number>(0)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -151,13 +150,13 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
       if (docsResult.success) {
         setDocuments(docsResult.documents || [])
       } else {
-        setError(docsResult.error || 'Failed to load documents')
+        toastError(docsResult.error || 'Failed to load documents')
       }
 
       if (foldersResult.success) {
         setFolders(foldersResult.folders || [])
       } else {
-        setError(foldersResult.error || 'Failed to load folders')
+        toastError(foldersResult.error || 'Failed to load folders')
       }
 
       if (richDocsResult.success) {
@@ -167,7 +166,9 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
       }
     } catch (error) {
       console.error('Error loading documents and folders:', error)
-      setError('Failed to load documents and folders')
+      toastError('Failed to load documents and folders', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setIsLoading(false)
     }
@@ -245,7 +246,7 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
       setCompanies(data || [])
     } catch (error) {
       console.error('Error loading companies:', error)
-      setError('Failed to load companies')
+      toastError('Failed to load companies')
     }
   }
 
@@ -298,23 +299,26 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
     // Validate folder name
     const folderName = newFolderName.trim()
     if (folderName.length === 0) {
-      setError('Folder name cannot be empty')
+      toastError('Folder name cannot be empty')
       return
     }
     
     if (folderName.length > 255) {
-      setError('Folder name is too long (maximum 255 characters)')
+      toastError('Folder name is too long', {
+        description: 'Maximum 255 characters allowed'
+      })
       return
     }
     
     // Check for invalid characters
     if (/[<>:"/\\|?*]/.test(folderName)) {
-      setError('Folder name contains invalid characters')
+      toastError('Folder name contains invalid characters', {
+        description: 'Cannot use: < > : " / \\ | ? *'
+      })
       return
     }
 
     setCreatingFolder(true)
-    setError('') // Clear any previous errors
     
     try {
       // Get the current folder's ID if we're not in the root
@@ -336,16 +340,18 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
       )
 
       if (result.success) {
-        setSuccess('Folder created successfully')
+        toastSuccess('Folder created successfully')
         setNewFolderName('')
         setShowCreateFolderModal(false)
         loadDocumentsAndFolders()
       } else {
-        setError(result.error || 'Failed to create folder')
+        toastError(result.error || 'Failed to create folder')
       }
     } catch (error) {
       console.error('Error creating folder:', error)
-      setError('Failed to create folder')
+      toastError('Failed to create folder', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setCreatingFolder(false)
     }
@@ -357,7 +363,9 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
 
     // Validate session and user ID
     if (!session?.user?.id) {
-      setError('User session not found. Please log in again.')
+      toastError('User session not found', {
+        description: 'Please log in again'
+      })
       return
     }
 
@@ -367,7 +375,7 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
 
     // Check if we're in a system folder
     if (currentFolder === '/Setup Instructions') {
-      setError('Cannot upload files to system folders')
+      toastError('Cannot upload files to system folders')
       return
     }
 
@@ -420,12 +428,14 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
         setUploadProgress(((i + 1) / files.length) * 100)
       }
 
-      setSuccess('Files uploaded successfully')
+      toastSuccess('Files uploaded successfully')
       loadDocumentsAndFolders()
       loadStorageUsage()
     } catch (error) {
       console.error('Error uploading files:', error)
-      setError('Failed to upload files')
+      toastError('Failed to upload files', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setUploading(false)
       setUploadProgress(0)
@@ -456,7 +466,9 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error downloading file:', error)
-      setError('Failed to download file')
+      toastError('Failed to download file', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
@@ -473,15 +485,17 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
       }
 
       if (result.success) {
-        setSuccess(`${deleteTarget.type === 'file' ? 'File' : 'Folder'} deleted successfully`)
+        toastSuccess(`${deleteTarget.type === 'file' ? 'File' : 'Folder'} deleted successfully`)
         loadDocumentsAndFolders()
         loadStorageUsage()
       } else {
-        setError(result.error || `Failed to delete ${deleteTarget.type}`)
+        toastError(result.error || `Failed to delete ${deleteTarget.type}`)
       }
     } catch (error) {
       console.error('Error deleting:', error)
-      setError(`Failed to delete ${deleteTarget.type}`)
+      toastError(`Failed to delete ${deleteTarget.type}`, {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setDeleting(false)
       setShowDeleteModal(false)
@@ -508,11 +522,13 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
         setDocuments(result.documents || [])
         setFolders([]) // Clear folders when searching
       } else {
-        setError(result.error || 'Search failed')
+        toastError(result.error || 'Search failed')
       }
     } catch (error) {
       console.error('Error searching documents:', error)
-      setError('Search failed')
+      toastError('Search failed', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
@@ -581,9 +597,9 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           const newFavorites = new Set(favorites)
           newFavorites.delete(itemId)
           setFavorites(newFavorites)
-          setSuccess(`${itemType === 'folder' ? 'Folder' : 'Document'} removed from favorites`)
+          toastSuccess(`${itemType === 'folder' ? 'Folder' : 'Document'} removed from favorites`)
         } else {
-          setError(result.error || 'Failed to remove from favorites')
+          toastError(result.error || 'Failed to remove from favorites')
         }
       } else {
         const result = await addToFavorites(session.user.id, itemId, itemType, selectedCompanyId)
@@ -591,14 +607,16 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
           const newFavorites = new Set(favorites)
           newFavorites.add(itemId)
           setFavorites(newFavorites)
-          setSuccess(`${itemType === 'folder' ? 'Folder' : 'Document'} added to favorites`)
+          toastSuccess(`${itemType === 'folder' ? 'Folder' : 'Document'} added to favorites`)
         } else {
-          setError(result.error || 'Failed to add to favorites')
+          toastError(result.error || 'Failed to add to favorites')
         }
       }
     } catch (error) {
       console.error('Error toggling favorite:', error)
-      setError('Failed to update favorites')
+      toastError('Failed to update favorites', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
@@ -773,77 +791,91 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
         </div>
       </div>
 
-             {/* Improved Navigation */}
+             {/* Enhanced Navigation with Improved Breadcrumbs */}
        <div className="flex items-center justify-between">
-         {/* Breadcrumbs */}
-         <div className="flex items-center space-x-2 text-sm">
-           {breadcrumbs.map((breadcrumb, index) => (
-             <div key={breadcrumb.id} className="flex items-center">
-               {index > 0 && <span className="text-gray-400 mx-2">/</span>}
-               <button
-                 onClick={() => handleBreadcrumbClick(breadcrumb)}
-                 className={`hover:underline ${
-                   index === breadcrumbs.length - 1 
-                     ? 'text-gray-900 font-medium' 
-                     : 'text-blue-600 hover:text-blue-800'
-                 }`}
-               >
-                 {breadcrumb.name}
-               </button>
-             </div>
-           ))}
-         </div>
-         
-         {/* Navigation Buttons */}
-         <div className="flex items-center space-x-2">
-           {/* Home Button */}
-           {breadcrumbs.length > 1 && (
-             <Button
-               variant="outline"
-               size="sm"
-               onClick={() => {
-                 setCurrentFolder('/')
-                 setBreadcrumbs([{ id: 'root', name: 'Home', path: '/' }])
-               }}
-               className="flex items-center space-x-1"
-             >
-               <Folder className="h-4 w-4" />
-               <span>Home</span>
-             </Button>
-           )}
-           
+         {/* Enhanced Breadcrumbs */}
+         <nav className="flex items-center space-x-2 text-sm" aria-label="Breadcrumb">
            {/* Back Button */}
            {breadcrumbs.length > 1 && (
              <Button
-               variant="outline"
+               variant="ghost"
                size="sm"
                onClick={() => {
                  const parentBreadcrumb = breadcrumbs[breadcrumbs.length - 2]
                  handleBreadcrumbClick(parentBreadcrumb)
                }}
-               className="flex items-center space-x-1"
+               className="h-8 px-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+               title="Go back"
              >
-               <ArrowLeft className="h-4 w-4" />
-               <span>Back</span>
+               <ArrowLeft className="h-3 w-3 mr-1" />
+               Back
              </Button>
            )}
-         </div>
+           
+           {/* Breadcrumb Items */}
+           <div className="flex items-center space-x-1">
+             {breadcrumbs.map((breadcrumb, index) => {
+               const isLast = index === breadcrumbs.length - 1
+               const isClickable = index < breadcrumbs.length - 1
+               
+               return (
+                 <React.Fragment key={breadcrumb.id}>
+                   <div className="flex items-center">
+                     <Button
+                       variant={isLast ? "default" : "ghost"}
+                       size="sm"
+                       onClick={() => handleBreadcrumbClick(breadcrumb)}
+                       className={`
+                         h-8 px-2.5 text-xs font-medium
+                         transition-all duration-200 ease-in-out
+                         ${isLast 
+                           ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 cursor-default' 
+                           : isClickable
+                             ? 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer hover:scale-105'
+                             : 'text-gray-400 dark:text-gray-500 cursor-default'
+                         }
+                       `}
+                       disabled={isLast}
+                       title={isClickable ? `Navigate to ${breadcrumb.name}` : undefined}
+                     >
+                       <Folder className={`h-3 w-3 mr-1.5 ${isLast ? '' : 'opacity-70'}`} />
+                       {breadcrumb.name}
+                     </Button>
+                   </div>
+                   {!isLast && (
+                     <ChevronRight className="h-3 w-3 text-gray-400 dark:text-gray-500 mx-0.5" />
+                   )}
+                 </React.Fragment>
+               )
+             })}
+           </div>
+           
+           {/* Current Location Context */}
+           {breadcrumbs.length > 1 && (
+             <div className="ml-2 px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 border-l border-gray-300 dark:border-gray-700 pl-3">
+               <Folder className="h-3 w-3 inline mr-1 align-middle" />
+               <span>Current: {breadcrumbs[breadcrumbs.length - 1].name}</span>
+             </div>
+           )}
+         </nav>
+         
+         {/* Home Button (Quick Action) */}
+         {breadcrumbs.length > 1 && (
+           <Button
+             variant="outline"
+             size="sm"
+             onClick={() => {
+               setCurrentFolder('/')
+               setBreadcrumbs([{ id: 'root', name: 'Home', path: '/' }])
+             }}
+             className="flex items-center space-x-1 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+             title="Go to home folder"
+           >
+             <Folder className="h-4 w-4" />
+             <span>Home</span>
+           </Button>
+         )}
        </div>
-
-      {/* Alerts */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      
-      {success && (
-        <Alert>
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
 
       {/* Upload Progress */}
       {uploading && (

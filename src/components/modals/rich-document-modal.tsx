@@ -53,7 +53,7 @@ import {
   Square
 } from 'lucide-react'
 import { saveRichDocument } from '@/lib/database-functions'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toastSuccess, toastError } from '@/lib/toast'
 
 interface RichDocumentModalProps {
   isOpen: boolean
@@ -74,8 +74,6 @@ export default function RichDocumentModal({
 }: RichDocumentModalProps) {
   const [documentTitle, setDocumentTitle] = useState('')
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [showSlashMenu, setShowSlashMenu] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
@@ -147,18 +145,16 @@ export default function RichDocumentModal({
 
   const handleSave = async () => {
     if (!documentTitle.trim()) {
-      setError('Please enter a document title')
+      toastError('Please enter a document title')
       return
     }
 
     if (!editor) {
-      setError('Editor not initialized')
+      toastError('Editor not initialized')
       return
     }
 
     setSaving(true)
-    setError('')
-    setSuccess('')
 
     try {
       // Get the HTML content from the editor
@@ -174,7 +170,7 @@ export default function RichDocumentModal({
       )
 
       if (result.success) {
-        setSuccess('Document created successfully!')
+        toastSuccess('Document created successfully!')
         
         // Reset the form
         setDocumentTitle('')
@@ -188,14 +184,15 @@ export default function RichDocumentModal({
         // Close the modal after a short delay
         setTimeout(() => {
           onClose()
-          setSuccess('')
         }, 1000)
       } else {
-        setError(result.error || 'Failed to save document')
+        toastError(result.error || 'Failed to save document')
       }
     } catch (err) {
       console.error('Error saving document:', err)
-      setError('Failed to save document. Please try again.')
+      toastError('Failed to save document', {
+        description: err instanceof Error ? err.message : 'Please try again'
+      })
     } finally {
       setSaving(false)
     }
@@ -206,8 +203,6 @@ export default function RichDocumentModal({
       editor.commands.clearContent()
     }
     setDocumentTitle('')
-    setError('')
-    setSuccess('')
     setShowSlashMenu(false)
     onClose()
   }
@@ -275,19 +270,6 @@ export default function RichDocumentModal({
             />
           </div>
         </DialogHeader>
-
-        {/* Alerts */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        
-        {success && (
-          <Alert>
-            <AlertDescription>{success}</AlertDescription>
-          </Alert>
-        )}
 
         {/* Toolbar */}
         <div className="flex items-center gap-1 p-2 border-b overflow-x-auto">

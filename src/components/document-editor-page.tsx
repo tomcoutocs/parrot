@@ -61,7 +61,7 @@ import {
 } from 'lucide-react'
 import { saveRichDocument, getRichDocument } from '@/lib/database-functions'
 import { supabase } from '@/lib/supabase'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toastSuccess, toastError } from '@/lib/toast'
 import { format } from 'date-fns'
 import DashboardLayout from '@/components/dashboard-layout'
 
@@ -75,8 +75,6 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
   const [documentTitle, setDocumentTitle] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [author, setAuthor] = useState<string>('')
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -163,11 +161,13 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
               setAuthor('Unknown')
             }
           } else {
-            setError('Document not found')
+            toastError('Document not found')
           }
         } catch (err) {
           console.error('Error loading document:', err)
-          setError('Failed to load document')
+          toastError('Failed to load document', {
+            description: err instanceof Error ? err.message : 'Please try again'
+          })
         } finally {
           setLoading(false)
         }
@@ -192,25 +192,23 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
 
   const handleSave = async () => {
     if (!documentTitle.trim()) {
-      setError('Please enter a document title')
+      toastError('Please enter a document title')
       return
     }
 
     if (!editor || !session?.user?.id) {
-      setError('Editor not initialized or user not authenticated')
+      toastError('Editor not initialized or user not authenticated')
       return
     }
 
     setSaving(true)
-    setError('')
-    setSuccess('')
 
     try {
       const content = editor.getHTML()
       const companyId = session.user.company_id || ''
 
       if (!companyId) {
-        setError('User must be associated with a company')
+        toastError('User must be associated with a company')
         return
       }
 
@@ -224,24 +222,21 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
       )
 
       if (result.success && result.document) {
-        setSuccess('Document saved successfully!')
+        toastSuccess('Document saved successfully!')
         setLastSaved(new Date())
         
         // If this was a new document, redirect to the new document ID
         if (isNewDocument && result.document.id) {
           router.replace(`/documents/${result.document.id}`)
         }
-        
-        // Clear success message after a moment
-        setTimeout(() => {
-          setSuccess('')
-        }, 2000)
       } else {
-        setError(result.error || 'Failed to save document')
+        toastError(result.error || 'Failed to save document')
       }
     } catch (err) {
       console.error('Error saving document:', err)
-      setError('Failed to save document. Please try again.')
+      toastError('Failed to save document', {
+        description: err instanceof Error ? err.message : 'Please try again'
+      })
     } finally {
       setSaving(false)
     }
@@ -399,23 +394,6 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
               </div>
             )}
           </div>
-
-          {/* Alerts */}
-          {error && (
-            <div className="px-16 pb-4">
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            </div>
-          )}
-          
-          {success && (
-            <div className="px-16 pb-4">
-              <Alert>
-                <AlertDescription>{success}</AlertDescription>
-              </Alert>
-            </div>
-          )}
 
           {/* Toolbar */}
           <div className="sticky top-[73px] z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-2">

@@ -36,6 +36,7 @@ import ParrotLogo from '@/components/ui/parrot-logo'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { QuickThemeToggle } from '@/components/ui/settings-modal'
 import { Breadcrumb, useBreadcrumbs } from '@/components/ui/breadcrumb'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 
 
 interface DashboardLayoutProps {
@@ -288,6 +289,15 @@ export default function DashboardLayout({
                 items={breadcrumbs} 
                 onNavigate={handleBreadcrumbNavigation}
                 className="text-xs"
+                showBackButton={breadcrumbs.length > 1}
+                onBackClick={() => {
+                  if (breadcrumbs.length > 1) {
+                    const previousItem = breadcrumbs[breadcrumbs.length - 2]
+                    if (previousItem.href) {
+                      handleBreadcrumbNavigation(previousItem.href)
+                    }
+                  }
+                }}
               />
             </div>
             <div className="flex items-center space-x-4">
@@ -296,6 +306,7 @@ export default function DashboardLayout({
                   Space Active
                 </Badge>
               )}
+              <NotificationBell />
               <span className="text-sm text-gray-600 dark:text-gray-400">
                 Welcome to Parrot, {session.user.name}
               </span>

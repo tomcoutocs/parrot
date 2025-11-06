@@ -45,10 +45,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import EmptyState from '@/components/ui/empty-state'
 import { format } from 'date-fns'
+import { toastSuccess, toastError } from '@/lib/toast'
 import { Form, FormField, FormSubmission } from '@/lib/supabase'
 import { 
   fetchForms, 
@@ -67,8 +67,6 @@ export default function FormsTab() {
   const { data: session } = useSession()
   const [forms, setForms] = useState<Form[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
@@ -93,7 +91,9 @@ export default function FormsTab() {
       setForms(formsData)
     } catch (error) {
       console.error('Error loading forms:', error)
-      setError('Failed to load forms')
+      toastError('Failed to load forms', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setLoading(false)
     }
@@ -101,20 +101,17 @@ export default function FormsTab() {
 
   const handleFormCreated = async () => {
     await loadForms()
-    setSuccess('Form created successfully')
-    setTimeout(() => setSuccess(''), 3000)
+    toastSuccess('Form created successfully')
   }
 
   const handleFormUpdated = async () => {
     await loadForms()
-    setSuccess('Form updated successfully')
-    setTimeout(() => setSuccess(''), 3000)
+    toastSuccess('Form updated successfully')
   }
 
   const handleFormDeleted = async () => {
     await loadForms()
-    setSuccess('Form deleted successfully')
-    setTimeout(() => setSuccess(''), 3000)
+    toastSuccess('Form deleted successfully')
   }
 
   const handleViewSubmissions = (form: Form) => {
@@ -134,11 +131,13 @@ export default function FormsTab() {
         if (result.success) {
           await handleFormDeleted()
         } else {
-          setError(result.error || 'Failed to delete form')
+          toastError(result.error || 'Failed to delete form')
         }
       } catch (error) {
         console.error('Error deleting form:', error)
-        setError('An error occurred while deleting the form')
+        toastError('An error occurred while deleting the form', {
+          description: error instanceof Error ? error.message : 'Please try again'
+        })
       }
     }
   }
@@ -149,8 +148,7 @@ export default function FormsTab() {
   }
 
   const handleFormSubmitted = async () => {
-    setSuccess('Form submitted successfully')
-    setTimeout(() => setSuccess(''), 3000)
+    toastSuccess('Form submitted successfully')
   }
 
   const filteredForms = forms.filter(form => {
@@ -215,20 +213,6 @@ export default function FormsTab() {
           </Button>
         )}
       </div>
-
-      {/* Success/Error Messages */}
-      {success && (
-        <Alert>
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
 
       {/* Filters */}
       <div className="flex gap-4">

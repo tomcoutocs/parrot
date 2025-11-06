@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
+import { toastSuccess, toastError } from '@/lib/toast'
 import { createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices, fetchCompaniesWithServices } from '@/lib/simplified-database-functions'
 import { fetchCompanyDetails, testCompanyAccess, simpleCompanyTest, fetchCompaniesDirect } from '@/lib/company-detail-functions'
 import { fetchUsers } from '@/lib/database-functions'
@@ -75,8 +75,6 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     is_active: true,
     is_partner: false
   })
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [viewMode, setViewMode] = useState<'card' | 'list'>('list')
   const [services, setServices] = useState<Service[]>([])
   const [selectedServices, setSelectedServices] = useState<string[]>([])
@@ -95,6 +93,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
   const [showCompanyDetailModal, setShowCompanyDetailModal] = useState(false)
   const [selectedCompanyDetails, setSelectedCompanyDetails] = useState<CompanyDetails | null>(null)
   const [isLoadingCompanyDetails, setIsLoadingCompanyDetails] = useState(false)
+  const [companyDetailError, setCompanyDetailError] = useState<string | null>(null)
 
   // Check if current user is admin
   const isAdmin = session?.user?.role === 'admin'
@@ -106,7 +105,9 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
       setCompanies(companiesData)
     } catch (error) {
       console.error('Error loading companies:', error)
-      setError('Failed to load companies')
+      toastError('Failed to load companies', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setIsLoading(false)
     }
@@ -118,7 +119,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
       setServices(servicesData)
     } catch (error) {
       console.error('Error loading services:', error)
-      setError('Failed to load services')
+      toastError('Failed to load services')
     }
   }
 
@@ -187,11 +188,9 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
 
     if (!createCompanyData.name) {
-      setError('Please fill in the company name')
+      toastError('Please fill in the company name')
       return
     }
 
@@ -245,62 +244,63 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
           }
         }
 
-        setSuccess('Company created successfully')
+        toastSuccess('Company created successfully')
         setCreateCompanyData({ name: '', is_partner: false, userInvitations: [], existingUserIds: [] })
         setUserSearchTerm('')
         setShowCreateModal(false)
         await loadCompanies()
       } else {
-        setError(result.error || 'Failed to create company')
+        toastError(result.error || 'Failed to create company')
       }
     } catch (error) {
       console.error('Error creating company:', error)
-      setError('An error occurred while creating the company')
+      toastError('An error occurred while creating the company', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
   const handleEditCompany = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
 
     if (!selectedCompany) return
 
     try {
       const result = await updateCompany(selectedCompany.id, editCompanyData)
       if (result.success) {
-        setSuccess('Company updated successfully')
+        toastSuccess('Company updated successfully')
         setShowEditModal(false)
         setSelectedCompany(null)
         await loadCompanies()
       } else {
-        setError(result.error || 'Failed to update company')
+        toastError(result.error || 'Failed to update company')
       }
     } catch (error) {
       console.error('Error updating company:', error)
-      setError('An error occurred while updating the company')
+      toastError('An error occurred while updating the company', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
   const handleDeleteCompany = async () => {
     if (!selectedCompany) return
 
-    setError('')
-    setSuccess('')
-
     try {
       const result = await deleteCompany(selectedCompany.id)
       if (result.success) {
-        setSuccess('Company deleted successfully')
+        toastSuccess('Company deleted successfully')
         setShowDeleteModal(false)
         setSelectedCompany(null)
         await loadCompanies()
       } else {
-        setError(result.error || 'Failed to delete company')
+        toastError(result.error || 'Failed to delete company')
       }
     } catch (error) {
       console.error('Error deleting company:', error)
-      setError('An error occurred while deleting the company')
+      toastError('An error occurred while deleting the company', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
@@ -334,29 +334,28 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
       setSelectedServices(activeServiceIds)
     } catch (error) {
       console.error('Error loading services:', error)
-      setError('Failed to load services')
+      toastError('Failed to load services')
     }
   }
 
   const handleUpdateCompanyServices = async () => {
     if (!editingCompanyForServices) return
 
-    setError('')
-    setSuccess('')
-
     try {
       const result = await updateCompanyServices(editingCompanyForServices.id, selectedServices)
       
       if (result.success) {
-        setSuccess('Company services updated successfully')
+        toastSuccess('Company services updated successfully')
         setShowServicesModal(false)
         setEditingCompanyForServices(null)
       } else {
-        setError(result.error || 'Failed to update company services')
+        toastError(result.error || 'Failed to update company services')
       }
     } catch (error) {
       console.error('Error updating company services:', error)
-      setError('Failed to update company services')
+      toastError('Failed to update company services', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     }
   }
 
@@ -380,7 +379,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
   const handleNavigateToCompany = async (companyId: string) => {
     setIsLoadingCompanyDetails(true)
     setShowCompanyDetailModal(true)
-    setError('') // Clear any previous errors
+    setCompanyDetailError(null)
     
     // Debug: Log the company ID being requested
     console.log('Attempting to fetch company with ID:', companyId)
@@ -388,11 +387,14 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     try {
       const details = await fetchCompanyDetails(companyId)
       setSelectedCompanyDetails(details)
+      setIsLoadingCompanyDetails(false)
     } catch (error) {
       console.error('Error loading company details:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to load company details'
-      setError(errorMessage)
+      setCompanyDetailError(errorMessage)
+      toastError(errorMessage)
       setSelectedCompanyDetails(null)
+      setIsLoadingCompanyDetails(false)
       
       // Debug: Test company access and log available companies
       try {
@@ -571,20 +573,6 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
           </SelectContent>
         </Select>
       </div>
-
-      {/* Success/Error Messages */}
-      {success && (
-        <Alert>
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
 
       {/* Results Count */}
       <div className="flex items-center justify-between text-sm text-gray-600">
@@ -1324,8 +1312,8 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
               <div className="text-center">
                 <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
                 <p className="text-muted-foreground mb-2">Failed to load company details</p>
-                {error && (
-                  <p className="text-sm text-red-500">{error}</p>
+                {companyDetailError && (
+                  <p className="text-sm text-red-500">{companyDetailError}</p>
                 )}
                 <Button 
                   variant="outline" 

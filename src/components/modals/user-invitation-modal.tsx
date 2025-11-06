@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, AlertCircle, CheckCircle, Plus, X } from 'lucide-react'
+import { Loader2, Plus, X } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { toastSuccess, toastError } from '@/lib/toast'
 
 interface UserInvitationModalProps {
   open: boolean
@@ -31,8 +31,6 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
   ])
   const [selectedCompany, setSelectedCompany] = useState<string>(selectedCompanyId || companies[0]?.id || '')
   const [sending, setSending] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
   const defaultTabPermissions = [
     'calendar',
@@ -80,18 +78,16 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
   const handleSubmit = async () => {
     const validationError = validateUsers()
     if (validationError) {
-      setError(validationError)
+      toastError(validationError)
       return
     }
 
     if (!session?.user?.id) {
-      setError('You must be logged in to send invitations')
+      toastError('You must be logged in to send invitations')
       return
     }
 
     setSending(true)
-    setError('')
-    setSuccess('')
 
     try {
       const invitations = users.map(user => ({
@@ -127,23 +123,24 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || 'Failed to send invitations')
+        toastError(data.error || 'Failed to send invitations')
         return
       }
 
-      setSuccess(`${invitations.length} invitations sent successfully!`)
+      toastSuccess(`${invitations.length} invitations sent successfully!`)
       
       // Reset form
       setUsers([{ email: '', full_name: '', role: 'user' }])
       
-      // Close modal after 2 seconds
+      // Close modal after a brief delay
       setTimeout(() => {
         onOpenChange(false)
-        setSuccess('')
-      }, 2000)
+      }, 1500)
 
     } catch (error) {
-      setError('Failed to send invitations')
+      toastError('Failed to send invitations', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setSending(false)
     }
@@ -152,8 +149,6 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
   const handleClose = () => {
     if (!sending) {
       setUsers([{ email: '', full_name: '', role: 'user' }])
-      setError('')
-      setSuccess('')
       onOpenChange(false)
     }
   }
@@ -169,20 +164,6 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
         </DialogHeader>
 
         <div className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert>
-              <CheckCircle className="h-4 w-4" />
-              <AlertDescription>{success}</AlertDescription>
-            </Alert>
-          )}
-
           {/* Company Selection */}
           <div className="space-y-2">
             <Label htmlFor="company-select">Select Company *</Label>

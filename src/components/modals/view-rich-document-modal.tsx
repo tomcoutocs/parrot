@@ -45,7 +45,7 @@ import {
   Plus
 } from 'lucide-react'
 import { saveRichDocument, deleteRichDocument, type RichDocument } from '@/lib/database-functions'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toastSuccess, toastError } from '@/lib/toast'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,8 +76,6 @@ export default function ViewRichDocumentModal({
   const [documentTitle, setDocumentTitle] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
@@ -137,18 +135,16 @@ export default function ViewRichDocumentModal({
     if (!document) return
     
     if (!documentTitle.trim()) {
-      setError('Please enter a document title')
+      toastError('Please enter a document title')
       return
     }
 
     if (!editor) {
-      setError('Editor not initialized')
+      toastError('Editor not initialized')
       return
     }
 
     setSaving(true)
-    setError('')
-    setSuccess('')
 
     try {
       const content = editor.getHTML()
@@ -163,22 +159,20 @@ export default function ViewRichDocumentModal({
       )
 
       if (result.success) {
-        setSuccess('Document updated successfully!')
+        toastSuccess('Document updated successfully!')
         setIsEditing(false)
         
         if (onDocumentUpdated) {
           onDocumentUpdated()
         }
-
-        setTimeout(() => {
-          setSuccess('')
-        }, 2000)
       } else {
-        setError(result.error || 'Failed to update document')
+        toastError(result.error || 'Failed to update document')
       }
     } catch (err) {
       console.error('Error saving document:', err)
-      setError('Failed to update document. Please try again.')
+      toastError('Failed to update document', {
+        description: err instanceof Error ? err.message : 'Please try again'
+      })
     } finally {
       setSaving(false)
     }
@@ -192,22 +186,24 @@ export default function ViewRichDocumentModal({
     }
 
     setDeleting(true)
-    setError('')
 
     try {
       const result = await deleteRichDocument(document.id)
 
       if (result.success) {
+        toastSuccess('Document deleted successfully')
         onClose()
         if (onDocumentDeleted) {
           onDocumentDeleted()
         }
       } else {
-        setError(result.error || 'Failed to delete document')
+        toastError(result.error || 'Failed to delete document')
       }
     } catch (err) {
       console.error('Error deleting document:', err)
-      setError('Failed to delete document. Please try again.')
+      toastError('Failed to delete document', {
+        description: err instanceof Error ? err.message : 'Please try again'
+      })
     } finally {
       setDeleting(false)
     }
@@ -215,8 +211,6 @@ export default function ViewRichDocumentModal({
 
   const handleClose = () => {
     setIsEditing(false)
-    setError('')
-    setSuccess('')
     onClose()
   }
 
@@ -304,19 +298,6 @@ export default function ViewRichDocumentModal({
             </div>
           )}
         </DialogHeader>
-
-        {/* Alerts */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        
-        {success && (
-          <Alert>
-            <AlertDescription>{success}</AlertDescription>
-          </Alert>
-        )}
 
         {/* Toolbar - only show when editing */}
         {isEditing && (

@@ -267,7 +267,7 @@ export default function LinksWidget({ companyId, config }: LinksWidgetProps) {
                           e.preventDefault()
                           handleDelete(link)
                         }}
-                        className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                        className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>

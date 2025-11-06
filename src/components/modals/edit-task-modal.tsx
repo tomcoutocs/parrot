@@ -12,6 +12,7 @@ import { Loader2 } from 'lucide-react'
 import type { TaskWithDetails, User } from '@/lib/supabase'
 import { updateTask, fetchUsers } from '@/lib/database-functions'
 import { formatDateForInput, formatDateForDatabase } from '@/lib/date-utils'
+import { useSession } from '@/components/providers/session-provider'
 
 interface EditTaskModalProps {
   task: TaskWithDetails | null
@@ -22,6 +23,7 @@ interface EditTaskModalProps {
 }
 
 export function EditTaskModal({ task, isOpen, onClose, onTaskUpdated, users }: EditTaskModalProps) {
+  const { data: session } = useSession()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<TaskWithDetails['status']>('todo')
@@ -71,7 +73,7 @@ export function EditTaskModal({ task, isOpen, onClose, onTaskUpdated, users }: E
       }
 
       console.log('Updating task with data:', taskData)
-      const result = await updateTask(task.id, taskData)
+      const result = await updateTask(task.id, taskData, session?.user?.id || undefined)
       console.log('Update task result:', result)
       
       if (result.success) {

@@ -14,6 +14,7 @@ import {
   Calendar, 
   Clock,
   MessageSquare,
+  MessageCircle,
   Search,
   Edit,
   Trash2,
@@ -137,13 +138,7 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
           className={`mb-3 ${snapshot.isDragging ? 'rotate-3 scale-105' : ''}`}
         >
           <Card 
-            className={`parrot-task-card cursor-pointer hover:shadow-md transition-shadow parrot-task-status-${task.status} parrot-task-priority-${task.priority}`}
-            onClick={(e) => {
-              // Prevent click when clicking on dropdown menu
-              if (!(e.target as HTMLElement).closest('[data-dropdown]')) {
-                onTaskClick(task)
-              }
-            }}
+            className={`parrot-task-card hover:shadow-md transition-shadow parrot-task-status-${task.status} parrot-task-priority-${task.priority}`}
           >
             <CardHeader className="parrot-task-card-header pb-2">
               <div className="flex justify-between items-start gap-2">
@@ -167,7 +162,7 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
                         Manage Assignments
                       </DropdownMenuItem>
                       <DropdownMenuItem 
-                        className="text-red-600"
+                        className="text-red-500"
                         onClick={() => onDeleteTask(task.id)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -232,12 +227,23 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
                       <span>{format(new Date(task.due_date), 'MMM d')}</span>
                     </div>
                   )}
-                  {(task.comment_count ?? 0) > 0 && (
-                    <div className="flex items-center gap-1">
-                      <MessageSquare className="h-3 w-3" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs hover:bg-gray-100 flex items-center gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onTaskClick(task)
+                    }}
+                    title="View comments"
+                  >
+                    <MessageCircle className="h-3 w-3" />
+                    {task.comment_count ? (
                       <span>{task.comment_count}</span>
-                    </div>
-                  )}
+                    ) : (
+                      <span className="text-gray-400">Comment</span>
+                    )}
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -422,15 +428,9 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`hidden sm:grid sm:grid-cols-12 gap-4 px-4 sm:px-6 py-3 border-b hover:bg-gray-50 cursor-pointer ${
+          className={`hidden sm:grid sm:grid-cols-12 gap-4 px-4 sm:px-6 py-3 border-b hover:bg-gray-50 ${
             snapshot.isDragging ? 'bg-blue-50 shadow-lg' : ''
           }`}
-          onClick={(e) => {
-            // Prevent click when clicking on interactive elements
-            if (!(e.target as HTMLElement).closest('[data-interactive]')) {
-              onTaskClick(task)
-            }
-          }}
         >
           {/* Desktop View */}
           {/* Name Column */}
@@ -583,7 +583,25 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
           </div>
 
           {/* Actions Column */}
-          <div className="col-span-1 flex justify-end">
+          <div className="col-span-1 flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs hover:bg-gray-100 flex items-center gap-1"
+              onClick={(e) => {
+                e.stopPropagation()
+                onTaskClick(task)
+              }}
+              title="View comments"
+              data-interactive
+            >
+              <MessageCircle className="h-3 w-3" />
+              {task.comment_count ? (
+                <span>{task.comment_count}</span>
+              ) : (
+                <span className="text-gray-400 text-xs">Comment</span>
+              )}
+            </Button>
             {canEdit && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -601,7 +619,7 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                     Manage Assignments
                   </DropdownMenuItem>
                   <DropdownMenuItem 
-                    className="text-red-600"
+                    className="text-red-500"
                     onClick={() => onDeleteTask(task.id)}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -1204,7 +1222,7 @@ export default function ProjectsTab({
     }
   }
 
-  const handleTaskClick = (task: TaskWithDetails) => {
+  const handleTaskClick = useCallback((task: TaskWithDetails) => {
     setSelectedTaskForSidebar(task)
     setIsTaskSidebarOpen(true)
     
@@ -1219,7 +1237,65 @@ export default function ProjectsTab({
         folderPath: undefined
       })
     }
-  }
+  }, [selectedProject, projects, onBreadcrumbContextChange])
+
+  // Handle URL params and custom events for opening tasks from notifications
+  // (Must be after handleTaskClick is defined)
+  useEffect(() => {
+    const taskIdParam = searchParams.get('taskId')
+    const projectIdParam = searchParams.get('projectId')
+
+    if (taskIdParam && projectIdParam) {
+      // Set the project first
+      if (projectIdParam !== selectedProject) {
+        handleProjectChange(projectIdParam)
+      }
+
+      // Wait a bit for project to load, then fetch and open task
+      const timer = setTimeout(async () => {
+        try {
+          const tasksForProject = await fetchTasksOptimized(projectIdParam)
+          const taskToOpen = tasksForProject.find(t => t.id === taskIdParam)
+          if (taskToOpen) {
+            handleTaskClick(taskToOpen)
+          }
+        } catch (error) {
+          console.error('Error opening task from URL:', error)
+        }
+      }, 500)
+
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, selectedProject, handleProjectChange, handleTaskClick])
+
+  // Listen for custom event to open task (from notifications)
+  useEffect(() => {
+    const handleOpenTask = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ taskId: string; projectId: string }>
+      const { taskId, projectId } = customEvent.detail
+
+      // Set the project first
+      if (projectId !== selectedProject) {
+        handleProjectChange(projectId)
+      }
+
+      // Wait a bit for project to load, then fetch and open task
+      setTimeout(async () => {
+        try {
+          const tasksForProject = await fetchTasksOptimized(projectId)
+          const taskToOpen = tasksForProject.find(t => t.id === taskId)
+          if (taskToOpen) {
+            handleTaskClick(taskToOpen)
+          }
+        } catch (error) {
+          console.error('Error opening task from event:', error)
+        }
+      }, 500)
+    }
+
+    window.addEventListener('open-task', handleOpenTask as EventListener)
+    return () => window.removeEventListener('open-task', handleOpenTask as EventListener)
+  }, [selectedProject, handleProjectChange, handleTaskClick])
 
   const handleCloseTaskSidebar = () => {
     setIsTaskSidebarOpen(false)

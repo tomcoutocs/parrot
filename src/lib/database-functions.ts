@@ -603,7 +603,7 @@ export async function removeProjectMember(projectId: string, userId: string, cur
   }
 }
 
-export async function updateTask(taskId: string, taskData: Partial<Task>): Promise<{ success: boolean; data?: Task; error?: string }> {
+export async function updateTask(taskId: string, taskData: Partial<Task>, userId?: string): Promise<{ success: boolean; data?: Task; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
@@ -611,6 +611,17 @@ export async function updateTask(taskId: string, taskData: Partial<Task>): Promi
 
   try {
     console.log('Updating task:', { taskId, taskData })
+    
+    // Get current task data to compare changes
+    const { data: currentTask } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('id', taskId)
+      .single()
+
+    if (!currentTask) {
+      return { success: false, error: 'Task not found' }
+    }
     
     const { data, error } = await supabase
       .from('tasks')
@@ -625,6 +636,72 @@ export async function updateTask(taskId: string, taskData: Partial<Task>): Promi
     if (error) {
       console.error('Error updating task:', error)
       return { success: false, error: error.message || 'Failed to update task' }
+    }
+
+    // Create notifications for significant changes
+    if (userId && data) {
+      const { createTaskUpdateNotification } = await import('./notification-functions')
+      
+      // Get current user name
+      const { data: userData } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', userId)
+        .single()
+
+      const updatedByName = userData?.full_name || 'Someone'
+
+      // Notify on status change
+      if (taskData.status && taskData.status !== currentTask.status) {
+        await createTaskUpdateNotification(
+          taskId,
+          data.title,
+          userId,
+          updatedByName,
+          'status',
+          currentTask.status,
+          taskData.status
+        ).catch(err => console.error('Failed to create status change notification:', err))
+      }
+
+      // Notify on priority change
+      if (taskData.priority && taskData.priority !== currentTask.priority) {
+        await createTaskUpdateNotification(
+          taskId,
+          data.title,
+          userId,
+          updatedByName,
+          'priority',
+          currentTask.priority,
+          taskData.priority
+        ).catch(err => console.error('Failed to create priority change notification:', err))
+      }
+
+      // Notify on due date change
+      if (taskData.due_date && taskData.due_date !== currentTask.due_date) {
+        await createTaskUpdateNotification(
+          taskId,
+          data.title,
+          userId,
+          updatedByName,
+          'due_date',
+          currentTask.due_date,
+          taskData.due_date
+        ).catch(err => console.error('Failed to create due date change notification:', err))
+      }
+
+      // Notify on title change
+      if (taskData.title && taskData.title !== currentTask.title) {
+        await createTaskUpdateNotification(
+          taskId,
+          data.title,
+          userId,
+          updatedByName,
+          'title',
+          currentTask.title,
+          taskData.title
+        ).catch(err => console.error('Failed to create title change notification:', err))
+      }
     }
 
     console.log('Task updated successfully:', data)
@@ -714,6 +791,29 @@ export async function assignUsersToTask(taskId: string, userIds: string[], assig
         currentUserId = user.id
       }
     }
+
+    // Get task details and assigned user info for notifications
+    const { data: task } = await supabase
+      .from('tasks')
+      .select(`
+        id,
+        title,
+        project_id,
+        projects:project_id(name)
+      `)
+      .eq('id', taskId)
+      .single()
+
+    // Get current user name for notification
+    let assignedByName = 'Someone'
+    if (currentUserId) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', currentUserId)
+        .single()
+      if (user) assignedByName = user.full_name
+    }
     
     const { error } = await supabase
       .rpc('assign_users_to_task', { 
@@ -725,6 +825,40 @@ export async function assignUsersToTask(taskId: string, userIds: string[], assig
     if (error) {
       console.error('Error assigning users to task:', error)
       return { success: false, error: error.message || 'Failed to assign users to task' }
+    }
+
+    // Create notifications for assigned users
+    if (task) {
+      const { createTaskAssignmentNotification } = await import('./notification-functions')
+      const projectName = (task.projects as { name?: string })?.name
+      
+      console.log('Creating notifications for assigned users:', {
+        userIds,
+        currentUserId,
+        taskTitle: task.title,
+        assignedByName
+      })
+      
+      for (const userId of userIds) {
+        // Create notification for all assigned users, including self-assignments
+        console.log(`Creating notification for user ${userId} (assigned by ${currentUserId})`)
+        const result = await createTaskAssignmentNotification(
+          taskId,
+          task.title,
+          userId,
+          assignedByName,
+          projectName,
+          currentUserId // Pass the assigner's ID
+        )
+        
+        if (result.success) {
+          console.log(`Notification created successfully for user ${userId}`)
+        } else {
+          console.error(`Failed to create notification for user ${userId}:`, result.error)
+        }
+      }
+    } else {
+      console.warn('Cannot create notifications: task data not found')
     }
 
     console.log('Users assigned to task successfully')

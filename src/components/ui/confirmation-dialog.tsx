@@ -47,8 +47,8 @@ export function ConfirmationDialog({
     switch (variant) {
       case 'destructive':
         return {
-          icon: <Trash2 className="h-6 w-6 text-red-600" />,
-          confirmButton: 'bg-red-600 hover:bg-red-700 text-white',
+          icon: <Trash2 className="h-6 w-6 text-red-500" />,
+          confirmButton: 'bg-red-500 hover:bg-red-600 text-white',
           alertVariant: 'destructive' as const
         }
       case 'warning':
@@ -156,7 +156,7 @@ export function DeleteConfirmationDialog({
           <DialogHeader>
             <div className="flex items-center gap-3">
               <div className="flex-shrink-0">
-                <Trash2 className="h-6 w-6 text-red-600" />
+                <Trash2 className="h-6 w-6 text-red-500" />
               </div>
               <div>
                 <DialogTitle className="text-lg font-semibold">Delete Item</DialogTitle>
@@ -181,7 +181,7 @@ export function DeleteConfirmationDialog({
             <Button
               onClick={onConfirm}
               disabled={isLoading}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-red-500 hover:bg-red-600 text-white"
             >
               {isLoading ? (
                 <>

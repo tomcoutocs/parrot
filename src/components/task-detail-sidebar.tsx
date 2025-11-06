@@ -112,6 +112,25 @@ export default function TaskDetailSidebar({
 
       setComments(prev => [...prev, data])
       setNewComment('')
+
+      // Create notification for task assignee and other commenters (if different from commenter)
+      if (data) {
+        const { createTaskCommentNotification } = await import('@/lib/notification-functions')
+        
+        // Extract mentions from comment (@username format)
+        const mentionMatches = newComment.match(/@(\w+)/g) || []
+        // For now, we'll just notify the task assignee
+        // TODO: Parse actual user IDs from mentions
+        
+        await createTaskCommentNotification(
+          task.id,
+          task.title,
+          data.id,
+          session.user.id,
+          session.user.name || 'Unknown',
+          [] // Mentioned user IDs - to be implemented
+        ).catch(err => console.error('Failed to create comment notification:', err))
+      }
     } catch (error) {
       console.error('Error submitting comment:', error)
     } finally {
@@ -178,7 +197,7 @@ export default function TaskDetailSidebar({
               variant="ghost"
               size="sm"
               onClick={() => onDeleteTask(task.id)}
-              className="text-red-600 hover:text-red-700"
+              className="text-red-500 hover:text-red-600"
             >
               <Trash2 className="h-4 w-4" />
             </Button>

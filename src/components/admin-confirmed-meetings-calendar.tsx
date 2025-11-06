@@ -259,7 +259,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-4 w-4 p-0 text-red-600 hover:text-red-800 hover:bg-red-100"
+                          className="h-4 w-4 p-0 text-red-500 hover:text-red-600 hover:bg-red-100"
                           onClick={(e) => {
                             e.stopPropagation()
                             setDeleteTarget(meeting.id)
@@ -268,7 +268,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
                           disabled={deleting}
                         >
                           {deleting && deleteTarget === meeting.id ? (
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-500"></div>
                           ) : (
                             <Trash2 className="w-3 h-3" />
                           )}
@@ -422,11 +422,11 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
                               setDeleteTarget(meeting.id)
                               setShowDeleteDialog(true)
                             }}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-6 px-2 text-xs flex-shrink-0 ml-2"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50 h-6 px-2 text-xs flex-shrink-0 ml-2"
                             disabled={deleting}
                           >
                             {deleting && deleteTarget === meeting.id ? (
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600"></div>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-500"></div>
                             ) : (
                               <Trash2 className="w-3 h-3" />
                             )}
@@ -666,7 +666,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
                 setDeleteTarget('all')
                 setShowDeleteDialog(true)
               }}
-              className="flex items-center gap-2 text-red-600 hover:text-red-700"
+              className="flex items-center gap-2 text-red-500 hover:text-red-600"
             >
               <Trash2 className="w-4 h-4" />
               Clear All
@@ -814,7 +814,7 @@ export const AdminConfirmedMeetingsCalendar: React.FC<AdminConfirmedMeetingsCale
                   handleDeleteMeeting(deleteTarget)
                 }
               }}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-500 hover:bg-red-600"
               disabled={deleting}
             >
               {deleting ? 'Deleting...' : (deleteTarget === 'all' ? 'Delete All' : 'Delete')}

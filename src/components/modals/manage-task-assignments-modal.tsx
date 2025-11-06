@@ -174,7 +174,7 @@ export function ManageTaskAssignmentsModal({ task, isOpen, onClose, onAssignment
                       size="sm"
                       onClick={() => handleRemoveAssignment(assignment.user_id)}
                       disabled={isLoading}
-                      className="text-red-600 hover:text-red-700"
+                      className="text-red-500 hover:text-red-600"
                     >
                       <UserMinus className="h-4 w-4" />
                     </Button>

@@ -24,9 +24,9 @@ import {
 } from '@/components/ui/dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, X, CheckCircle, AlertCircle } from 'lucide-react'
+import { Loader2, X, CheckCircle } from 'lucide-react'
 import { Form, FormField } from '@/lib/supabase'
+import { toastSuccess, toastError } from '@/lib/toast'
 
 interface FillFormModalProps {
   isOpen: boolean
@@ -39,7 +39,6 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form }
   const { data: session } = useSession()
   const [formData, setFormData] = useState<Record<string, unknown>>({})
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
   // Reset form data when modal opens
@@ -54,8 +53,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form }
         }
       })
       setFormData(initialData)
-      setError('')
-      setSuccess(false)
+      setSuccess(false) // Reset success state when modal opens
     }
   }, [isOpen, form])
 
@@ -83,17 +81,16 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form }
     
     const validationError = validateForm()
     if (validationError) {
-      setError(validationError)
+      toastError(validationError)
       return
     }
 
     if (!session?.user?.id) {
-      setError('You must be logged in to submit a form')
+      toastError('You must be logged in to submit a form')
       return
     }
 
     setLoading(true)
-    setError('')
 
     try {
       console.log('Submitting form with data:', formData)
@@ -102,16 +99,20 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form }
       
       if (result.success && result.data) {
         setSuccess(true)
+        toastSuccess('Form submitted successfully!')
         setTimeout(() => {
           onFormSubmitted()
           onClose()
-        }, 2000)
+          setSuccess(false) // Reset success state when closing
+        }, 1500)
       } else {
-        setError(result.error || 'Failed to submit form. Please try again.')
+        toastError(result.error || 'Failed to submit form. Please try again.')
       }
     } catch (error) {
       console.error('Error submitting form:', error)
-      setError('An error occurred while submitting the form')
+      toastError('An error occurred while submitting the form', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
     } finally {
       setLoading(false)
     }
@@ -333,13 +334,6 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form }
               </Card>
             ))}
           </div>
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
 
           <DialogFooter>
             <Button

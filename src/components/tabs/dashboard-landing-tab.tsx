@@ -369,7 +369,7 @@ export default function DashboardLandingTab({ onNavigateToTab, currentSpaceId }:
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                              className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleRemoveWidget(item.widgetConfig!.id)
