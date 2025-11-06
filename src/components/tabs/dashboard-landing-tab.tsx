@@ -308,20 +308,20 @@ export default function DashboardLandingTab({ onNavigateToTab, currentSpaceId }:
                                   <span className="text-sm">Add Widget</span>
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-64">
+                              <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]">
                                 <div className="space-y-1">
                                   <p className="text-sm font-semibold mb-2">Select a widget to add:</p>
                                   {availableWidgetsForSlot.map((widget) => (
                                     <Button
                                       key={widget.widget_key}
                                       variant="ghost"
-                                      className="w-full justify-start text-left h-auto py-2"
+                                      className="w-full justify-start text-left h-auto py-2 whitespace-normal"
                                       onClick={() => handleAddWidget(widget.widget_key, index)}
                                     >
-                                      <div className="flex flex-col items-start">
-                                        <span className="text-sm font-medium">{widget.name}</span>
+                                      <div className="flex flex-col items-start w-full min-w-0">
+                                        <span className="text-sm font-medium break-words w-full">{widget.name}</span>
                                         {widget.description && (
-                                          <span className="text-xs text-gray-500">{widget.description}</span>
+                                          <span className="text-xs text-gray-500 break-words w-full">{widget.description}</span>
                                         )}
                                       </div>
                                     </Button>
