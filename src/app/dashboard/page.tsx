@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, startTransition } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
@@ -54,7 +54,8 @@ function DashboardContent() {
     }
     
     const validTabs: TabType[] = ['spaces', 'dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug']
-    if (tabParam && validTabs.includes(tabParam)) {
+    // Only update activeTab if it's different to prevent unnecessary re-renders
+    if (tabParam && validTabs.includes(tabParam) && activeTab !== tabParam) {
       console.log('Setting active tab to:', tabParam)
       setActiveTab(tabParam)
     }
@@ -66,10 +67,16 @@ function DashboardContent() {
     
     if (spaceParam) {
       console.log('Setting current space to:', spaceParam)
-      setCurrentSpaceId(spaceParam)
-      setSelectedCompany(spaceParam) // Space ID is the company ID
+      if (currentSpaceId !== spaceParam) {
+        setCurrentSpaceId(spaceParam)
+        setSelectedCompany(spaceParam) // Space ID is the company ID
+      }
+    } else if (!spaceParam && currentSpaceId !== null && tabParam === 'spaces') {
+      // URL has no space param but we have a space - clear it (only when on spaces tab)
+      setCurrentSpaceId(null)
+      setSelectedCompany(null)
     }
-  }, [searchParams, session, router])
+  }, [searchParams, session, router, activeTab, currentSpaceId])
   
   // Initialize space for non-admin users - they should go straight to their space
   useEffect(() => {
@@ -231,9 +238,12 @@ function DashboardContent() {
     
     if (spaceId === null) {
       // Exiting space - go back to spaces view (admin only)
-      setCurrentSpaceId(null)
-      setSelectedCompany(null)
-      setActiveTab('spaces')
+      // Batch all state updates together to prevent stuttering
+      startTransition(() => {
+        setCurrentSpaceId(null)
+        setSelectedCompany(null)
+        setActiveTab('spaces')
+      })
       router.push('/dashboard?tab=spaces')
     } else {
       handleSelectSpace(spaceId)

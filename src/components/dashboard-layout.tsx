@@ -185,7 +185,7 @@ export default function DashboardLayout({
                  const isActive = activeTab === item.id
                  
                  const handleNavClick = () => {
-                   // If clicking Spaces while in a space, exit the space
+                   // If clicking Spaces while in a space, exit the space and switch tab
                    if (item.id === 'spaces' && currentSpaceId && onSpaceChange) {
                      onSpaceChange(null)
                    } else {
