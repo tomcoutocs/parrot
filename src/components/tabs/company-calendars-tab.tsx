@@ -17,7 +17,9 @@ import {
   ChevronRight,
   Filter,
   Eye,
-  EyeOff
+  EyeOff,
+  Calendar as CalendarIcon,
+  Lightbulb
 } from 'lucide-react'
 import {
   Dialog,
@@ -368,7 +370,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
             <div key={index} className={getDayClassNames(day, expanded)}>
               {/* Date Number and Expand Button */}
               <div className="flex items-center justify-between mb-2">
-                <span className={isToday(day) ? "bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs" : ""}>
+                <span className={isToday(day) ? "bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium" : "text-foreground"}>
                   {getDate(day)}
                 </span>
                 {hasEvents && (
@@ -620,7 +622,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
       return (
         <div className="grid grid-cols-7 gap-0">
           {days.map(day => (
-            <div key={day.toISOString()} className="h-12 flex items-center justify-center font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">
+            <div key={day.toISOString()} className="h-12 flex items-center justify-center text-xs font-medium text-muted-foreground bg-muted/20 border-b border-border/40">
               {format(day, 'EEE')}
             </div>
           ))}
@@ -632,7 +634,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
     return (
       <div className="grid grid-cols-7 gap-0">
         {days.map(day => (
-          <div key={day} className="h-12 flex items-center justify-center font-semibold text-gray-700 bg-gray-50 border-b border-gray-200">
+          <div key={day} className="h-12 flex items-center justify-center text-xs font-medium text-muted-foreground bg-muted/20 border-b border-border/40">
             {day}
           </div>
         ))}
@@ -641,21 +643,21 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
   }
 
   const getDayClassNames = (date: Date, expanded: boolean) => {
-    let baseClasses = "min-h-32 p-2 border-r border-b border-gray-200 text-sm relative transition-all duration-300 ease-in-out"
+    let baseClasses = "min-h-24 p-2 border-r border-b border-border/40 text-sm relative transition-all duration-300 ease-in-out"
     
     if (filterType === 'today') {
-      baseClasses = "min-h-96 p-4 border border-gray-200 text-sm relative transition-all duration-300 ease-in-out"
+      baseClasses = "min-h-96 p-4 border border-border/40 text-sm relative transition-all duration-300 ease-in-out"
     }
     
     if (expanded) {
-      baseClasses = baseClasses.replace('min-h-32', 'min-h-96')
+      baseClasses = baseClasses.replace('min-h-24', 'min-h-96')
       if (filterType === 'today') {
         baseClasses = baseClasses.replace('min-h-96', 'min-h-[32rem]')
       }
     }
     
-    const todayClasses = isToday(date) ? "bg-blue-50 font-semibold" : ""
-    const otherMonthClasses = !isSameMonth(date, currentMonth) && filterType !== 'today' && filterType !== 'this-week' ? "text-gray-300 bg-gray-50" : ""
+    const todayClasses = isToday(date) ? "bg-blue-500/20" : ""
+    const otherMonthClasses = !isSameMonth(date, currentMonth) && filterType !== 'today' && filterType !== 'this-week' ? "text-muted-foreground/50 bg-muted/10" : "bg-background"
     
     return `${baseClasses} ${todayClasses} ${otherMonthClasses}`.trim()
   }
@@ -729,8 +731,30 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
   }
 
   const getFilterCount = (type: FilterType) => {
-    const filtered = getFilteredEvents()
-    return filtered.length
+    const now = new Date()
+    
+    switch (type) {
+      case 'today':
+        return events.filter(event => 
+          isSameDay(parseISO(event.start_date), now)
+        ).length
+      case 'this-week':
+        const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+        const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
+        return events.filter(event => 
+          isWithinInterval(parseISO(event.start_date), { start: weekStart, end: weekEnd })
+        ).length
+      case 'this-month':
+        const monthStart = startOfMonth(now)
+        const monthEnd = endOfMonth(now)
+        return events.filter(event => 
+          isWithinInterval(parseISO(event.start_date), { start: monthStart, end: monthEnd })
+        ).length
+      case 'all':
+        return events.length
+      default:
+        return 0
+    }
   }
 
   const formatTime = (time: string) => {
@@ -842,8 +866,8 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Building className="w-5 h-5 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Company Calendar</h3>
+            <CalendarIcon className="w-5 h-5 text-foreground" />
+            <h3 className="text-lg font-semibold text-foreground">Company Calendar</h3>
             <Badge variant="secondary" className="ml-2">
               {getFilterCount(filterType)} events
             </Badge>
@@ -862,7 +886,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
             
             <Button
               onClick={() => setShowCreateDialog(true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
             >
               <Plus className="w-4 h-4" />
               Add Event
@@ -873,10 +897,10 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
         {/* Company Selection (Admin Only) */}
         {isAdmin && (
           <div className="flex items-center gap-2 mb-4">
-            <Label htmlFor="company-select" className="text-sm font-medium text-gray-700">
+            <Label htmlFor="company-select" className="text-sm font-medium text-foreground">
               Company:
             </Label>
-                         <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
               <SelectTrigger id="company-select" className="w-64">
                 <SelectValue placeholder="Select a company" />
               </SelectTrigger>
@@ -892,9 +916,8 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
         )}
 
         {/* Filter Options */}
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm text-gray-600 mr-2">Show:</span>
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-sm text-muted-foreground mr-2">Show:</span>
           
           <div className="flex gap-1">
             {(['today', 'this-week', 'this-month', 'all'] as FilterType[]).map((type) => (
@@ -903,42 +926,43 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
                 variant={filterType === type ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => handleFilterChange(type)}
-                className="text-xs px-3 py-1 h-8"
+                className={`text-xs px-3 py-1 h-8 ${
+                  filterType === type 
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+                    : 'bg-background hover:bg-muted'
+                }`}
               >
-                {getFilterLabel(type)}
-                <Badge variant="secondary" className="ml-1 text-xs">
-                  {getFilterCount(type)}
-                </Badge>
+                {getFilterLabel(type)} {getFilterCount(type)}
               </Button>
             ))}
           </div>
           
           {/* Help text */}
-          <div className="ml-4 text-xs text-gray-500 flex items-center gap-1">
-            <span>💡</span>
+          <div className="ml-4 text-xs text-muted-foreground flex items-center gap-1">
+            <Lightbulb className="w-3.5 h-3.5" />
             <span>Click + on days with events to expand • Click event titles or + buttons to expand event details</span>
           </div>
         </div>
 
         {/* Calendar Navigation */}
         {shouldShowMonthNavigation() && (
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-center gap-4 mb-4">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigateMonth('prev')}
-              className="p-2 hover:bg-gray-100"
+              className="p-2 hover:bg-muted"
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-foreground">
               {getCalendarTitle()}
             </h2>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigateMonth('next')}
-              className="p-2 hover:bg-gray-100"
+              className="p-2 hover:bg-muted"
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -947,9 +971,9 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
       </div>
 
       {/* Calendar Grid */}
-      <Card className="parrot-card-enhanced">
+      <Card className="border-border/60">
         <CardContent className="p-0">
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-border/60 rounded-lg overflow-hidden">
             {renderCalendarHeader()}
             <div className="grid grid-cols-7 auto-rows-auto gap-0 [&>*:nth-child(7n)]:border-r-0">
               {renderCalendarDays()}
@@ -959,41 +983,37 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
       </Card>
 
       {/* Summary Stats */}
-      <div className="mt-6 grid grid-cols-4 gap-4 text-center">
-        <div className="bg-blue-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-blue-600">{events.length}</div>
-          <div className="text-sm text-blue-600">Total Events</div>
-        </div>
-        <div className="bg-green-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-green-600">
-            {filterType === 'today' 
-              ? events.filter(e => isSameDay(parseISO(e.start_date), new Date())).length
-              : filterType === 'this-week'
-              ? events.filter(e => {
-                  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
-                  const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 })
-                  return isWithinInterval(parseISO(e.start_date), { start: weekStart, end: weekEnd })
-                }).length
-              : events.filter(e => isSameMonth(parseISO(e.start_date), currentMonth)).length
-            }
-          </div>
-          <div className="text-sm text-green-600">
-            {filterType === 'today' ? 'Today' : 
-             filterType === 'this-week' ? 'This Week' : 'This Month'}
-          </div>
-        </div>
-        <div className="bg-purple-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-purple-600">
-            {events.filter(e => isSameDay(parseISO(e.start_date), new Date())).length}
-          </div>
-          <div className="text-sm text-purple-600">Today</div>
-        </div>
-        <div className="bg-orange-50 rounded-lg p-3">
-          <div className="text-2xl font-bold text-orange-600">
-            {getFilterCount(filterType)}
-          </div>
-          <div className="text-sm text-orange-600">Filtered</div>
-        </div>
+      <div className="mt-6 grid grid-cols-4 gap-4">
+        <Card className="bg-blue-500 text-white border-0">
+          <CardContent className="p-4 text-center">
+            <div className="text-2xl font-bold">{events.length}</div>
+            <div className="text-sm opacity-90">Total Events</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-500 text-white border-0">
+          <CardContent className="p-4 text-center">
+            <div className="text-2xl font-bold">
+              {events.filter(e => isSameMonth(parseISO(e.start_date), currentMonth)).length}
+            </div>
+            <div className="text-sm opacity-90">This Month</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-purple-500 text-white border-0">
+          <CardContent className="p-4 text-center">
+            <div className="text-2xl font-bold">
+              {events.filter(e => isSameDay(parseISO(e.start_date), new Date())).length}
+            </div>
+            <div className="text-sm opacity-90">Today</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-orange-500 text-white border-0">
+          <CardContent className="p-4 text-center">
+            <div className="text-2xl font-bold">
+              {getFilterCount(filterType)}
+            </div>
+            <div className="text-sm opacity-90">Filtered</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Error Display */}

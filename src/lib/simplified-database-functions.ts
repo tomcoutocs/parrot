@@ -280,6 +280,39 @@ export function invalidateProjectCache() {
   console.warn('Cache invalidation temporarily disabled')
 }
 
+// Fetch company events for calendar
+export async function fetchCompanyEvents(companyId: string): Promise<Array<{
+  id: string
+  company_id: string
+  title: string
+  description?: string
+  start_date: string
+  end_date?: string
+  created_at: string
+  updated_at: string
+}>> {
+  if (!supabase) return []
+
+  try {
+    await setAppContext()
+    const { data, error } = await supabase
+      .from('company_events')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('start_date', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching company events:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error fetching company events:', error)
+    return []
+  }
+}
+
 // Export other functions that might be needed
 export * from './database-functions'
 

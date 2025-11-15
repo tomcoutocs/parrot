@@ -1,0 +1,71 @@
+"use client"
+
+import { 
+  LayoutDashboard, 
+  CheckSquare, 
+  FileText, 
+  Calendar,
+  BarChart3,
+  Users,
+  Settings
+} from "lucide-react"
+
+interface NavigationItem {
+  id: string
+  label: string
+  icon: React.ReactNode
+  roles?: ('admin' | 'manager' | 'user' | 'internal')[]
+}
+
+interface ModernNavigationProps {
+  activeTab: string
+  onTabChange: (tabId: string) => void
+  userRole?: 'admin' | 'manager' | 'user' | 'internal'
+}
+
+const navigationItems: NavigationItem[] = [
+  { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
+  { id: "tasks", label: "Projects", icon: <CheckSquare className="w-4 h-4" /> },
+  { id: "documents", label: "Documents", icon: <FileText className="w-4 h-4" /> },
+  { id: "calendar", label: "Calendar", icon: <Calendar className="w-4 h-4" /> },
+  { id: "reports", label: "Reports", icon: <BarChart3 className="w-4 h-4" /> },
+  { id: "users", label: "Users", icon: <Users className="w-4 h-4" />, roles: ['admin', 'manager'] },
+  { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" />, roles: ['admin', 'manager'] },
+]
+
+export function ModernNavigation({ activeTab, onTabChange, userRole }: ModernNavigationProps) {
+  // Filter navigation items based on user role
+  const visibleItems = navigationItems.filter(item => {
+    // If no roles specified, item is visible to all
+    if (!item.roles) return true
+    // Check if user role is in allowed roles
+    return userRole && item.roles.includes(userRole)
+  })
+
+  return (
+    <div className="border-b border-border/50">
+      <div className="flex items-center gap-5">
+        {visibleItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onTabChange(item.id)}
+            className={`
+              relative flex items-center gap-2 px-1 pb-2.5 text-sm transition-colors
+              ${activeTab === item.id 
+                ? "text-foreground" 
+                : "text-muted-foreground hover:text-foreground"
+              }
+            `}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+            {activeTab === item.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+

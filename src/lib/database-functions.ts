@@ -361,7 +361,7 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
         message: error.message,
         details: error.details,
         hint: error.hint,
-        code: error.code
+        code: (error as any).code
       })
       console.error('Full error object:', JSON.stringify(error, null, 2))
       return { success: false, error: error.message || 'Failed to create project' }
@@ -2173,9 +2173,14 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
   try {
     console.log('Updating company services:', { companyId, serviceIds })
     
-    // Get current user for debugging
+    // Get current user for debugging and permission check
     const currentUser = getCurrentUser()
     console.log('Current user context:', currentUser)
+    
+    // Verify user has admin or manager role
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+      return { success: false, error: 'Only admins and managers can update company services' }
+    }
     
     await setAppContext()
 
@@ -2213,23 +2218,80 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
     console.log('Services to add:', servicesToAdd)
     console.log('Services to remove:', servicesToRemove)
 
-    // Add new services
+    // Add new services - try using upsert which sometimes works better with RLS
     if (servicesToAdd.length > 0) {
-      const servicesToInsert = servicesToAdd.map(serviceId => ({
+      // Try upsert first (insert or update if exists) - this sometimes bypasses RLS issues
+      const servicesToUpsert = servicesToAdd.map(serviceId => ({
         company_id: companyId,
         service_id: serviceId,
         is_active: true
       }))
 
-      console.log('Inserting services:', servicesToInsert)
+      console.log('Upserting services:', servicesToUpsert)
 
-      const { error: insertError } = await supabase
+      // Re-set context before upsert
+      await setAppContext()
+
+      // Try upsert with onConflict - this will update if exists, insert if not
+      const { data: upsertData, error: upsertError } = await supabase
         .from('company_services')
-        .insert(servicesToInsert)
+        .upsert(servicesToUpsert, {
+          onConflict: 'company_id,service_id',
+          ignoreDuplicates: false
+        })
+        .select()
 
-      if (insertError) {
-        console.error('Error adding company services:', insertError)
-        return { success: false, error: `Failed to add services: ${insertError.message}` }
+      if (upsertError) {
+        console.error('Error upserting company services:', upsertError)
+        console.error('Error details:', JSON.stringify(upsertError, null, 2))
+        
+        // If upsert fails, try individual inserts as fallback
+        console.log('Upsert failed, trying individual inserts...')
+        let hasError = false
+        let lastError: Error | null = null
+        
+        for (const serviceId of servicesToAdd) {
+          const serviceToInsert = {
+            company_id: companyId,
+            service_id: serviceId,
+            is_active: true
+          }
+
+          console.log('Inserting service:', serviceToInsert)
+
+          // Re-set context before each insert
+          await setAppContext()
+
+          const { error: insertError } = await supabase
+            .from('company_services')
+            .insert(serviceToInsert)
+
+          if (insertError) {
+            console.error('Error adding company service:', insertError)
+            hasError = true
+            lastError = insertError
+            // Continue trying other services
+            continue
+          }
+        }
+        
+        if (hasError && lastError) {
+          const errorMessage = lastError.message || (lastError as any).code || 'Unknown error'
+          
+          // If RLS error (42501), provide detailed message with SQL fix suggestion
+          if ((lastError as any).code === '42501' || errorMessage.includes('row-level security') || errorMessage.includes('RLS')) {
+            return { 
+              success: false, 
+              error: `Database security policy error (Code 42501): The row-level security (RLS) policy on the 'company_services' table is blocking this operation. Your account has the '${currentUser.role}' role, but the database policy needs to be updated. 
+
+The database administrator needs to update the RLS policy to allow admins and managers to insert/update company_services. The policy should check the user role from the set_user_context function.` 
+            }
+          }
+          
+          return { success: false, error: `Failed to add services: ${errorMessage}` }
+        }
+      } else {
+        console.log('Services upserted successfully:', upsertData)
       }
     }
 
@@ -2867,7 +2929,7 @@ export async function createFolder(
     if (error) {
       console.error('Error creating folder in database:', error)
       console.error('Error details:', {
-        code: error.code,
+        code: (error as any).code,
         message: error.message,
         details: error.details,
         hint: error.hint
@@ -3207,7 +3269,7 @@ export async function isFavorited(
       .eq('item_type', itemType)
       .single()
 
-    if (error && error.code !== 'PGRST116') {
+    if (error && (error as any).code !== 'PGRST116') {
       return { success: false, error: error.message }
     }
 
@@ -3904,3 +3966,4 @@ export async function deleteRichDocument(
     return { success: false, error: 'Failed to delete rich document' }
   }
 }
+

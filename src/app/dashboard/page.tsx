@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, Suspense, startTransition } from 'react'
+import { useState, useEffect, Suspense, startTransition, useRef } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
+import { ModernDashboardLayout } from '@/components/modern-dashboard-layout'
 import LazyTabComponent, { preloadCriticalTabs } from '@/components/lazy-tab-loader'
 import { loadDashboardData, cleanupSubscriptions } from '@/lib/simplified-database-functions'
 
@@ -11,6 +12,7 @@ function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isChangingTabRef = useRef(false)
   // Initialize tab based on user role - non-admin users go straight to dashboard
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     // Default to spaces for admin, dashboard for non-admin (will be set properly once session loads)
@@ -53,9 +55,10 @@ function DashboardContent() {
       }
     }
     
-    const validTabs: TabType[] = ['spaces', 'dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug']
+    const validTabs: TabType[] = ['spaces', 'dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug', 'reports', 'settings']
     // Only update activeTab if it's different to prevent unnecessary re-renders
-    if (tabParam && validTabs.includes(tabParam) && activeTab !== tabParam) {
+    // Only sync from URL if we're not already in the process of changing tabs
+    if (tabParam && validTabs.includes(tabParam) && activeTab !== tabParam && !isChangingTabRef.current) {
       console.log('Setting active tab to:', tabParam)
       setActiveTab(tabParam)
     }
@@ -71,12 +74,18 @@ function DashboardContent() {
         setCurrentSpaceId(spaceParam)
         setSelectedCompany(spaceParam) // Space ID is the company ID
       }
-    } else if (!spaceParam && currentSpaceId !== null && tabParam === 'spaces') {
-      // URL has no space param but we have a space - clear it (only when on spaces tab)
-      setCurrentSpaceId(null)
-      setSelectedCompany(null)
+    } else if (!spaceParam && currentSpaceId !== null) {
+      // URL has no space param but we have a space - clear it
+      // This happens when switching to admin views
+      // BUT: Don't clear space if we're switching to a space-required tab (like settings)
+      // The tab change handler should have included the space in the URL
+      const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'forms', 'services', 'company-calendars', 'documents', 'settings']
+      if (!spaceRequiredTabs.includes(tabParam as TabType)) {
+        setCurrentSpaceId(null)
+        setSelectedCompany(null)
+      }
     }
-  }, [searchParams, session, router, activeTab, currentSpaceId])
+  }, [searchParams, session, router, currentSpaceId]) // Removed activeTab from dependencies to prevent loop
   
   // Initialize space for non-admin users - they should go straight to their space
   useEffect(() => {
@@ -162,6 +171,9 @@ function DashboardContent() {
   }
 
   const handleTabChange = (tab: TabType) => {
+    // Mark that we're changing tabs to prevent useEffect from interfering
+    isChangingTabRef.current = true
+    
     // Security check - prevent non-admin users from accessing admin-only tabs
     const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
     if (adminOnlyTabs.includes(tab) && session?.user?.role !== 'admin') {
@@ -170,6 +182,7 @@ function DashboardContent() {
       if (session?.user?.company_id) {
         setActiveTab('dashboard')
         router.push(`/dashboard?tab=dashboard&space=${session.user.company_id}`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
       }
       return
     }
@@ -178,10 +191,12 @@ function DashboardContent() {
     if (adminOnlyTabs.includes(tab)) {
       setActiveTab(tab)
       router.push(`/dashboard?tab=${tab}`)
+      setTimeout(() => { isChangingTabRef.current = false }, 100)
       return
     }
     
     // If switching to a space tab that requires being in a space, ensure we have a space
+    // Reports can be accessed without a space (shows all data or a message)
     const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'forms', 'services', 'company-calendars', 'documents']
     if (spaceRequiredTabs.includes(tab) && !currentSpaceId) {
       // For non-admin users, automatically use their company_id as space
@@ -190,6 +205,7 @@ function DashboardContent() {
         setSelectedCompany(session.user.company_id)
         setActiveTab(tab)
         router.push(`/dashboard?tab=${tab}&space=${session.user.company_id}`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
         return
       }
       // For admin users, they need to select a space first - stay on spaces tab
@@ -197,17 +213,56 @@ function DashboardContent() {
       if (activeTab !== 'spaces') {
         setActiveTab('spaces')
       }
+      setTimeout(() => { isChangingTabRef.current = false }, 100)
+      return
+    }
+    
+    // Settings tab - always requires a space
+    if (tab === 'settings') {
+      // If we have a current space, use it
+      if (currentSpaceId) {
+        setActiveTab('settings')
+        router.push(`/dashboard?tab=settings&space=${currentSpaceId}`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
+        return
+      }
+      
+      // For non-admin users, automatically use their company_id as space
+      if (session?.user?.role !== 'admin' && session?.user?.company_id) {
+        setCurrentSpaceId(session.user.company_id)
+        setSelectedCompany(session.user.company_id)
+        setActiveTab('settings')
+        router.push(`/dashboard?tab=settings&space=${session.user.company_id}`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
+        return
+      }
+      
+      // For admin users without a space, redirect to spaces to select one
+      // Settings always needs a space context
+      if (activeTab !== 'spaces') {
+        setActiveTab('spaces')
+      }
+      setTimeout(() => { isChangingTabRef.current = false }, 100)
+      return
+    }
+    
+    // Reports tab can be accessed without a space - allow it
+    if (tab === 'reports' && !currentSpaceId) {
+      setActiveTab('reports')
+      router.push(`/dashboard?tab=reports`)
+      setTimeout(() => { isChangingTabRef.current = false }, 100)
       return
     }
     
     // Normal tab switch
     setActiveTab(tab)
-    // Update URL if we have a space
+    // Update URL - always include space if we have one (especially for settings)
     if (currentSpaceId) {
       router.push(`/dashboard?tab=${tab}&space=${currentSpaceId}`)
     } else {
       router.push(`/dashboard?tab=${tab}`)
     }
+    setTimeout(() => { isChangingTabRef.current = false }, 100)
   }
 
   const handleNavigateToTab = (tab: string) => {
@@ -250,26 +305,85 @@ function DashboardContent() {
     }
   }
 
+  // Map internal tab names to display names for modern navigation
+  const getDisplayTab = (tab: TabType): string => {
+    if (currentSpaceId) {
+      // Client view tabs
+      const clientTabMap: Record<TabType, string> = {
+        'dashboard': 'overview',
+        'projects': 'tasks',
+        'documents': 'documents',
+        'company-calendars': 'calendar',
+        'admin': 'users',
+        'reports': 'reports',
+        'settings': 'settings',
+        'spaces': 'overview',
+        'forms': 'overview',
+        'services': 'overview',
+        'companies': 'overview',
+        'project-overview': 'overview',
+        'debug': 'overview',
+      }
+      return clientTabMap[tab] || 'overview'
+    }
+    return 'overview'
+  }
+
+  const handleModernTabChange = (tabId: string) => {
+    // Map modern tab IDs back to internal tab names
+    const tabMap: Record<string, TabType> = {
+      'overview': 'dashboard',
+      'tasks': 'projects',
+      'documents': 'documents',
+      'calendar': 'company-calendars',
+      'reports': 'reports',
+      'users': 'admin',
+      'settings': 'settings',
+    }
+    const internalTab = tabMap[tabId] || 'dashboard'
+    
+    // Security check: prevent non-manager/admin users from accessing users tab
+    if (internalTab === 'admin' && session?.user?.role !== 'admin' && session?.user?.role !== 'manager') {
+      console.warn('Non-manager user attempted to access users tab')
+      // Redirect to dashboard
+      handleTabChange('dashboard')
+      return
+    }
+    
+    // Security check: prevent non-manager/admin users from accessing settings tab
+    if (internalTab === 'settings' && session?.user?.role !== 'admin' && session?.user?.role !== 'manager') {
+      console.warn('Non-manager user attempted to access settings tab')
+      // Redirect to dashboard
+      handleTabChange('dashboard')
+      return
+    }
+    
+    handleTabChange(internalTab)
+  }
+
   return (
-    <DashboardLayout 
-      activeTab={activeTab} 
-      onTabChange={handleTabChange}
-      breadcrumbContext={breadcrumbContext}
+    <ModernDashboardLayout
+      activeTab={activeTab}
+      onTabChange={handleModernTabChange}
       currentSpaceId={currentSpaceId}
       onSpaceChange={handleSpaceChange}
     >
-      <div className="min-h-full">
-        {/* Lazy Loaded Tab Content */}
-        <LazyTabComponent 
-          tabName={activeTab} 
-          selectedCompany={selectedCompany} 
-          onNavigateToTab={handleNavigateToTab}
-          onBreadcrumbContextChange={setBreadcrumbContext}
-          currentSpaceId={currentSpaceId}
-          onSelectSpace={handleSelectSpace}
-        />
-      </div>
-    </DashboardLayout>
+             <div className="min-h-full">
+               {/* Lazy Loaded Tab Content - only show for tabs not handled by ModernDashboardLayout */}
+               {/* ModernDashboardLayout now handles: dashboard, projects, documents, company-calendars, reports, admin, settings */}
+               {/* Only render LazyTabComponent for other tabs */}
+               {!['dashboard', 'projects', 'documents', 'company-calendars', 'reports', 'admin', 'settings'].includes(activeTab) && (
+                 <LazyTabComponent 
+                   tabName={activeTab} 
+                   selectedCompany={selectedCompany} 
+                   onNavigateToTab={handleNavigateToTab}
+                   onBreadcrumbContextChange={setBreadcrumbContext}
+                   currentSpaceId={currentSpaceId}
+                   onSelectSpace={handleSelectSpace}
+                 />
+               )}
+             </div>
+    </ModernDashboardLayout>
   )
 }
 
