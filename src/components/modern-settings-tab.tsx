@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock } from "lucide-react"
+import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -46,6 +46,8 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
     is_partner: false,
     selectedServices: [] as string[],
     managerId: "",
+    retainer: "",
+    revenue: "",
   })
 
   useEffect(() => {
@@ -65,6 +67,8 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
         is_partner: false,
         selectedServices: [],
         managerId: "",
+        retainer: "",
+        revenue: "",
       })
     }
   }, [activeSpace])
@@ -99,6 +103,8 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
           is_partner: spaceCompany.is_partner || false,
           selectedServices: selectedServiceIds,
           managerId: "", // We'll need to fetch this separately if needed
+          retainer: spaceCompany.retainer?.toString() || "",
+          revenue: spaceCompany.revenue?.toString() || "",
         })
       }
       
@@ -138,6 +144,8 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
         address: formData.address || undefined,
         is_active: formData.is_active,
         is_partner: formData.is_partner,
+        retainer: formData.retainer ? parseFloat(formData.retainer) : undefined,
+        revenue: formData.revenue ? parseFloat(formData.revenue) : undefined,
       })
 
       if (!updateResult.success) {
@@ -341,6 +349,50 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
                   No services available
                 </p>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Financial Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <DollarSign className="w-4 h-4" />
+              Financial Information
+            </CardTitle>
+            <CardDescription>
+              Retainer and revenue details
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="retainer">Monthly Retainer</Label>
+              <Input
+                id="retainer"
+                type="number"
+                step="0.01"
+                value={formData.retainer}
+                onChange={(e) => setFormData({ ...formData, retainer: e.target.value })}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Monthly retainer amount for this space
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="revenue">Revenue</Label>
+              <Input
+                id="revenue"
+                type="number"
+                step="0.01"
+                value={formData.revenue}
+                onChange={(e) => setFormData({ ...formData, revenue: e.target.value })}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Total revenue for this space
+              </p>
             </div>
           </CardContent>
         </Card>

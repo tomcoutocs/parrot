@@ -65,21 +65,48 @@ export function ModernDashboardLayout({
 
   const isAdmin = session?.user?.role === "admin"
   
-  // Initialize viewMode based on URL parameters on mount only
+  // Initialize viewMode based on URL parameters and space selection
+  // Use stable dependencies to avoid array size changes
+  const userRole = session?.user?.role ?? null
+  
   useEffect(() => {
-    // On initial load, determine viewMode from URL
-    // If we have a space and are on a client tab, start in client mode
-    // Reports can be accessed in client mode even without a space
-    // Otherwise, start in admin mode (for admins)
-    if (currentSpaceId && (activeTab === "projects" || activeTab === "dashboard" || activeTab === "documents" || activeTab === "company-calendars" || activeTab === "reports" || activeTab === "settings")) {
+    // Ensure we have session before determining viewMode
+    if (!session || !userRole) return
+    
+    // If we have a space selected, always stay in client mode
+    // This ensures space-specific tabs (like users) show space users, not admin team
+    if (currentSpaceId) {
       setViewMode("client")
-    } else if (activeTab === "reports" && !currentSpaceId) {
+      return
+    }
+    
+    // Admin-only tabs should be in admin mode only when no space is selected
+    // These tabs require admin mode: spaces, companies, project-overview, debug
+    // Note: "admin" tab is handled differently - it can be in client mode when in a space
+    const adminOnlyTabs = ['spaces', 'companies', 'project-overview', 'debug']
+    if (adminOnlyTabs.includes(activeTab)) {
+      setViewMode("admin")
+      return
+    }
+    
+    // "admin" tab (users) should switch to admin mode only if no space is selected
+    // When in a space, "admin" tab shows space users in client mode
+    if (activeTab === "admin" && !currentSpaceId) {
+      setViewMode("admin")
+      setAdminView("team") // Set adminView to "team" to show AdminTeam component
+      return
+    }
+    
+    // On initial load, determine viewMode from URL
+    // Reports can be accessed without a space - use client mode
+    // Otherwise, start in admin mode (for admins)
+    if (activeTab === "reports" && !currentSpaceId) {
       // Reports can be accessed without a space - use client mode
       setViewMode("client")
-    } else if (!currentSpaceId && isAdmin) {
+    } else if (!currentSpaceId && userRole === "admin") {
       setViewMode("admin")
     }
-  }, []) // Only run on mount - don't override user actions after that
+  }, [currentSpaceId, activeTab, userRole, session]) // Update when space or tab changes
 
   // Fetch manager for the current space
   useEffect(() => {
@@ -180,11 +207,25 @@ export function ModernDashboardLayout({
   // Removed this useEffect - it was forcing viewMode changes
   // Let user actions (clicks) control viewMode instead
 
-  const handleSpaceClick = (spaceId: string) => {
-    setCurrentSpace(spaces.find(s => s.id === spaceId) || null)
-    setViewMode("client")
+  const handleSpaceClick = (spaceId: string | null) => {
+    console.log('ModernDashboardLayout: handleSpaceClick called with spaceId:', spaceId)
+    // Find the space in the current spaces array
+    if (spaceId) {
+      const selectedSpace = spaces.find(s => s.id === spaceId)
+      if (selectedSpace) {
+        setCurrentSpace(selectedSpace)
+      }
+    } else {
+      setCurrentSpace(null)
+    }
+    // Switch to client mode immediately - this ensures we show space content, not spaces selection
+    // This must happen BEFORE onSpaceChange to prevent the spaces menu from showing
+    if (spaceId) {
+      setViewMode("client")
+    }
+    // Call onSpaceChange - handleSelectSpace will handle setting the tab to dashboard
+    // Don't call onTabChange here as it's redundant and can cause race conditions
     onSpaceChange?.(spaceId)
-    onTabChange("overview")
   }
 
   const handleViewModeChange = (mode: "admin" | "client") => {
@@ -196,6 +237,9 @@ export function ModernDashboardLayout({
   }
 
   const handleAdminViewChange = (view: string) => {
+    console.log('ModernDashboardLayout: handleAdminViewChange called with view:', view)
+    console.log('ModernDashboardLayout: Current currentSpaceId:', currentSpaceId)
+    
     // Map admin views to existing tabs for URL/routing
     // All admin views use "spaces" tab (which is the admin dashboard) except team which uses "admin" tab
     const tabMap: Record<string, string> = {
@@ -209,21 +253,25 @@ export function ModernDashboardLayout({
     }
     const mappedTab = tabMap[view] || "spaces"
     
-    // Set admin view and view mode FIRST - this ensures admin mode is set before clearing space
+    // Set admin view and view mode FIRST
     setAdminView(view)
     setViewMode("admin")
     
-    // Clear space and update URL to remove space parameter
+    // CRITICAL: Clear space and navigate in the correct order
+    // Call onTabChange FIRST to set the tab, then clear space
+    // This ensures handleSpaceChange knows we're already on an admin tab
+    onTabChange(mappedTab)
+    
+    // Clear space - handleSpaceChange will see we're on an admin tab and won't redirect
     setCurrentSpace(null)
     onSpaceChange?.(null)
     
     // Update URL to remove space parameter and set correct tab
+    // Use replace instead of push to avoid adding to history
     if (router) {
-      router.push(`/dashboard?tab=${mappedTab}`)
+      console.log('ModernDashboardLayout: Navigating to admin tab:', mappedTab)
+      router.replace(`/dashboard?tab=${mappedTab}`)
     }
-    
-    // Call onTabChange to ensure state is updated
-    onTabChange(mappedTab)
   }
 
   const handleClientTabChange = (tabId: string) => {
@@ -231,8 +279,8 @@ export function ModernDashboardLayout({
     if (tabId === "reports" && viewMode === "admin" && !currentSpaceId) {
       setViewMode("client")
     }
-    // If switching to settings and we have a space, ensure we're in client mode
-    if (tabId === "settings" && currentSpaceId && viewMode === "admin") {
+    // If switching to settings or users and we have a space, ensure we're in client mode
+    if ((tabId === "settings" || tabId === "users") && currentSpaceId && viewMode === "admin") {
       setViewMode("client")
     }
     // Pass through the display tab name to onTabChange
@@ -263,7 +311,7 @@ export function ModernDashboardLayout({
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative z-0">
         {/* Top Bar */}
         <div className="h-14 border-b border-border/50 flex items-center justify-between px-6">
           {viewMode === "admin" ? (

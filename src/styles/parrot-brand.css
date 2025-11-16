@@ -1,5 +1,49 @@
 /* Parrot Brand Colors and Gradients */
 
+/* Ensure dialogs are perfectly centered */
+[role="dialog"],
+[data-radix-dialog-content],
+[data-slot="dialog-content"] {
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  margin: 0 !important;
+  position: fixed !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+
+/* Add backdrop blur to all pop-up menus */
+[data-radix-dialog-overlay],
+[data-radix-dialog-overlay][data-state="open"],
+.fixed.inset-0.z-50.bg-background\/80 {
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* Add backdrop blur for Popover, DropdownMenu, and Select */
+/* Use body blur when these components are open */
+body:has([data-radix-popover-content][data-state="open"]),
+body:has([data-radix-dropdown-menu-content][data-state="open"]),
+body:has([data-radix-select-content][data-state="open"]) {
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Alternative: Add backdrop blur overlay using pseudo-element on body */
+body:has([data-radix-popover-content][data-state="open"])::before,
+body:has([data-radix-dropdown-menu-content][data-state="open"])::before,
+body:has([data-radix-select-content][data-state="open"])::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 49;
+  pointer-events: none;
+}
+
 /* Delete Dialog Centering Fix */
 .delete-dialog-centered {
   left: 50% !important;

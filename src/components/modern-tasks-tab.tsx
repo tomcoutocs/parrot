@@ -3,12 +3,15 @@
 import { CheckSquare, Clock, AlertCircle, MoreHorizontal, ChevronRight, Plus, Calendar, FolderKanban } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { TaskRow } from "./task-row"
 import { InlineTaskCreation } from "./inline-task-creation"
 import { BulkEditBar } from "./bulk-edit-bar"
-import { fetchProjectsOptimized, fetchTasksOptimized, fetchUsersOptimized } from "@/lib/simplified-database-functions"
+import { fetchProjectsOptimized, fetchTasksOptimized, fetchUsersOptimized, updateTaskPosition } from "@/lib/simplified-database-functions"
+import { updateTaskStatus } from "@/lib/database-functions"
 import { ProjectWithDetails, TaskWithDetails } from "@/lib/supabase"
 import { format } from "date-fns"
+import { useSession } from "@/components/providers/session-provider"
 import CreateProjectModal from "@/components/modals/create-project-modal"
 import CreateTaskModal from "@/components/modals/create-task-modal"
 import TaskDetailSidebar from "@/components/task-detail-sidebar"
@@ -35,6 +38,7 @@ interface Project {
   dueDate: string
   launchDate?: string
   statusGroups: StatusGroup[]
+  taskCount?: number
 }
 
 interface ModernTasksTabProps {
@@ -51,6 +55,14 @@ const statusGroupMap: Record<string, { name: string; color: string }> = {
   "review": { name: "REVIEW", color: "#f59e0b" },
   "done": { name: "DONE", color: "#10b981" },
   "completed": { name: "DONE", color: "#10b981" },
+}
+
+// Reverse map: status group name to database status
+const statusGroupToDbStatus: Record<string, string> = {
+  "IN PROGRESS": "in_progress",
+  "TO DO": "todo",
+  "REVIEW": "review",
+  "DONE": "done",
 }
 
 function transformTaskToDesignTask(task: TaskWithDetails): Task & { originalStatus?: string } {
@@ -108,18 +120,17 @@ function groupTasksByStatus(tasks: (Task & { originalStatus?: string })[]): Stat
   })
   
   // Convert to StatusGroup array, maintaining order: IN PROGRESS, TO DO, REVIEW, DONE
+  // ALWAYS show all status groups, even if empty
   const order = ["IN PROGRESS", "TO DO", "REVIEW", "DONE"]
   const orderedGroups: StatusGroup[] = []
   
   order.forEach(groupName => {
-    if (groups[groupName]) {
-      const groupInfo = Object.values(statusGroupMap).find(g => g.name === groupName) || statusGroupMap["todo"]
-      orderedGroups.push({
-        name: groupName,
-        color: groupInfo.color,
-        tasks: groups[groupName]
-      })
-    }
+    const groupInfo = Object.values(statusGroupMap).find(g => g.name === groupName) || statusGroupMap["todo"]
+    orderedGroups.push({
+      name: groupName,
+      color: groupInfo.color,
+      tasks: groups[groupName] || [] // Always include, even if empty
+    })
   })
   
   // Add any other groups that weren't in the order
@@ -139,6 +150,7 @@ function groupTasksByStatus(tasks: (Task & { originalStatus?: string })[]): Stat
 
 export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
   const [expandedProjects, setExpandedProjects] = useState<string[]>([])
   const [expandedStatuses, setExpandedStatuses] = useState<string[]>([])
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false)
@@ -203,7 +215,8 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
             name: project.name || "Unnamed Project",
             dueDate: "-",
             launchDate: undefined,
-            statusGroups
+            statusGroups,
+            taskCount: projectTasks.length // Store task count
           }
         })
         
@@ -278,9 +291,55 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     }
   }
 
-  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+  const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
     console.log("Updating task", taskId, updates)
-    // TODO: Update task in database
+    
+    // If status is being updated, update it in the database
+    if ('status' in updates && updates.status && session?.user?.id) {
+      try {
+        const task = tasksMap.get(taskId)
+        if (task) {
+          await updateTaskStatus(taskId, updates.status as TaskWithDetails['status'], session.user.id)
+          
+          // Reload projects to reflect the change
+          const loadData = async () => {
+            if (!activeSpace) return
+            const projectsData = await fetchProjectsOptimized(activeSpace)
+            const projectIds = projectsData.map(p => p.id)
+            const allTasksData = projectIds.length > 0 
+              ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+              : []
+            
+            const newTasksMap = new Map<string, TaskWithDetails>()
+            allTasksData.forEach(task => {
+              newTasksMap.set(task.id, task)
+            })
+            setTasksMap(newTasksMap)
+            
+            const transformedProjects: Project[] = projectsData.map((project) => {
+              const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+              const designTasks = projectTasks.map(transformTaskToDesignTask)
+              const statusGroups = groupTasksByStatus(designTasks)
+              
+              return {
+                id: project.id,
+                name: project.name || "Unnamed Project",
+                dueDate: "-",
+                launchDate: undefined,
+                statusGroups,
+                taskCount: projectTasks.length
+              }
+            })
+            
+            setProjects(transformedProjects)
+          }
+          loadData()
+        }
+      } catch (error) {
+        console.error("Error updating task status:", error)
+      }
+    }
+    // TODO: Handle other updates (priority, assignee, due date, etc.)
   }
 
   const handleTaskDelete = (taskId: string) => {
@@ -323,6 +382,107 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   const handleClearSelection = () => {
     setSelectedTasks([])
     setIsSelectionMode(false)
+  }
+
+  const handleDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId } = result
+
+    // If dropped outside a droppable area, do nothing
+    if (!destination) return
+
+    // If dropped in the same position, do nothing
+    if (destination.droppableId === source.droppableId && destination.index === source.index) {
+      return
+    }
+
+    // Parse the droppable ID format: "projectId-statusGroupName" (e.g., "project123-to-do")
+    // Find the project ID (everything before the first dash that matches a project ID)
+    let projectId = ''
+    let destStatusGroupName = ''
+    
+    // Try to find project ID by matching against known project IDs
+    for (const project of projects) {
+      if (destination.droppableId.startsWith(project.id + '-')) {
+        projectId = project.id
+        // Extract status group name (everything after projectId-)
+        const statusPart = destination.droppableId.substring(project.id.length + 1)
+        // Convert from "to-do" or "in-progress" format to "TO DO" or "IN PROGRESS"
+        // Map common variations to the correct uppercase format
+        const statusMap: Record<string, string> = {
+          'to-do': 'TO DO',
+          'in-progress': 'IN PROGRESS',
+          'review': 'REVIEW',
+          'done': 'DONE'
+        }
+        destStatusGroupName = statusMap[statusPart.toLowerCase()] || statusPart.split('-').map(word => 
+          word.toUpperCase()
+        ).join(' ')
+        break
+      }
+    }
+
+    if (!projectId || !destStatusGroupName) {
+      console.error("Could not parse droppable ID:", destination.droppableId)
+      return
+    }
+
+    // Find the project
+    const project = projects.find(p => p.id === projectId)
+    if (!project) return
+
+    // Get the task from the tasks map
+    const task = tasksMap.get(draggableId)
+    if (!task) return
+
+    // Convert status group name to database status
+    const newStatus = statusGroupToDbStatus[destStatusGroupName] as TaskWithDetails['status']
+    if (!newStatus) {
+      console.error("Could not map status group name to database status:", destStatusGroupName)
+      return
+    }
+
+    // Update task status in database
+    if (session?.user?.id) {
+      try {
+        await updateTaskPosition(draggableId, destination.index, newStatus, session.user.id)
+        
+        // Reload projects to reflect the change
+        const loadData = async () => {
+          if (!activeSpace) return
+          const projectsData = await fetchProjectsOptimized(activeSpace)
+          const projectIds = projectsData.map(p => p.id)
+          const allTasksData = projectIds.length > 0 
+            ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+            : []
+          
+          const newTasksMap = new Map<string, TaskWithDetails>()
+          allTasksData.forEach(task => {
+            newTasksMap.set(task.id, task)
+          })
+          setTasksMap(newTasksMap)
+          
+          const transformedProjects: Project[] = projectsData.map((project) => {
+            const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+            const designTasks = projectTasks.map(transformTaskToDesignTask)
+            const statusGroups = groupTasksByStatus(designTasks)
+            
+            return {
+              id: project.id,
+              name: project.name || "Unnamed Project",
+              dueDate: "-",
+              launchDate: undefined,
+              statusGroups,
+              taskCount: projectTasks.length
+            }
+          })
+          
+          setProjects(transformedProjects)
+        }
+        loadData()
+      } catch (error) {
+        console.error("Error updating task status:", error)
+      }
+    }
   }
 
   if (loading) {
@@ -402,6 +562,11 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                   }`}
                 />
                 <span className="text-sm font-medium">{project.name}</span>
+                {project.taskCount !== undefined && (
+                  <span className="text-xs text-muted-foreground ml-1.5">
+                    ({project.taskCount})
+                  </span>
+                )}
                 <div className="flex items-center gap-3 ml-2 text-xs">
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <Calendar className="w-3 h-3" />
@@ -419,87 +584,113 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
 
               {/* Project Content */}
               {isProjectExpanded && (
-                <div className="bg-muted/20">
-                  {project.statusGroups.map((statusGroup) => {
-                    const statusId = `${project.id}-${statusGroup.name.toLowerCase().replace(" ", "-")}`
-                    const isStatusExpanded = expandedStatuses.includes(statusId)
+                <DragDropContext onDragEnd={handleDragEnd}>
+                  <div className="bg-muted/20">
+                    {project.statusGroups.map((statusGroup) => {
+                      const statusId = `${project.id}-${statusGroup.name.toLowerCase().replace(" ", "-")}`
+                      const isStatusExpanded = expandedStatuses.includes(statusId)
+                      const droppableId = `${project.id}-${statusGroup.name.toLowerCase().replace(/\s+/g, "-")}`
 
-                    return (
-                      <div key={statusId} className="border-t border-border/40">
-                        {/* Status Group Header */}
-                        <button
-                          onClick={() => toggleStatus(statusId)}
-                          className="w-full flex items-center gap-2 px-8 py-2.5 hover:bg-muted/50 transition-colors"
-                        >
-                          <ChevronRight 
-                            className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${
-                              isStatusExpanded ? "rotate-90" : ""
-                            }`}
-                          />
-                          <div 
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: statusGroup.color }}
-                          />
-                          <span className="text-xs font-medium tracking-wide" style={{ color: statusGroup.color }}>
-                            {statusGroup.name} {statusGroup.tasks.length}
-                          </span>
-                        </button>
+                      return (
+                        <div key={statusId} className="border-t border-border/40">
+                          {/* Status Group Header */}
+                          <button
+                            onClick={() => toggleStatus(statusId)}
+                            className="w-full flex items-center gap-2 px-8 py-2.5 hover:bg-muted/50 transition-colors"
+                          >
+                            <ChevronRight 
+                              className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${
+                                isStatusExpanded ? "rotate-90" : ""
+                              }`}
+                            />
+                            <div 
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: statusGroup.color }}
+                            />
+                            <span className="text-xs font-medium tracking-wide" style={{ color: statusGroup.color }}>
+                              {statusGroup.name} {statusGroup.tasks.length}
+                            </span>
+                          </button>
 
-                        {/* Tasks List */}
-                        {isStatusExpanded && (
-                          <div className="pb-2">
-                            {/* Table Header */}
-                            <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
-                              <div className="col-span-5">Name</div>
-                              <div className="col-span-2">Assignee</div>
-                              <div className="col-span-2">Due date</div>
-                              <div className="col-span-2">Priority</div>
-                              <div className="col-span-1"></div>
-                            </div>
+                          {/* Tasks List */}
+                          {isStatusExpanded && (
+                            <Droppable droppableId={droppableId}>
+                              {(provided, snapshot) => (
+                                <div
+                                  {...provided.droppableProps}
+                                  ref={provided.innerRef}
+                                  className={`pb-2 ${snapshot.isDraggingOver ? 'bg-muted/40' : ''}`}
+                                >
+                                  {/* Table Header */}
+                                  <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
+                                    <div className="col-span-4">Name</div>
+                                    <div className="col-span-2">Assignee</div>
+                                    <div className="col-span-2">Status</div>
+                                    <div className="col-span-2">Due date</div>
+                                    <div className="col-span-1">Priority</div>
+                                    <div className="col-span-1"></div>
+                                  </div>
 
-                            {/* Tasks */}
-                            {statusGroup.tasks.map((task) => (
-                              <TaskRow
-                                key={task.id}
-                                task={task}
-                                isSelected={selectedTasks.includes(task.id)}
-                                onToggleSelect={handleToggleSelect}
-                                onUpdate={handleTaskUpdate}
-                                onDelete={handleTaskDelete}
-                                showMultiSelect={isSelectionMode}
-                                selectedTasks={selectedTasks}
-                                onTaskClick={handleTaskClick}
-                              />
-                            ))}
+                                  {/* Tasks */}
+                                  {statusGroup.tasks.map((task, index) => {
+                                    const taskData = tasksMap.get(task.id)
+                                    return (
+                                      <Draggable key={task.id} draggableId={task.id} index={index}>
+                                        {(provided, snapshot) => (
+                                          <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            {...provided.dragHandleProps}
+                                            className={snapshot.isDragging ? 'opacity-50' : ''}
+                                          >
+                                            <TaskRow
+                                              task={task}
+                                              isSelected={selectedTasks.includes(task.id)}
+                                              onToggleSelect={handleToggleSelect}
+                                              onUpdate={handleTaskUpdate}
+                                              onDelete={handleTaskDelete}
+                                              showMultiSelect={isSelectionMode}
+                                              selectedTasks={selectedTasks}
+                                              onTaskClick={handleTaskClick}
+                                            />
+                                          </div>
+                                        )}
+                                      </Draggable>
+                                    )
+                                  })}
+                                  {provided.placeholder}
 
-                            {/* Inline Task Creation */}
-                            {showingInlineCreate === statusId && (
-                              <InlineTaskCreation
-                                statusColor={statusGroup.color}
-                                onSave={(task) => {
-                                  console.log("Creating task:", task)
-                                  setShowingInlineCreate(null)
-                                }}
-                                onCancel={() => setShowingInlineCreate(null)}
-                              />
-                            )}
+                                  {/* Inline Task Creation */}
+                                  {showingInlineCreate === statusId && (
+                                    <InlineTaskCreation
+                                      statusColor={statusGroup.color}
+                                      onSave={(task) => {
+                                        console.log("Creating task:", task)
+                                        setShowingInlineCreate(null)
+                                      }}
+                                      onCancel={() => setShowingInlineCreate(null)}
+                                    />
+                                  )}
 
-                            {/* Add Task Button */}
-                            {showingInlineCreate !== statusId && (
-                              <button 
-                                onClick={() => setShowingInlineCreate(statusId)}
-                                className="flex items-center gap-1.5 px-12 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add task</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                                  {/* Add Task Button */}
+                                  {showingInlineCreate !== statusId && (
+                                    <button 
+                                      onClick={() => setShowingInlineCreate(statusId)}
+                                      className="flex items-center gap-1.5 px-12 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add task</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </Droppable>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </DragDropContext>
               )}
             </div>
           )
@@ -528,7 +719,8 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                     name: project.name || "Unnamed Project",
                     dueDate: "-",
                     launchDate: undefined,
-                    statusGroups
+                    statusGroups,
+                    taskCount: projectTasks.length
                   }
                 })
               )
@@ -562,7 +754,8 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                   name: project.name || "Unnamed Project",
                   dueDate: "-",
                   launchDate: undefined,
-                  statusGroups
+                  statusGroups,
+                  taskCount: projectTasks.length
                 }
               })
               setProjects(transformedProjects)

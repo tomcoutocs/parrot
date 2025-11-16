@@ -26,17 +26,6 @@ interface CreateSpaceModalProps {
   onSuccess?: () => void
 }
 
-const SPACE_COLORS = [
-  { name: "Purple", value: "#a855f7", class: "bg-purple-500" },
-  { name: "Blue", value: "#3b82f6", class: "bg-blue-500" },
-  { name: "Green", value: "#10b981", class: "bg-green-500" },
-  { name: "Orange", value: "#f97316", class: "bg-orange-500" },
-  { name: "Pink", value: "#ec4899", class: "bg-pink-500" },
-  { name: "Teal", value: "#14b8a6", class: "bg-teal-500" },
-  { name: "Red", value: "#ef4444", class: "bg-red-500" },
-  { name: "Dark Blue", value: "#1e40af", class: "bg-blue-700" },
-  { name: "Purple Dark", value: "#7c3aed", class: "bg-purple-700" },
-]
 
 export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModalProps) {
   const [spaceName, setSpaceName] = useState("")
@@ -47,7 +36,6 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [contactName, setContactName] = useState("")
   const [contactEmail, setContactEmail] = useState("")
-  const [selectedColor, setSelectedColor] = useState(SPACE_COLORS[0].value)
   const [services, setServices] = useState<Service[]>([])
   const [managers, setManagers] = useState<Array<{ id: string; name: string }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -65,7 +53,6 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
       setSelectedServices([])
       setContactName("")
       setContactEmail("")
-      setSelectedColor(SPACE_COLORS[0].value)
     }
   }, [isOpen])
 
@@ -149,22 +136,10 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle className="text-2xl font-bold">Create New Client Space</DialogTitle>
-              <DialogDescription className="mt-1">
-                Set up a new client workspace with services, team, and settings
-              </DialogDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <DialogTitle className="text-2xl font-bold">Create New Client Space</DialogTitle>
+          <DialogDescription className="mt-1">
+            Set up a new client workspace with services, team, and settings
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6 mt-4">
@@ -235,6 +210,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
+                      type="button"
                       id="startDate"
                       variant="outline"
                       className={cn(
@@ -246,11 +222,18 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
                       {startDate ? format(startDate, "MM/dd/yyyy") : "mm/dd/yyyy"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+                  <PopoverContent 
+                    className="w-auto p-0 z-[100]" 
+                    align="start"
+                    style={{ pointerEvents: 'auto' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Calendar
                       mode="single"
                       selected={startDate}
-                      onSelect={setStartDate}
+                      onSelect={(date) => {
+                        setStartDate(date)
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
@@ -314,32 +297,6 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
             <p className="text-xs text-muted-foreground">
               You can add more users later in the Users section
             </p>
-          </div>
-
-          {/* Space Color */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold">Space Color</h3>
-            <p className="text-sm text-muted-foreground">
-              Choose a color to help identify this space
-            </p>
-            
-            <div className="flex items-center gap-2 flex-wrap">
-              {SPACE_COLORS.map((color) => (
-                <button
-                  key={color.value}
-                  type="button"
-                  onClick={() => setSelectedColor(color.value)}
-                  className={cn(
-                    "w-10 h-10 rounded-full border-2 transition-all",
-                    color.class,
-                    selectedColor === color.value
-                      ? "border-foreground scale-110"
-                      : "border-transparent hover:border-muted-foreground/50"
-                  )}
-                  aria-label={color.name}
-                />
-              ))}
-            </div>
           </div>
 
           {/* Action Buttons */}

@@ -46,6 +46,15 @@ export interface BulkEmailResult {
   results: Array<{ success: boolean; email: string; error?: string }>
 }
 
+export interface WelcomeEmailData {
+  recipientName: string
+  recipientEmail: string
+  password: string
+  companyName?: string
+  role: string
+  loginUrl: string
+}
+
 // Email sending function for single invitation using Resend
 export async function sendInvitationEmail(data: InvitationEmailData): Promise<EmailResult> {
   try {
@@ -235,6 +244,116 @@ export function formatExpirationDate(expiresAt: string): string {
   } catch (error) {
     console.error('Failed to format expiration date:', error)
     return 'Unknown'
+  }
+}
+
+// Email sending function for welcome emails when users are created directly
+export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<EmailResult> {
+  try {
+    console.log('🔍 Welcome email sending debug info:', {
+      hasResendKey: !!process.env.RESEND_API_KEY,
+      resendKeyLength: process.env.RESEND_API_KEY?.length || 0,
+      recipientEmail: data.recipientEmail,
+      companyName: data.companyName
+    })
+
+    if (!process.env.RESEND_API_KEY || !resend) {
+      console.warn('⚠️ RESEND_API_KEY not configured or Resend client not initialized, falling back to mock email')
+      console.log('📧 Mock welcome email sent:', {
+        to: data.recipientEmail,
+        subject: `Welcome to ${data.companyName || 'Parrot'}`,
+        recipientName: data.recipientName,
+        companyName: data.companyName,
+        role: data.role
+      })
+      return { success: true }
+    }
+
+    const companyText = data.companyName ? ` at <strong>${data.companyName}</strong>` : ''
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Welcome to ${data.companyName || 'Parrot'}</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
+            <h1 style="color: #2563eb; margin-bottom: 20px;">Welcome!</h1>
+            <p style="font-size: 18px; margin-bottom: 20px;">Hello ${data.recipientName},</p>
+            <p style="font-size: 16px; margin-bottom: 20px;">
+              Your account has been created${companyText} as a <strong>${data.role}</strong>.
+            </p>
+            <div style="background: white; padding: 20px; border-radius: 6px; margin: 20px 0; text-align: left;">
+              <p style="font-size: 14px; margin-bottom: 10px; color: #666;"><strong>Your login credentials:</strong></p>
+              <p style="font-size: 14px; margin-bottom: 5px;"><strong>Email:</strong> ${data.recipientEmail}</p>
+              <p style="font-size: 14px; margin-bottom: 15px;"><strong>Password:</strong> ${data.password}</p>
+              <p style="font-size: 12px; color: #999; font-style: italic;">Please change your password after your first login for security.</p>
+            </div>
+            <a href="${data.loginUrl}" 
+               style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-bottom: 20px;">
+              Sign In Now
+            </a>
+            <p style="font-size: 14px; color: #666; margin-top: 30px;">
+              If the button doesn't work, copy and paste this link into your browser:<br>
+              <a href="${data.loginUrl}" style="color: #2563eb;">${data.loginUrl}</a>
+            </p>
+          </div>
+        </body>
+      </html>
+    `
+
+    // Check if we have a valid from email configured
+    const fromEmail = process.env.FROM_EMAIL
+    
+    if (!fromEmail) {
+      console.error('❌ FROM_EMAIL not configured. Please set a verified domain email.')
+      return {
+        success: false,
+        error: 'Email configuration error: FROM_EMAIL not set'
+      }
+    }
+
+    const result = await resend.emails.send({
+      from: fromEmail,
+      to: [data.recipientEmail],
+      subject: `Welcome to ${data.companyName || 'Parrot'}`,
+      html: emailHtml,
+    })
+
+    if (result.error) {
+      console.error('Resend API error:', result.error)
+      
+      // Handle specific domain verification errors
+      if (result.error.message?.includes('domain is not verified')) {
+        return {
+          success: false,
+          error: 'Domain verification error: Please verify your domain in Resend dashboard'
+        }
+      }
+      
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email'
+      }
+    }
+
+    console.log('📧 Welcome email sent successfully via Resend:', {
+      id: result.data?.id,
+      to: data.recipientEmail,
+      subject: `Welcome to ${data.companyName || 'Parrot'}`
+    })
+
+    return {
+      success: true
+    }
+  } catch (error) {
+    console.error('Failed to send welcome email:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }
   }
 }
 

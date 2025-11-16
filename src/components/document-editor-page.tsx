@@ -64,7 +64,7 @@ import { fetchCompanyTasks } from '@/lib/company-detail-functions'
 import { supabase } from '@/lib/supabase'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { format } from 'date-fns'
-import DashboardLayout from '@/components/dashboard-layout'
+import { ModernDashboardLayout } from '@/components/modern-dashboard-layout'
 import {
   Dialog,
   DialogContent,
@@ -80,9 +80,11 @@ import type { TaskWithDetails } from '@/lib/supabase'
 
 interface DocumentEditorPageProps {
   documentId: string
+  inline?: boolean
+  spaceId?: string | null
 }
 
-export default function DocumentEditorPage({ documentId }: DocumentEditorPageProps) {
+export default function DocumentEditorPage({ documentId, inline = false, spaceId: propSpaceId }: DocumentEditorPageProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
@@ -96,13 +98,29 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
   const [isWiki, setIsWiki] = useState(false)
   const [documentIcon, setDocumentIcon] = useState<string>('')
   const [coverImage, setCoverImage] = useState<string>('')
+  const [isMounted, setIsMounted] = useState(false)
   
-  // Get current space ID from URL or use user's company_id
+  // Ensure we're on the client before rendering editor
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+  
+  // Get current space ID from prop, URL, or use user's company_id
   // For non-admin users, always use their company_id as the space
   // For admin users, ONLY use the space param from URL (don't fall back to company_id)
-  const spaceParam = searchParams?.get('space')
+  const spaceParam = propSpaceId || searchParams?.get('space')
   const isAdmin = session?.user?.role === 'admin'
   const currentSpaceId = spaceParam || (!isAdmin && session?.user?.company_id ? session.user.company_id : null)
+  
+  // Log for debugging
+  console.log('DocumentEditorPage render:', { 
+    documentId, 
+    isNewDocument, 
+    spaceParam, 
+    isAdmin, 
+    currentSpaceId,
+    companyId: session?.user?.company_id 
+  })
   
   // Modal states
   const [showLinkModal, setShowLinkModal] = useState(false)
@@ -129,6 +147,21 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
       router.push(`/dashboard?tab=documents&space=${spaceId}`)
     }
   }
+  
+  const handleModernTabChange = (tabId: string) => {
+    // Map modern tab IDs to internal tab names
+    const tabMap: Record<string, string> = {
+      'overview': 'dashboard',
+      'tasks': 'projects',
+      'documents': 'documents',
+      'calendar': 'company-calendars',
+      'reports': 'reports',
+      'users': 'admin',
+      'settings': 'settings',
+    }
+    const internalTab = tabMap[tabId] || 'dashboard'
+    handleTabChange(internalTab)
+  }
 
   const editor = useEditor({
     extensions: [
@@ -139,7 +172,7 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
-          class: 'text-blue-600 underline hover:text-blue-800',
+          class: 'text-primary underline hover:text-primary/80',
         },
       }),
       TextAlign.configure({
@@ -166,16 +199,30 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg max-w-none focus:outline-none min-h-[600px] px-16 py-8 dark:prose-invert prose-headings:text-gray-900 dark:prose-headings:text-gray-100 prose-p:text-gray-800 dark:prose-p:text-gray-200',
+        class: 'prose prose-sm sm:prose lg:prose-lg max-w-none focus:outline-none min-h-[600px] py-8 dark:prose-invert prose-headings:text-foreground prose-p:text-foreground',
       },
     },
     onUpdate: () => {
       // Auto-save could be implemented here
     },
+    onCreate: ({ editor }) => {
+      console.log('Editor created:', editor)
+    },
+    onDestroy: () => {
+      console.log('Editor destroyed')
+    },
   })
+  
+  useEffect(() => {
+    if (editor) {
+      console.log('Editor is ready:', editor.isEditable, editor.isEmpty)
+    }
+  }, [editor])
 
   // Load existing document if editing
   useEffect(() => {
+    console.log('useEffect for loading document:', { isNewDocument, hasSession: !!session?.user?.id, hasEditor: !!editor })
+    
     if (!isNewDocument && session?.user?.id) {
       const loadDocument = async () => {
         setLoading(true)
@@ -222,7 +269,9 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
         }
       }
       loadDocument()
-    } else {
+    } else if (isNewDocument) {
+      // For new documents, set loading to false immediately
+      console.log('Setting loading to false for new document')
       setLoading(false)
       if (session?.user) {
         setAuthor(session.user.name || session.user.email || 'Unknown')
@@ -254,10 +303,11 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
 
     try {
       const content = editor.getHTML()
-      const companyId = session.user.company_id || ''
+      // Use currentSpaceId if available, otherwise fall back to user's company_id
+      const companyId = currentSpaceId || session.user.company_id || ''
 
       if (!companyId) {
-        toastError('User must be associated with a company')
+        toastError('Please select a space first')
         return
       }
 
@@ -413,52 +463,68 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
     { icon: Redo, onClick: () => editor?.chain().focus().redo().run() },
   ]
 
-  if (loading) {
+  console.log('Render check:', { loading, hasEditor: !!editor, editor, isMounted })
+
+  if (!isMounted) {
+    console.log('Not mounted yet, showing loading')
     return (
-      <DashboardLayout 
+      <ModernDashboardLayout 
         activeTab="documents" 
-        onTabChange={handleTabChange} 
-        breadcrumbContext={{}} 
+        onTabChange={handleModernTabChange} 
         currentSpaceId={currentSpaceId}
         onSpaceChange={handleSpaceChange}
       >
         <div className="min-h-screen flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      </DashboardLayout>
+      </ModernDashboardLayout>
+    )
+  }
+
+  if (loading) {
+    console.log('Rendering loading state')
+    return (
+      <ModernDashboardLayout 
+        activeTab="documents" 
+        onTabChange={handleModernTabChange} 
+        currentSpaceId={currentSpaceId}
+        onSpaceChange={handleSpaceChange}
+      >
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </ModernDashboardLayout>
     )
   }
 
   if (!editor) {
-    return null
+    console.error('Editor not initialized')
+    return (
+      <ModernDashboardLayout 
+        activeTab="documents" 
+        onTabChange={handleModernTabChange} 
+        currentSpaceId={currentSpaceId}
+        onSpaceChange={handleSpaceChange}
+      >
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-destructive mb-4">Editor failed to initialize</p>
+            <Button onClick={() => window.location.reload()}>Reload Page</Button>
+          </div>
+        </div>
+      </ModernDashboardLayout>
+    )
   }
 
-  return (
-    <DashboardLayout 
-      activeTab="documents" 
-      onTabChange={handleTabChange} 
-      breadcrumbContext={{}} 
-      currentSpaceId={currentSpaceId}
-      onSpaceChange={handleSpaceChange}
-    >
-      <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
-        {/* Top Header Bar - Fixed */}
-        <div className="border-b bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <div className="flex items-center justify-between px-4 py-2">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  const spaceQuery = currentSpaceId ? `&space=${currentSpaceId}` : ''
-                  router.push(`/dashboard?tab=documents${spaceQuery}`)
-                }}
-                className="gap-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Button>
-              <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
+  console.log('Rendering editor content')
+  
+  const editorContent = (
+    <>
+      <div className="flex flex-col h-full bg-background">
+        {/* Document Header */}
+        <div className="border-b border-border/50 bg-background flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-3">
+            <div className="flex items-center gap-3">
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -473,72 +539,59 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
               </Button>
             </div>
             
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <Type className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 text-sm gap-1"
+                onClick={() => setShowLinkModal(true)}
+              >
+                <Link2 className="h-3 w-3" />
+                Link Task or Doc
               </Button>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MoreVertical className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-8 text-sm gap-1 ${isWiki ? 'bg-muted text-foreground' : ''}`}
+                onClick={() => setIsWiki(!isWiki)}
+              >
+                <CheckCircle2 className={`h-3 w-3 ${isWiki ? 'fill-current' : ''}`} />
+                Mark Wiki
               </Button>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <Link2 className="h-4 w-4" />
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 text-sm gap-1"
+                onClick={() => setShowIconModal(true)}
+              >
+                <Palette className="h-3 w-3" />
+                Add icon
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 text-sm gap-1"
+                onClick={() => setShowCoverModal(true)}
+              >
+                <Image className="h-3 w-3" />
+                Add cover
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 text-sm gap-1"
+                onClick={() => setShowSettingsModal(true)}
+              >
+                <Settings className="h-3 w-3" />
+                Settings
               </Button>
             </div>
-          </div>
-
-          {/* Page Controls Row */}
-          <div className="flex items-center gap-2 px-4 pb-2 flex-wrap">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-7 text-sm gap-1"
-              onClick={() => setShowLinkModal(true)}
-            >
-              <Link2 className="h-3 w-3" />
-              Link Task or Doc
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-7 text-sm gap-1 ${isWiki ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : ''}`}
-              onClick={() => setIsWiki(!isWiki)}
-            >
-              <CheckCircle2 className={`h-3 w-3 ${isWiki ? 'fill-current' : ''}`} />
-              Mark Wiki
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-7 text-sm gap-1"
-              onClick={() => setShowIconModal(true)}
-            >
-              <Palette className="h-3 w-3" />
-              Add icon
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-7 text-sm gap-1"
-              onClick={() => setShowCoverModal(true)}
-            >
-              <Image className="h-3 w-3" />
-              Add cover
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-7 text-sm gap-1"
-              onClick={() => setShowSettingsModal(true)}
-            >
-              <Settings className="h-3 w-3" />
-              Settings
-            </Button>
           </div>
         </div>
 
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-4xl mx-auto px-8 py-6">
           {/* Cover Image */}
           {coverImage && (
             <div className="w-full h-64 mb-6 relative">
@@ -558,113 +611,118 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
             </div>
           )}
 
-          {/* Page Title */}
-          <div className="px-16 py-6 flex items-center gap-3">
-            {documentIcon && (
-              <span className="text-5xl">{documentIcon}</span>
-            )}
-            <Input
-              ref={titleInputRef}
-              value={documentTitle}
-              onChange={(e) => setDocumentTitle(e.target.value)}
-              placeholder="Untitled"
-              className="text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-2 bg-transparent text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 flex-1"
-            />
-          </div>
-
-          {/* Metadata */}
-          <div className="px-16 pb-4 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            {author && (
-              <div className="flex items-center gap-1">
-                <User className="h-3 w-3" />
-                <span>{author}</span>
-              </div>
-            )}
-            {lastSaved && (
-              <div className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                <span>Last updated {format(lastSaved, 'MMM d')} at {format(lastSaved, 'h:mm a')}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Toolbar - Sticky within scrollable area */}
-          <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-2">
-            <div className="flex items-center gap-1 overflow-x-auto">
-              {/* Notion-like Insert dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1">
-                    <Plus className="h-4 w-4" />
-                    <span className="text-sm">Insert</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  {quickInsertActions.map((action) => {
-                    const Icon = action.icon
-                    return (
-                      <DropdownMenuItem
-                        key={action.label}
-                        onClick={action.action}
-                        className="cursor-pointer gap-2"
-                      >
-                        <Icon className="h-4 w-4" />
-                        {action.label}
-                      </DropdownMenuItem>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-              
-              {toolbarButtons.map((button, index) => {
-                if ('separator' in button) {
-                  return <div key={index} className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-                }
-                const Icon = button.icon
-                const isActive = button.isActive ? button.isActive() : false
-                return (
-                  <Button
-                    key={index}
-                    variant={isActive ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={button.onClick}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Icon className="h-4 w-4" />
-                  </Button>
-                )
-              })}
-              
-              <div className="flex-1" />
-              
-              <Button
-                variant="orange"
-                size="sm"
-                onClick={handleSave}
-                disabled={!documentTitle.trim() || saving}
-                className="gap-2"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Save
-                  </>
-                )}
-              </Button>
+            {/* Page Title */}
+            <div className="py-6 flex items-center gap-3">
+              {documentIcon && (
+                <span className="text-5xl">{documentIcon}</span>
+              )}
+              <Input
+                ref={titleInputRef}
+                value={documentTitle}
+                onChange={(e) => setDocumentTitle(e.target.value)}
+                placeholder="Untitled"
+                className="text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-2 bg-transparent text-foreground placeholder:text-muted-foreground flex-1"
+              />
             </div>
-          </div>
 
-          {/* Editor */}
-          <div className="min-h-[600px] pb-16">
-            <EditorContent editor={editor} />
-          </div>
+            {/* Metadata */}
+            <div className="pb-4 flex items-center gap-4 text-sm text-muted-foreground">
+              {author && (
+                <div className="flex items-center gap-1">
+                  <User className="h-3 w-3" />
+                  <span>{author}</span>
+                </div>
+              )}
+              {lastSaved && (
+                <div className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  <span>Last updated {format(lastSaved, 'MMM d')} at {format(lastSaved, 'h:mm a')}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Toolbar - Sticky within scrollable area */}
+            <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-2 -mx-8 mb-4">
+              <div className="flex items-center gap-1 overflow-x-auto">
+                {/* Notion-like Insert dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 gap-1">
+                      <Plus className="h-4 w-4" />
+                      <span className="text-sm">Insert</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    {quickInsertActions.map((action) => {
+                      const Icon = action.icon
+                      return (
+                        <DropdownMenuItem
+                          key={action.label}
+                          onClick={action.action}
+                          className="cursor-pointer gap-2"
+                        >
+                          <Icon className="h-4 w-4" />
+                          {action.label}
+                        </DropdownMenuItem>
+                      )
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                <div className="w-px h-6 bg-border mx-1" />
+                
+                {toolbarButtons.map((button, index) => {
+                  if ('separator' in button) {
+                    return <div key={index} className="w-px h-6 bg-border mx-1" />
+                  }
+                  const Icon = button.icon
+                  const isActive = button.isActive ? button.isActive() : false
+                  return (
+                    <Button
+                      key={index}
+                      variant={isActive ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={button.onClick}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Icon className="h-4 w-4" />
+                    </Button>
+                  )
+                })}
+                
+                <div className="flex-1" />
+                
+                <Button
+                  className="bg-foreground text-background hover:bg-foreground/90 gap-2"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={!documentTitle.trim() || saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Editor */}
+            <div className="min-h-[600px] pb-16">
+              {editor ? (
+                <EditorContent editor={editor} />
+              ) : (
+                <div className="flex items-center justify-center h-[600px]">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -861,7 +919,24 @@ export default function DocumentEditorPage({ documentId }: DocumentEditorPagePro
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </>
+  )
+
+  // If inline mode, return content without layout wrapper
+  if (inline) {
+    return editorContent
+  }
+
+  // Otherwise wrap in ModernDashboardLayout
+  return (
+    <ModernDashboardLayout 
+      activeTab="documents" 
+      onTabChange={handleModernTabChange} 
+      currentSpaceId={currentSpaceId}
+      onSpaceChange={handleSpaceChange}
+    >
+      {editorContent}
+    </ModernDashboardLayout>
   )
 }
 

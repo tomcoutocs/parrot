@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { 
   Plus, 
   Search, 
@@ -45,7 +45,7 @@ import { CreateSpaceModal } from "@/components/modals/create-space-modal"
 
 interface ModernSidebarProps {
   activeSpace: string | null
-  onSpaceChange: (spaceId: string) => void
+  onSpaceChange: (spaceId: string | null) => void
   viewMode: "admin" | "client"
   onViewModeChange: (mode: "admin" | "client") => void
   adminView?: string
@@ -86,9 +86,8 @@ export function ModernSidebar({
       if (isAdmin) {
         try {
           const companies = await fetchCompaniesOptimized()
-          // Filter to only active companies
-          const activeSpaces = companies.filter(company => company.is_active !== false)
-          setSpaces(activeSpaces)
+          // Include all companies (active and inactive) - they'll be sorted below
+          setSpaces(companies)
         } catch (error) {
           console.error("Error loading spaces:", error)
         }
@@ -126,8 +125,38 @@ export function ModernSidebar({
   const filteredSpaces = spaces.filter(space =>
     space.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
+  
+  // Sort spaces once and memoize to ensure stable order
+  const sortedSpaces = React.useMemo(() => {
+    return [...filteredSpaces].sort((a, b) => {
+      // Active clients first
+      const aActive = a.is_active !== false
+      const bActive = b.is_active !== false
+      if (aActive && !bActive) return -1
+      if (!aActive && bActive) return 1
+      // Then sort by name for consistent ordering
+      return a.name.localeCompare(b.name)
+    })
+  }, [filteredSpaces])
 
   const handleSpaceClick = (spaceId: string) => {
+    console.log('ModernSidebar: handleSpaceClick called with spaceId:', spaceId)
+    console.log('ModernSidebar: Current activeSpace:', activeSpace)
+    console.log('ModernSidebar: Available spaces:', spaces.map(s => ({ id: s.id, name: s.name })))
+    
+    // Ensure we're passing the correct spaceId
+    if (!spaceId) {
+      console.error('ModernSidebar: No spaceId provided to handleSpaceClick')
+      return
+    }
+    
+    // Verify the space exists
+    const spaceExists = spaces.find(s => s.id === spaceId)
+    if (!spaceExists) {
+      console.error('ModernSidebar: Space not found in spaces array:', spaceId)
+      return
+    }
+    
     onSpaceChange(spaceId)
     // Only change to client mode if clicking a different space
     // If already viewing this space, don't change viewMode
@@ -139,7 +168,7 @@ export function ModernSidebar({
   return (
     <TooltipProvider delayDuration={0}>
       <div 
-        className={`bg-sidebar border-r border-border/50 h-screen flex flex-col transition-all duration-200 ${
+        className={`bg-sidebar border-r border-border/50 h-screen flex flex-col transition-all duration-200 relative z-10 ${
           isCollapsed ? "w-16" : "w-60"
         }`}
       >
@@ -176,7 +205,7 @@ export function ModernSidebar({
 
         {/* Admin Navigation */}
         {isAdmin && (
-          <div className={`px-2 py-3 border-b border-border/50 ${isCollapsed ? "px-1" : ""}`}>
+          <div className={`px-2 py-3 border-b border-border/50 relative z-20 ${isCollapsed ? "px-1" : ""}`}>
             {!isCollapsed && (
               <div className="px-3 mb-2">
                 <span className="text-xs text-muted-foreground">ADMIN</span>
@@ -189,11 +218,18 @@ export function ModernSidebar({
                 const navButton = (
                   <button
                     key={item.id}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      console.log('Admin nav clicked:', item.id, 'Current activeSpace:', activeSpace)
+                      // Clear space first, then switch to admin mode
+                      if (activeSpace) {
+                        onSpaceChange(null)
+                      }
                       onViewModeChange("admin")
                       onAdminViewChange?.(item.id)
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm relative z-30 ${
                       isCollapsed ? "justify-center px-2" : ""
                     } ${
                       isActive 
@@ -247,21 +283,32 @@ export function ModernSidebar({
             </div>
           )}
           <div className="space-y-0.5">
-            {filteredSpaces
-              .sort((a, b) => {
-                // Active clients first
-                const aActive = a.is_active !== false
-                const bActive = b.is_active !== false
-                if (aActive && !bActive) return -1
-                if (!aActive && bActive) return 1
-                return 0
-              })
-              .map((space) => {
+            {sortedSpaces.map((space) => {
                 const isActive = activeSpace === space.id && viewMode === "client"
+                // Use the actual space object's ID directly - don't create a separate variable
                 const spaceButton = (
                   <button
                     key={space.id}
-                    onClick={() => handleSpaceClick(space.id)}
+                    data-space-id={space.id}
+                    data-space-name={space.name}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      // Get spaceId from the button's data attribute to ensure we have the correct one
+                      const clickedSpaceId = e.currentTarget.getAttribute('data-space-id')
+                      const clickedSpaceName = e.currentTarget.getAttribute('data-space-name')
+                      console.log(`Space button clicked - Space ID: ${clickedSpaceId}, Space Name: ${clickedSpaceName}`)
+                      console.log('Space object:', { id: space.id, name: space.name })
+                      console.log('All sorted spaces:', sortedSpaces.map(s => ({ id: s.id, name: s.name })))
+                      
+                      if (clickedSpaceId && clickedSpaceId === space.id) {
+                        handleSpaceClick(clickedSpaceId)
+                      } else {
+                        console.error('Space ID mismatch! Button:', clickedSpaceId, 'Space object:', space.id)
+                        // Fallback to space.id from closure
+                        handleSpaceClick(space.id)
+                      }
+                    }}
                     className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors text-sm ${
                       isCollapsed ? "justify-center px-2" : ""
                     } ${
@@ -270,11 +317,10 @@ export function ModernSidebar({
                         : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                     }`}
                   >
-                    {space.is_active !== false && (
+                    {space.is_active !== false ? (
                       <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] flex-shrink-0" />
-                    )}
-                    {space.is_active === false && (
-                      <div className="w-2 h-2 rounded-full bg-muted-foreground/30 flex-shrink-0" />
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)] flex-shrink-0" />
                     )}
                     {!isCollapsed && <span className="truncate">{space.name}</span>}
                   </button>

@@ -14,6 +14,7 @@ interface Task {
   assignee: string
   dueDate: string
   priority: string
+  status?: string
   subtasks?: number
   completed?: boolean
 }
@@ -41,6 +42,13 @@ const priorityLevels = [
   { id: "high", label: "High", color: "text-orange-600", dotColor: "bg-orange-500" },
   { id: "normal", label: "Normal", color: "text-muted-foreground", dotColor: "bg-gray-400" },
   { id: "low", label: "Low", color: "text-blue-600", dotColor: "bg-blue-500" },
+]
+
+const statusLevels = [
+  { id: "todo", label: "TO DO", color: "#6b7280", displayColor: "text-gray-600", dotColor: "bg-gray-500" },
+  { id: "in_progress", label: "IN PROGRESS", color: "#8b5cf6", displayColor: "text-purple-600", dotColor: "bg-purple-500" },
+  { id: "review", label: "REVIEW", color: "#f59e0b", displayColor: "text-yellow-600", dotColor: "bg-yellow-500" },
+  { id: "done", label: "DONE", color: "#10b981", displayColor: "text-green-600", dotColor: "bg-green-500" },
 ]
 
 function getDueDateStatus(dueDate: string) {
@@ -76,6 +84,7 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
 
   const dueDateStatus = getDueDateStatus(task.dueDate)
   const currentPriority = priorityLevels.find(p => p.label.toLowerCase() === task.priority.toLowerCase()) || priorityLevels[2]
+  const currentStatus = statusLevels.find(s => s.id === (task.status?.toLowerCase() || (task.completed ? "done" : "todo"))) || statusLevels[0]
 
   const handleNameSave = () => {
     if (nameValue.trim() && nameValue !== task.name) {
@@ -103,16 +112,41 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
     }
   }
 
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Don't trigger if clicking on interactive elements
+    const target = e.target as HTMLElement
+    if (
+      target.closest('button') ||
+      target.closest('[role="menuitem"]') ||
+      target.closest('[data-interactive]') ||
+      target.closest('input') ||
+      target.closest('.cursor-text') ||
+      target.closest('[role="dialog"]') ||
+      target.closest('[data-radix-popper-content-wrapper]')
+    ) {
+      return
+    }
+    
+    // Open comments if onTaskClick is provided
+    if (onTaskClick) {
+      onTaskClick(task.id)
+    }
+  }
+
   return (
     <div 
-      className={`grid grid-cols-12 gap-4 px-12 py-2.5 hover:bg-muted/50 transition-colors items-center group rounded-md ${
+      className={`grid grid-cols-12 gap-4 px-12 py-2.5 hover:bg-muted/50 transition-colors items-center group rounded-md cursor-pointer ${
         isSelected ? "bg-muted/70" : ""
       }`}
+      onClick={handleRowClick}
     >
       {/* Name Column with left-side controls */}
-      <div className="col-span-5 flex items-center gap-2 -ml-8">
+      <div className="col-span-4 flex items-center gap-2 -ml-8">
         {/* Drag Handle - hidden until hover */}
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <div 
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex flex-col gap-0.5 cursor-move p-1">
             <div className="flex gap-0.5">
               <div className="w-0.5 h-0.5 rounded-full bg-muted-foreground/50" />
@@ -148,16 +182,6 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
 
         {/* Chevron for expand */}
         <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-        
-        {/* Radio button (always visible) */}
-        <button 
-          className="relative w-4 h-4 rounded-full border-2 border-border hover:border-muted-foreground transition-all flex items-center justify-center flex-shrink-0 group/check"
-          onClick={() => onToggleSelect(task.id)}
-        >
-          {isSelected && (
-            <div className="w-2 h-2 rounded-full bg-foreground" />
-          )}
-        </button>
 
         {/* Task Name - Editable */}
         {isEditingName ? (
@@ -175,19 +199,19 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
             }}
             className="flex-1 bg-transparent border-none outline-none text-sm"
             autoFocus
+            onClick={(e) => e.stopPropagation()}
           />
         ) : (
           <span 
-            className="text-sm cursor-pointer hover:bg-muted/50 px-1 py-0.5 rounded -ml-1"
+            className="text-sm cursor-text hover:bg-muted/50 px-1 py-0.5 rounded -ml-1"
             onClick={(e) => {
               e.stopPropagation()
-              if (onTaskClick) {
-                onTaskClick(task.id)
-              } else {
-                setIsEditingName(true)
-              }
+              setIsEditingName(true)
             }}
-            onDoubleClick={() => setIsEditingName(true)}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              setIsEditingName(true)
+            }}
           >
             {task.name}
           </span>
@@ -243,6 +267,33 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
         </DropdownMenu>
       </div>
 
+      {/* Status Column - Editable with dropdown */}
+      <div className="col-span-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors -ml-2">
+              <div className={`w-1.5 h-1.5 rounded-full ${currentStatus.dotColor}`} />
+              <span className={`text-xs font-medium ${currentStatus.displayColor}`}>
+                {currentStatus.label}
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {statusLevels.map((status) => (
+              <DropdownMenuItem
+                key={status.id}
+                onClick={() => onUpdate(task.id, { status: status.id })}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
+                  <span className={status.displayColor}>{status.label}</span>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
       {/* Due Date Column - Editable with color indicators */}
       <div className="col-span-2">
         <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
@@ -286,7 +337,7 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
       </div>
 
       {/* Priority Column - Editable with colors */}
-      <div className="col-span-2">
+      <div className="col-span-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors -ml-2">

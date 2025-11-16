@@ -4,6 +4,13 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from "lucid
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { useSession } from "@/components/providers/session-provider"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toastError, toastSuccess } from "@/lib/toast"
 
 interface BrandEvent {
   id: string
@@ -42,58 +49,152 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false)
   const [events, setEvents] = useState<BrandEvent[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Event creation form state
+  const [eventTitle, setEventTitle] = useState('')
+  const [eventDescription, setEventDescription] = useState('')
+  const [eventDate, setEventDate] = useState('')
+  const [eventStartTime, setEventStartTime] = useState('')
+  const [eventEndTime, setEventEndTime] = useState('')
+  const [includeTime, setIncludeTime] = useState(false)
+  const [eventType, setEventType] = useState<"launch" | "sale" | "event" | "deadline">("event")
+  const [creating, setCreating] = useState(false)
 
-  useEffect(() => {
-    const loadEvents = async () => {
-      if (!activeSpace && !session?.user?.company_id) {
+  const loadEvents = async () => {
+    if (!activeSpace && !session?.user?.company_id) {
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    try {
+      const companyId = activeSpace || session?.user?.company_id
+      if (!companyId || !supabase) {
         setLoading(false)
         return
       }
 
-      setLoading(true)
-      try {
-        const companyId = activeSpace || session?.user?.company_id
-        if (!companyId || !supabase) {
-          setLoading(false)
-          return
-        }
+      const { data, error } = await supabase
+        .from('company_events')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('start_date', { ascending: true })
 
-        const { data, error } = await supabase
-          .from('company_events')
-          .select('*')
-          .eq('company_id', companyId)
-          .order('start_date', { ascending: true })
-
-        if (error) {
-          console.error("Error loading events:", error)
-          setLoading(false)
-          return
-        }
-
-        // Transform database events to BrandEvent format
-        const transformedEvents: BrandEvent[] = (data || []).map((event) => {
-          const eventType = inferEventType(event.title || "")
-          return {
-            id: event.id,
-            title: event.title || "Untitled Event",
-            startDate: new Date(event.start_date),
-            endDate: event.end_date ? new Date(event.end_date) : new Date(event.start_date),
-            type: eventType,
-            color: eventTypeColors[eventType] || eventTypeColors.default
-          }
-        })
-
-        setEvents(transformedEvents)
-      } catch (error) {
-        console.error("Error loading calendar events:", error)
-      } finally {
+      if (error) {
+        console.error("Error loading events:", error)
         setLoading(false)
+        return
       }
-    }
 
+      // Transform database events to BrandEvent format
+      const transformedEvents: BrandEvent[] = (data || []).map((event) => {
+        // Try to get event type from event_type field, or infer from title
+        const eventTypeValue = (event as any).event_type || inferEventType(event.title || "")
+        return {
+          id: event.id,
+          title: event.title || "Untitled Event",
+          startDate: new Date(event.start_date),
+          endDate: event.end_date ? new Date(event.end_date) : new Date(event.start_date),
+          type: eventTypeValue,
+          color: eventTypeColors[eventTypeValue] || eventTypeColors.default
+        }
+      })
+
+      setEvents(transformedEvents)
+    } catch (error) {
+      console.error("Error loading calendar events:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     loadEvents()
   }, [activeSpace, session?.user?.company_id])
 
+  const createEvent = async () => {
+    if (!eventTitle.trim() || !eventDate) {
+      toastError('Please fill in event title and date')
+      return
+    }
+
+    if (includeTime && (!eventStartTime || !eventEndTime)) {
+      toastError('Please fill in start and end times')
+      return
+    }
+
+    const companyId = activeSpace || session?.user?.company_id
+    if (!companyId) {
+      toastError('Please select a space first')
+      return
+    }
+
+    try {
+      setCreating(true)
+      
+      // Prepare the event data
+      const eventData: {
+        title: string
+        description: string
+        start_date: string
+        end_date: string
+        created_by: string | undefined
+        company_id: string
+        start_time?: string
+        end_time?: string
+        event_type?: string
+      } = {
+        title: eventTitle,
+        description: eventDescription,
+        start_date: eventDate,
+        end_date: eventDate, // For now, same day events
+        created_by: session?.user?.id,
+        company_id: companyId,
+        event_type: eventType
+      }
+
+      // Only include time fields if time is enabled
+      if (includeTime) {
+        eventData.start_time = eventStartTime
+        eventData.end_time = eventEndTime
+      } else {
+        // For all-day events, set default times (00:00:00)
+        eventData.start_time = '00:00:00'
+        eventData.end_time = '23:59:59'
+      }
+
+      if (!supabase) {
+        throw new Error('Supabase client not initialized')
+      }
+
+      const { data, error } = await supabase
+        .from('company_events')
+        .insert(eventData)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Reset form
+      setEventTitle('')
+      setEventDescription('')
+      setEventDate('')
+      setEventStartTime('')
+      setEventEndTime('')
+      setIncludeTime(false)
+      setEventType('event')
+      setIsCreateEventOpen(false)
+
+      // Reload events
+      await loadEvents()
+      toastSuccess('Event created successfully!')
+    } catch (err) {
+      console.error('Error creating event:', err)
+      toastError('Failed to create event')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -345,7 +446,128 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       </div>
 
       {/* Event Creation Dialog */}
-      {/* TODO: Add EventCreation component when available */}
+      <Dialog open={isCreateEventOpen} onOpenChange={setIsCreateEventOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Event</DialogTitle>
+            <DialogDescription>
+              Create a new event for your calendar. Time is optional - uncheck &quot;Include specific time&quot; for all-day events.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="event-title">Event Title *</Label>
+              <Input
+                id="event-title"
+                value={eventTitle}
+                onChange={(e) => setEventTitle(e.target.value)}
+                placeholder="Enter event title"
+              />
+            </div>
+            <div>
+              <Label htmlFor="event-description">Description</Label>
+              <Textarea
+                id="event-description"
+                value={eventDescription}
+                onChange={(e) => setEventDescription(e.target.value)}
+                placeholder="Enter event description (optional)"
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label htmlFor="event-date">Date *</Label>
+              <Input
+                id="event-date"
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="event-type">Event Type *</Label>
+              <Select value={eventType} onValueChange={(value: "launch" | "sale" | "event" | "deadline") => setEventType(value)}>
+                <SelectTrigger id="event-type">
+                  <div className="flex items-center gap-2 w-full">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: eventTypeColors[eventType] || eventTypeColors.default }} />
+                    <SelectValue placeholder="Select event type">
+                      {eventType.charAt(0).toUpperCase() + eventType.slice(1)}
+                    </SelectValue>
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="event">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
+                      <span>Event</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="launch">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
+                      <span>Launch</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="sale">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#ef4444" }} />
+                      <span>Sale</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="deadline">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
+                      <span>Deadline</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                id="include-time"
+                type="checkbox"
+                checked={includeTime}
+                onChange={(e) => setIncludeTime(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="include-time">Include specific time</Label>
+            </div>
+            {includeTime && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="event-start-time">Start Time *</Label>
+                  <Input
+                    id="event-start-time"
+                    type="time"
+                    value={eventStartTime}
+                    onChange={(e) => setEventStartTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="event-end-time">End Time *</Label>
+                  <Input
+                    id="event-end-time"
+                    type="time"
+                    value={eventEndTime}
+                    onChange={(e) => setEventEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateEventOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={createEvent} 
+              disabled={creating || !eventTitle || !eventDate || (includeTime && (!eventStartTime || !eventEndTime))}
+            >
+              {creating ? 'Creating...' : 'Create Event'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

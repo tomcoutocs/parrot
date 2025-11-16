@@ -183,9 +183,19 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
     }
 
     try {
-      const result = await createUser(createUserData)
+      // Call the API route instead of createUser directly to ensure email is sent server-side
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(createUserData),
+      })
+
+      const result = await response.json()
+
       if (result.success) {
-        toastSuccess('User created successfully')
+        toastSuccess('User created successfully and welcome email sent')
         setCreateUserData({ 
           email: '', 
           full_name: '', 

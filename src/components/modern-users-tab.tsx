@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { UserPlus, Search, MoreHorizontal, Shield, User as UserIcon } from "lucide-react"
+import { UserPlus, Search, MoreHorizontal, Shield, User as UserIcon, Edit } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,8 +10,18 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { fetchUsersOptimized, fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
+import { fetchCompanyUsers } from "@/lib/company-detail-functions"
 import { User, Company } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
+import { updateUser } from "@/lib/database-functions"
+import { toastSuccess, toastError } from "@/lib/toast"
 
 interface ModernUsersTabProps {
   activeSpace?: string | null
@@ -19,6 +29,8 @@ interface ModernUsersTabProps {
 
 export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false)
+  const [isEditUserOpen, setIsEditUserOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState<"all" | "internal" | "client">("all")
   const [filterRole, setFilterRole] = useState<"all" | "admin" | "manager" | "user">("all")
@@ -26,7 +38,7 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Form state
+  // Form state for creating users
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -35,26 +47,87 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     spaces: [] as string[],
   })
 
+  // Form state for editing users
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    email: "",
+    role: "user" as "admin" | "manager" | "user" | "internal",
+    type: "client" as "internal" | "client",
+    spaces: [] as string[],
+  })
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
       try {
-        const [usersData, companiesData] = await Promise.all([
-          fetchUsersOptimized(),
-          fetchCompaniesOptimized()
-        ])
+        console.log('ModernUsersTab: Loading users for activeSpace:', activeSpace)
         
-        // Filter users by activeSpace if provided
-        let filteredUsers = usersData
+        const companiesData = await fetchCompaniesOptimized()
+        
+        // If we have an activeSpace, fetch users for that specific company
+        let filteredUsers: User[] = []
         if (activeSpace) {
-          // Show users that belong to this space (company)
-          filteredUsers = usersData.filter(user => user.company_id === activeSpace)
+          console.log('ModernUsersTab: Fetching users for space:', activeSpace)
+          
+          // Use fetchCompanyUsers which properly queries users for a company
+          // Filter to only active users
+          const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
+          console.log('ModernUsersTab: Company users from fetchCompanyUsers:', companyUsers.length)
+          console.log('ModernUsersTab: Company users:', companyUsers.map(u => ({ 
+            email: u.email, 
+            company_id: u.company_id,
+            role: u.role,
+            is_active: u.is_active
+          })))
+          
+          // Also fetch all users to get internal users assigned via internal_user_companies
+          const allUsers = await fetchUsersOptimized()
+          
+          // Get internal users assigned to this space via internal_user_companies
+          let internalUserIds: string[] = []
+          if (supabase) {
+            try {
+              const { data: internalAssignments, error } = await supabase
+                .from('internal_user_companies')
+                .select('user_id')
+                .eq('company_id', activeSpace)
+              
+              console.log('ModernUsersTab: Internal assignments query result:', { 
+                error, 
+                count: internalAssignments?.length || 0 
+              })
+              
+              if (!error && internalAssignments) {
+                internalUserIds = internalAssignments.map(assignment => assignment.user_id)
+                console.log('ModernUsersTab: Internal user IDs:', internalUserIds)
+              } else if (error) {
+                console.error("ModernUsersTab: Error fetching internal user assignments:", error)
+              }
+            } catch (err) {
+              console.error("ModernUsersTab: Exception fetching internal user assignments:", err)
+            }
+          }
+          
+          // Get internal users by their IDs from all users
+          const internalUsers = allUsers.filter(user => internalUserIds.includes(user.id))
+          console.log('ModernUsersTab: Internal users found:', internalUsers.length)
+          
+          // Combine company users and internal users, removing duplicates
+          const allSpaceUsers = [...companyUsers, ...internalUsers]
+          filteredUsers = allSpaceUsers.filter((user, index, self) => 
+            index === self.findIndex(u => u.id === user.id)
+          )
+          
+          console.log('ModernUsersTab: Total filtered users:', filteredUsers.length)
+        } else {
+          // No activeSpace - show all users
+          filteredUsers = await fetchUsersOptimized()
         }
         
         setUsers(filteredUsers)
         setCompanies(companiesData)
       } catch (error) {
-        console.error("Error loading users:", error)
+        console.error("ModernUsersTab: Error loading users:", error)
       } finally {
         setLoading(false)
       }
@@ -83,17 +156,207 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Creating user:", formData)
-    setIsAddUserOpen(false)
-    setFormData({
-      name: "",
-      email: "",
-      role: "user",
-      type: "client",
-      spaces: [],
-    })
+    
+    if (!selectedUser || !editFormData.name || !editFormData.email) {
+      console.error("Name and email are required")
+      return
+    }
+
+    try {
+      // Prepare user data based on type
+      const userData: any = {
+        email: editFormData.email,
+        full_name: editFormData.name,
+        role: editFormData.role,
+        is_active: true,
+        tab_permissions: []
+      }
+
+      // Set company_id for client users
+      if (editFormData.type === "client" && editFormData.spaces.length > 0) {
+        userData.company_id = editFormData.spaces[0]
+      } else {
+        userData.company_id = null
+      }
+
+      // For internal users, handle company assignments if needed
+      if (editFormData.type === "internal") {
+        if (editFormData.spaces.length > 0) {
+          userData.role = "internal"
+          userData.company_ids = editFormData.spaces
+          userData.primary_company_id = editFormData.spaces[0]
+        }
+      }
+
+      console.log("Updating user:", userData)
+
+      // Call updateUser function
+      const result = await updateUser(selectedUser.id, userData)
+
+      if (result.success) {
+        toastSuccess('User updated successfully')
+        setIsEditUserOpen(false)
+        setSelectedUser(null)
+        setEditFormData({
+          name: "",
+          email: "",
+          role: "user",
+          type: "client",
+          spaces: [],
+        })
+        
+        // Reload users
+        const companiesData = await fetchCompaniesOptimized()
+        setCompanies(companiesData)
+        
+        // Reload users based on activeSpace
+        if (activeSpace) {
+          const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
+          const allUsers = await fetchUsersOptimized()
+          
+          let internalUserIds: string[] = []
+          if (supabase) {
+            try {
+              const { data: internalAssignments } = await supabase
+                .from('internal_user_companies')
+                .select('user_id')
+                .eq('company_id', activeSpace)
+              
+              if (internalAssignments) {
+                internalUserIds = internalAssignments.map(assignment => assignment.user_id)
+              }
+            } catch (err) {
+              console.error("Error fetching internal user assignments:", err)
+            }
+          }
+          
+          const internalUsers = allUsers.filter(user => internalUserIds.includes(user.id))
+          const allSpaceUsers = [...companyUsers, ...internalUsers]
+          const filteredUsers = allSpaceUsers.filter((user, index, self) => 
+            index === self.findIndex(u => u.id === user.id)
+          )
+          setUsers(filteredUsers)
+        } else {
+          const allUsers = await fetchUsersOptimized()
+          setUsers(allUsers)
+        }
+      } else {
+        console.error("Failed to update user:", result.error)
+        toastError(result.error || 'Failed to update user')
+      }
+    } catch (error) {
+      console.error("Error updating user:", error)
+      toastError('An error occurred while updating the user', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!formData.name || !formData.email) {
+      console.error("Name and email are required")
+      return
+    }
+
+    try {
+      // Generate a temporary password (in production, you might want to require admin to set it)
+      const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`
+      
+      // Prepare user data based on type
+      const userData: any = {
+        email: formData.email,
+        full_name: formData.name,
+        password: tempPassword,
+        tab_permissions: []
+      }
+
+      // Set role and company assignments based on user type
+      if (formData.type === "client") {
+        // Client users get the selected role and are assigned to a company
+        userData.role = formData.role // admin, manager, or user
+        if (formData.spaces.length > 0) {
+          userData.company_id = formData.spaces[0]
+        }
+      } else {
+        // Internal users have role "internal" and can be assigned to multiple companies
+        userData.role = "internal"
+        if (formData.spaces.length > 0) {
+          userData.company_ids = formData.spaces
+          userData.primary_company_id = formData.spaces[0]
+        }
+      }
+
+      console.log("Creating user:", userData)
+
+      // Call the API route to create user and send welcome email
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        console.log("User created successfully:", result.user)
+        setIsAddUserOpen(false)
+        setFormData({
+          name: "",
+          email: "",
+          role: "user",
+          type: "client",
+          spaces: [],
+        })
+        
+        // Reload users
+        const companiesData = await fetchCompaniesOptimized()
+        setCompanies(companiesData)
+        
+        // Reload users based on activeSpace
+        if (activeSpace) {
+          const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
+          const allUsers = await fetchUsersOptimized()
+          
+          let internalUserIds: string[] = []
+          if (supabase) {
+            try {
+              const { data: internalAssignments } = await supabase
+                .from('internal_user_companies')
+                .select('user_id')
+                .eq('company_id', activeSpace)
+              
+              if (internalAssignments) {
+                internalUserIds = internalAssignments.map(assignment => assignment.user_id)
+              }
+            } catch (err) {
+              console.error("Error fetching internal user assignments:", err)
+            }
+          }
+          
+          const internalUsers = allUsers.filter(user => internalUserIds.includes(user.id))
+          const allSpaceUsers = [...companyUsers, ...internalUsers]
+          const filteredUsers = allSpaceUsers.filter((user, index, self) => 
+            index === self.findIndex(u => u.id === user.id)
+          )
+          setUsers(filteredUsers)
+        } else {
+          const allUsers = await fetchUsersOptimized()
+          setUsers(allUsers)
+        }
+      } else {
+        console.error("Failed to create user:", result.error)
+        alert(`Failed to create user: ${result.error}`)
+      }
+    } catch (error) {
+      console.error("Error creating user:", error)
+      alert(`Error creating user: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   const filteredUsers = users.filter(user => {
@@ -366,9 +629,51 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
 
                   <div className="col-span-1 flex items-center justify-between">
                     <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
-                      <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
+                          <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            setSelectedUser(user)
+                            
+                            // Get company assignments for internal users
+                            let userSpaces: string[] = []
+                            if (user.role === "internal" && supabase) {
+                              try {
+                                const { data: assignments } = await supabase
+                                  .from('internal_user_companies')
+                                  .select('company_id')
+                                  .eq('user_id', user.id)
+                                
+                                if (assignments) {
+                                  userSpaces = assignments.map(a => a.company_id)
+                                }
+                              } catch (err) {
+                                console.error("Error fetching company assignments:", err)
+                              }
+                            } else if (user.company_id) {
+                              userSpaces = [user.company_id]
+                            }
+                            
+                            setEditFormData({
+                              name: user.full_name || "",
+                              email: user.email,
+                              role: user.role,
+                              type: user.role === "internal" ? "internal" : (user.company_id ? "client" : "internal"),
+                              spaces: userSpaces,
+                            })
+                            setIsEditUserOpen(true)
+                          }}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit User
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               )
@@ -385,6 +690,136 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
         <span>•</span>
         <span>{users.filter(u => u.company_id).length} client users</span>
       </div>
+
+      {/* Edit User Modal */}
+      <Dialog open={isEditUserOpen} onOpenChange={setIsEditUserOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update user account information
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-5 mt-4">
+            {/* Name */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Full Name</Label>
+              <Input
+                id="edit-name"
+                placeholder="Enter full name"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                required
+              />
+            </div>
+
+            {/* Email */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email Address</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                placeholder="email@example.com"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                required
+              />
+            </div>
+
+            {/* User Type & Role */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-type">User Type</Label>
+                <Select
+                  value={editFormData.type}
+                  onValueChange={(value: "internal" | "client") => 
+                    setEditFormData({ ...editFormData, type: value })
+                  }
+                >
+                  <SelectTrigger id="edit-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="internal">Internal Team</SelectItem>
+                    <SelectItem value="client">Client</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-role">Role</Label>
+                <Select
+                  value={editFormData.role}
+                  onValueChange={(value: "admin" | "manager" | "user" | "internal") => 
+                    setEditFormData({ ...editFormData, role: value })
+                  }
+                >
+                  <SelectTrigger id="edit-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                    {editFormData.type === "internal" && (
+                      <SelectItem value="internal">Internal</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Space Access */}
+            {editFormData.type === "client" && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-spaces">Space Access</Label>
+                <Select
+                  value={editFormData.spaces[0] || ""}
+                  onValueChange={(value) => 
+                    setEditFormData({ ...editFormData, spaces: [value] })
+                  }
+                >
+                  <SelectTrigger id="edit-spaces">
+                    <SelectValue placeholder="Select a space" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        <div className="flex items-center gap-2">
+                          {company.is_active !== false && (
+                            <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]" />
+                          )}
+                          {company.is_active === false && (
+                            <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                          )}
+                          {company.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Client users can only access assigned spaces
+                </p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditUserOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

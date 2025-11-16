@@ -2,14 +2,16 @@
 
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { MoreHorizontal, Calendar, Flag, Plus, FolderKanban, Search } from "lucide-react"
+import { MoreHorizontal, Calendar, Flag, Plus, FolderKanban, Search, Edit } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { fetchProjectsOptimized } from "@/lib/simplified-database-functions"
-import { ProjectWithDetails } from "@/lib/supabase"
+import { ProjectWithDetails, User } from "@/lib/supabase"
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import CreateProjectModal from "@/components/modals/create-project-modal"
+import EditProjectModal from "@/components/modals/edit-project-modal"
+import { fetchUsers } from "@/lib/database-functions"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +28,9 @@ export function ModernProjectsTab({ activeSpace }: ModernProjectsTabProps) {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<ProjectWithDetails | null>(null)
+  const [users, setUsers] = useState<User[]>([])
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -47,6 +52,19 @@ export function ModernProjectsTab({ activeSpace }: ModernProjectsTabProps) {
 
     loadProjects()
   }, [activeSpace])
+
+  // Load users for the edit modal
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const usersData = await fetchUsers()
+        setUsers(usersData)
+      } catch (error) {
+        console.error("Error loading users:", error)
+      }
+    }
+    loadUsers()
+  }, [])
 
   const calculateProgress = (project: ProjectWithDetails) => {
     if (!project.tasks || project.tasks.length === 0) {
@@ -90,6 +108,22 @@ export function ModernProjectsTab({ activeSpace }: ModernProjectsTabProps) {
     }
     loadProjects()
     setShowCreateModal(false)
+  }
+
+  const handleProjectUpdated = () => {
+    // Reload projects after update
+    const loadProjects = async () => {
+      if (!activeSpace) return
+      try {
+        const projectsData = await fetchProjectsOptimized(activeSpace)
+        setProjects(projectsData)
+      } catch (error) {
+        console.error("Error reloading projects:", error)
+      }
+    }
+    loadProjects()
+    setShowEditModal(false)
+    setSelectedProject(null)
   }
 
   if (loading) {
@@ -218,12 +252,18 @@ export function ModernProjectsTab({ activeSpace }: ModernProjectsTabProps) {
                   <div className="col-span-1 flex justify-end">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
+                        <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all pointer-events-auto">
                           <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedProject(project)
+                          setShowEditModal(true)
+                        }}>
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
                         <DropdownMenuItem>View Details</DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
                       </DropdownMenuContent>
@@ -241,6 +281,18 @@ export function ModernProjectsTab({ activeSpace }: ModernProjectsTabProps) {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onProjectCreated={handleProjectCreated}
+      />
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setSelectedProject(null)
+        }}
+        onProjectUpdated={handleProjectUpdated}
+        project={selectedProject}
+        users={users}
       />
     </div>
   )

@@ -1170,6 +1170,7 @@ export async function createUser(userData: {
 
     console.log('User created successfully:', data)
     console.log('Created user tab permissions:', data.tab_permissions)
+
     return { success: true, data }
   } catch (error) {
     console.error('Error creating user:', error)
@@ -1651,6 +1652,8 @@ export async function createCompany(companyData: {
   phone?: string
   address?: string
   is_partner?: boolean
+  retainer?: number
+  revenue?: number
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1671,7 +1674,9 @@ export async function createCompany(companyData: {
         phone: companyData.phone,
         address: companyData.address,
         is_partner: companyData.is_partner || false,
-        is_active: true
+        is_active: true,
+        retainer: companyData.retainer,
+        revenue: companyData.revenue
       })
       .select()
       .single()
@@ -1698,6 +1703,8 @@ export async function updateCompany(companyId: string, companyData: {
   address?: string
   is_active: boolean
   is_partner: boolean
+  retainer?: number
+  revenue?: number
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1719,6 +1726,8 @@ export async function updateCompany(companyId: string, companyData: {
         address: companyData.address,
         is_partner: companyData.is_partner,
         is_active: companyData.is_active,
+        retainer: companyData.retainer,
+        revenue: companyData.revenue,
         updated_at: new Date().toISOString()
       })
       .eq('id', companyId)

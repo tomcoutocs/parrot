@@ -2,18 +2,27 @@
 
 import { Suspense, use } from 'react'
 import DocumentEditorPage from '@/components/document-editor-page'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
 
 export default function DocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   return (
-    <Suspense fallback={<DocumentEditorLoading />}>
-      <DocumentEditorPageWrapper documentId={id} />
-    </Suspense>
+    <ErrorBoundary showDetails={true}>
+      <Suspense fallback={<DocumentEditorLoading />}>
+        <DocumentEditorPageWrapper documentId={id} />
+      </Suspense>
+    </ErrorBoundary>
   )
 }
 
 function DocumentEditorPageWrapper({ documentId }: { documentId: string }) {
-  return <DocumentEditorPage documentId={documentId} />
+  return (
+    <ErrorBoundary showDetails={true}>
+      <Suspense fallback={<DocumentEditorLoading />}>
+        <DocumentEditorPage documentId={documentId} />
+      </Suspense>
+    </ErrorBoundary>
+  )
 }
 
 function DocumentEditorLoading() {

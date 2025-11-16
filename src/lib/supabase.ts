@@ -53,6 +53,8 @@ export interface Company {
   tags?: string[]
   is_active: boolean
   is_partner: boolean
+  retainer?: number
+  revenue?: number
   created_at: string
   updated_at: string
   services?: Service[]

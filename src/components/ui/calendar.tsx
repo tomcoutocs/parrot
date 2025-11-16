@@ -188,6 +188,7 @@ function CalendarDayButton({
   return (
     <Button
       ref={ref}
+      type="button"
       variant="ghost"
       size="icon"
       data-day={day.date.toLocaleDateString()}
@@ -205,6 +206,10 @@ function CalendarDayButton({
         defaultClassNames.day,
         className
       )}
+      onClick={(e) => {
+        e.stopPropagation()
+        props.onClick?.(e as any)
+      }}
       {...props}
     />
   )

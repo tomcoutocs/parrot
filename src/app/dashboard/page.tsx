@@ -13,6 +13,8 @@ function DashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isChangingTabRef = useRef(false)
+  const isChangingSpaceRef = useRef(false)
+  const isSwitchingToAdminRef = useRef(false)
   // Initialize tab based on user role - non-admin users go straight to dashboard
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     // Default to spaces for admin, dashboard for non-admin (will be set properly once session loads)
@@ -37,6 +39,12 @@ function DashboardContent() {
 
   // Handle URL parameters for tab, company, and space
   useEffect(() => {
+    // Skip URL sync if we're actively changing spaces or switching to admin tabs
+    if (isChangingSpaceRef.current || isSwitchingToAdminRef.current) {
+      console.log('Dashboard: Skipping URL sync - space change or admin switch in progress')
+      return
+    }
+    
     const tabParam = searchParams.get('tab') as TabType
     const companyParam = searchParams.get('company')
     const spaceParam = searchParams.get('space')
@@ -57,10 +65,21 @@ function DashboardContent() {
     
     const validTabs: TabType[] = ['spaces', 'dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug', 'reports', 'settings']
     // Only update activeTab if it's different to prevent unnecessary re-renders
-    // Only sync from URL if we're not already in the process of changing tabs
-    if (tabParam && validTabs.includes(tabParam) && activeTab !== tabParam && !isChangingTabRef.current) {
-      console.log('Setting active tab to:', tabParam)
-      setActiveTab(tabParam)
+    // Only sync from URL if we're not already in the process of changing tabs or spaces
+    // IMPORTANT: If we have a space param, don't show the spaces tab - switch to dashboard instead
+    if (tabParam && validTabs.includes(tabParam)) {
+      if (spaceParam && tabParam === 'spaces') {
+        // If URL has a space but tab is spaces, redirect to dashboard for that space
+        // BUT: Skip if we're actively changing spaces to avoid redirect loops
+        if (!isChangingSpaceRef.current) {
+          console.log('Space selected but tab is spaces - redirecting to dashboard')
+          router.push(`/dashboard?tab=dashboard&space=${spaceParam}`)
+          setActiveTab('dashboard')
+        }
+      } else if (activeTab !== tabParam && !isChangingTabRef.current && !isChangingSpaceRef.current) {
+        console.log('Setting active tab to:', tabParam)
+        setActiveTab(tabParam)
+      }
     }
     
     if (companyParam) {
@@ -70,17 +89,36 @@ function DashboardContent() {
     
     if (spaceParam) {
       console.log('Setting current space to:', spaceParam)
-      if (currentSpaceId !== spaceParam) {
+      // Only sync from URL if space actually changed and we're not manually changing it
+      // IMPORTANT: Don't sync space if we're on an admin-only tab (admin tabs don't have spaces)
+      // EXCEPTION: "admin" tab can have a space to show space users
+      const adminOnlyTabs: TabType[] = ['spaces', 'companies', 'project-overview', 'debug']
+      if (adminOnlyTabs.includes(tabParam as TabType)) {
+        console.log('Admin tab detected - ignoring space param')
+        // Clear space if we're on an admin tab (except admin tab which can have space)
+        if (currentSpaceId !== null) {
+          setCurrentSpaceId(null)
+          setSelectedCompany(null)
+        }
+      } else if (currentSpaceId !== spaceParam) {
+        console.log('Syncing space from URL:', spaceParam)
         setCurrentSpaceId(spaceParam)
         setSelectedCompany(spaceParam) // Space ID is the company ID
       }
     } else if (!spaceParam && currentSpaceId !== null) {
       // URL has no space param but we have a space - clear it
       // This happens when switching to admin views
-      // BUT: Don't clear space if we're switching to a space-required tab (like settings)
+      // BUT: Don't clear space if we're switching to a space-required tab (like settings or admin/users)
       // The tab change handler should have included the space in the URL
-      const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'forms', 'services', 'company-calendars', 'documents', 'settings']
-      if (!spaceRequiredTabs.includes(tabParam as TabType)) {
+      const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'forms', 'services', 'company-calendars', 'documents', 'settings', 'admin']
+      const adminOnlyTabs: TabType[] = ['spaces', 'companies', 'project-overview', 'debug']
+      
+      // Always clear space for admin tabs (except admin/users tab which can have space)
+      if (adminOnlyTabs.includes(tabParam as TabType)) {
+        console.log('Clearing space for admin tab:', tabParam)
+        setCurrentSpaceId(null)
+        setSelectedCompany(null)
+      } else if (!spaceRequiredTabs.includes(tabParam as TabType)) {
         setCurrentSpaceId(null)
         setSelectedCompany(null)
       }
@@ -88,8 +126,9 @@ function DashboardContent() {
   }, [searchParams, session, router, currentSpaceId]) // Removed activeTab from dependencies to prevent loop
   
   // Initialize space for non-admin users - they should go straight to their space
+  // IMPORTANT: Only run this for non-admin users, and don't interfere if admin is switching spaces
   useEffect(() => {
-    if (session && session.user.role !== 'admin' && session.user.company_id) {
+    if (session && session.user.role !== 'admin' && session.user.company_id && !isChangingSpaceRef.current) {
       const userSpaceId = session.user.company_id
       
       // Always set their space immediately
@@ -188,10 +227,41 @@ function DashboardContent() {
     }
     
     // Admin-only tabs don't require a space - allow switching to them freely
+    // EXCEPTION: "admin" tab (users) can be accessed WITH a space to show space users
+    // When switching to admin tabs (except "admin"), clear the space if one is selected
     if (adminOnlyTabs.includes(tab)) {
+      console.log('Dashboard: Switching to admin tab:', tab)
+      
+      // Special handling for "admin" tab - if we have a space, keep it
+      if (tab === 'admin' && currentSpaceId) {
+        console.log('Dashboard: Switching to admin tab WITH space - showing space users')
+        setActiveTab(tab)
+        router.push(`/dashboard?tab=${tab}&space=${currentSpaceId}`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
+        return
+      }
+      
+      // For other admin tabs or admin tab without space, clear space
+      // Set flag to prevent URL sync from interfering
+      isSwitchingToAdminRef.current = true
+      
+      // Clear space when switching to admin tabs (except admin tab with space)
+      if (currentSpaceId) {
+        console.log('Dashboard: Clearing space for admin tab')
+        setCurrentSpaceId(null)
+        setSelectedCompany(null)
+        isChangingSpaceRef.current = true
+      }
+      
       setActiveTab(tab)
       router.push(`/dashboard?tab=${tab}`)
-      setTimeout(() => { isChangingTabRef.current = false }, 100)
+      
+      setTimeout(() => { 
+        isChangingTabRef.current = false
+        isSwitchingToAdminRef.current = false
+        isChangingSpaceRef.current = false
+        console.log('Dashboard: Admin switch flags cleared')
+      }, 300)
       return
     }
     
@@ -270,15 +340,43 @@ function DashboardContent() {
   }
   
   const handleSelectSpace = (spaceId: string) => {
+    console.log('Dashboard: handleSelectSpace called with spaceId:', spaceId)
+    console.log('Dashboard: Current currentSpaceId:', currentSpaceId)
+    console.log('Dashboard: Is admin?', session?.user?.role === 'admin')
+    
+    if (!spaceId) {
+      console.error('Dashboard: No spaceId provided to handleSelectSpace')
+      return
+    }
+    
+    // Set flag FIRST to prevent URL sync useEffect from interfering
+    isChangingSpaceRef.current = true
+    isChangingTabRef.current = true
+    
+    // Immediately update state - don't wait for URL
     setCurrentSpaceId(spaceId)
     setSelectedCompany(spaceId)
-    // Switch to dashboard when entering a space
     setActiveTab('dashboard')
-    // Update URL
-    router.push(`/dashboard?tab=dashboard&space=${spaceId}`)
+    
+    // Update URL with the correct spaceId - use replace to avoid adding to history
+    const url = `/dashboard?tab=dashboard&space=${spaceId}`
+    console.log('Dashboard: Navigating to URL:', url)
+    router.replace(url)
+    
+    // Clear flags after URL has time to update (increased delay for reliability)
+    setTimeout(() => {
+      isChangingSpaceRef.current = false
+      isChangingTabRef.current = false
+      console.log('Dashboard: Space change flags cleared')
+    }, 500)
   }
   
   const handleSpaceChange = (spaceId: string | null) => {
+    console.log('Dashboard: handleSpaceChange called with spaceId:', spaceId)
+    console.log('Dashboard: Current currentSpaceId:', currentSpaceId)
+    console.log('Dashboard: Session user role:', session?.user?.role)
+    console.log('Dashboard: Current activeTab:', activeTab)
+    
     // Prevent non-admin users from exiting their space
     if (spaceId === null && session?.user?.role !== 'admin') {
       console.warn('Non-admin user attempted to exit their space')
@@ -293,14 +391,50 @@ function DashboardContent() {
     
     if (spaceId === null) {
       // Exiting space - go back to spaces view (admin only)
-      // Batch all state updates together to prevent stuttering
-      startTransition(() => {
+      // BUT: Don't change tab if we're already switching to an admin tab
+      console.log('Dashboard: Clearing space, current tab:', activeTab, 'isSwitchingToAdmin:', isSwitchingToAdminRef.current)
+      
+      // If we're already switching to admin tab, just clear space and let handleTabChange handle navigation
+      if (isSwitchingToAdminRef.current) {
+        console.log('Dashboard: Already switching to admin tab, just clearing space')
         setCurrentSpaceId(null)
         setSelectedCompany(null)
+        return
+      }
+      
+      // Set flag to prevent URL sync from interfering
+      isSwitchingToAdminRef.current = true
+      isChangingSpaceRef.current = true
+      
+      // Clear space immediately
+      setCurrentSpaceId(null)
+      setSelectedCompany(null)
+      
+      // Only change tab if we're not already on an admin tab
+      const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
+      if (!adminOnlyTabs.includes(activeTab)) {
+        console.log('Dashboard: Switching to spaces tab')
         setActiveTab('spaces')
-      })
-      router.push('/dashboard?tab=spaces')
+        router.push('/dashboard?tab=spaces')
+      } else {
+        console.log('Dashboard: Already on admin tab, just clearing space')
+        // Just update URL to remove space param
+        const currentUrl = new URL(window.location.href)
+        currentUrl.searchParams.delete('space')
+        router.replace(currentUrl.pathname + currentUrl.search)
+      }
+      
+      setTimeout(() => {
+        isSwitchingToAdminRef.current = false
+        isChangingSpaceRef.current = false
+        console.log('Dashboard: Space change flags cleared')
+      }, 300)
     } else {
+      // Ensure we have a valid spaceId string
+      if (typeof spaceId !== 'string' || !spaceId.trim()) {
+        console.error('Dashboard: Invalid spaceId provided:', spaceId)
+        return
+      }
       handleSelectSpace(spaceId)
     }
   }
