@@ -3976,3 +3976,184 @@ export async function deleteRichDocument(
   }
 }
 
+export interface RecentActivity {
+  id: string
+  type: 'project_created' | 'task_created' | 'task_completed' | 'task_updated' | 'comment_added'
+  user_id: string
+  user_name: string
+  user_email?: string
+  timestamp: string
+  project_id?: string
+  project_name?: string
+  company_name?: string
+  task_id?: string
+  task_title?: string
+  comment_content?: string
+}
+
+export async function fetchRecentActivities(limit: number = 10): Promise<RecentActivity[]> {
+  if (!supabase) return []
+
+  try {
+    await setAppContext()
+    const activities: RecentActivity[] = []
+    const oneWeekAgo = new Date()
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+
+    // Fetch recent projects
+    const { data: recentProjects } = await supabase
+      .from('projects')
+      .select(`
+        id,
+        name,
+        created_at,
+        created_by,
+        company_id,
+        created_user:users!projects_created_by_fkey(id, full_name, email),
+        company:companies!projects_company_id_fkey(id, name)
+      `)
+      .gte('created_at', oneWeekAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (recentProjects) {
+      recentProjects.forEach(project => {
+        activities.push({
+          id: `project-${project.id}`,
+          type: 'project_created',
+          user_id: project.created_by,
+          user_name: (project.created_user as any)?.full_name || 'Unknown',
+          user_email: (project.created_user as any)?.email,
+          timestamp: project.created_at,
+          project_id: project.id,
+          project_name: project.name,
+          company_name: (project.company as any)?.name
+        })
+      })
+    }
+
+    // Fetch recent tasks (created and completed)
+    const { data: recentTasks } = await supabase
+      .from('tasks')
+      .select(`
+        id,
+        title,
+        status,
+        created_at,
+        updated_at,
+        created_by,
+        project_id,
+        created_user:users!tasks_created_by_fkey(id, full_name, email),
+        project:projects!tasks_project_id_fkey(id, name, company_id, company:companies!projects_company_id_fkey(id, name))
+      `)
+      .gte('created_at', oneWeekAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit * 2)
+    
+    // Also fetch recently completed tasks
+    const { data: completedTasks } = await supabase
+      .from('tasks')
+      .select(`
+        id,
+        title,
+        status,
+        created_at,
+        updated_at,
+        created_by,
+        project_id,
+        created_user:users!tasks_created_by_fkey(id, full_name, email),
+        project:projects!tasks_project_id_fkey(id, name, company_id, company:companies!projects_company_id_fkey(id, name))
+      `)
+      .eq('status', 'done')
+      .gte('updated_at', oneWeekAgo.toISOString())
+      .order('updated_at', { ascending: false })
+      .limit(limit)
+    
+    const allRecentTasks = [...(recentTasks || []), ...(completedTasks || [])]
+    const uniqueTasks = Array.from(
+      new Map(allRecentTasks.map(task => [task.id, task])).values()
+    )
+
+    if (uniqueTasks.length > 0) {
+      uniqueTasks.forEach(task => {
+        const isCompleted = task.status === 'done'
+        const isNew = new Date(task.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+        const wasRecentlyCompleted = isCompleted && new Date(task.updated_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+        
+        if (isNew && !wasRecentlyCompleted) {
+          activities.push({
+            id: `task-created-${task.id}`,
+            type: 'task_created',
+            user_id: task.created_by,
+            user_name: (task.created_user as any)?.full_name || 'Unknown',
+            user_email: (task.created_user as any)?.email,
+            timestamp: task.created_at,
+            project_id: task.project_id,
+            project_name: (task.project as any)?.name,
+            company_name: (task.project as any)?.company?.name,
+            task_id: task.id,
+            task_title: task.title
+          })
+        } else if (wasRecentlyCompleted) {
+          activities.push({
+            id: `task-completed-${task.id}`,
+            type: 'task_completed',
+            user_id: task.created_by,
+            user_name: (task.created_user as any)?.full_name || 'Unknown',
+            user_email: (task.created_user as any)?.email,
+            timestamp: task.updated_at,
+            project_id: task.project_id,
+            project_name: (task.project as any)?.name,
+            company_name: (task.project as any)?.company?.name,
+            task_id: task.id,
+            task_title: task.title
+          })
+        }
+      })
+    }
+
+    // Fetch recent task comments
+    const { data: recentComments } = await supabase
+      .from('task_comments')
+      .select(`
+        id,
+        content,
+        created_at,
+        user_id,
+        task_id,
+        user:users!task_comments_user_id_fkey(id, full_name, email),
+        task:tasks!task_comments_task_id_fkey(id, title, project_id, project:projects!tasks_project_id_fkey(id, name, company_id, company:companies!projects_company_id_fkey(id, name)))
+      `)
+      .gte('created_at', oneWeekAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (recentComments) {
+      recentComments.forEach(comment => {
+        activities.push({
+          id: `comment-${comment.id}`,
+          type: 'comment_added',
+          user_id: comment.user_id,
+          user_name: (comment.user as any)?.full_name || 'Unknown',
+          user_email: (comment.user as any)?.email,
+          timestamp: comment.created_at,
+          project_id: (comment.task as any)?.project_id,
+          project_name: (comment.task as any)?.project?.name,
+          company_name: (comment.task as any)?.project?.company?.name,
+          task_id: comment.task_id,
+          task_title: (comment.task as any)?.title,
+          comment_content: comment.content
+        })
+      })
+    }
+
+    // Sort all activities by timestamp and return the most recent
+    return activities
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit)
+  } catch (error) {
+    console.error('Error fetching recent activities:', error)
+    return []
+  }
+}
+

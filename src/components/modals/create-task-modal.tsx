@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { X, Calendar, Clock, User, AlertCircle } from 'lucide-react'
+import { X, Calendar, User, AlertCircle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,7 +43,6 @@ export default function CreateTaskModal({
   const [priority, setPriority] = useState<Task['priority']>('medium')
   const [assignedTo, setAssignedTo] = useState<string>('unassigned')
   const [dueDate, setDueDate] = useState<string>('')
-  const [estimatedHours, setEstimatedHours] = useState<number>(1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -73,7 +72,7 @@ export default function CreateTaskModal({
         priority,
         assigned_to: assignedTo === 'unassigned' ? undefined : assignedTo || undefined,
         due_date: dueDate ? formatDateForDatabase(dueDate) : undefined,
-        estimated_hours: estimatedHours,
+        estimated_hours: 0,
         actual_hours: 0,
         position: 1, // Will be updated by the database
         created_by: session.user.id
@@ -89,7 +88,6 @@ export default function CreateTaskModal({
         setPriority('medium')
         setAssignedTo('unassigned')
         setDueDate('')
-        setEstimatedHours(1)
         
         onTaskCreated()
         onClose()
@@ -112,7 +110,6 @@ export default function CreateTaskModal({
       setPriority('medium')
       setAssignedTo('unassigned')
       setDueDate('')
-      setEstimatedHours(1)
       setError('')
       onClose()
     }
@@ -207,36 +204,18 @@ export default function CreateTaskModal({
             </Select>
           </div>
 
-          {/* Due Date and Estimated Hours */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="dueDate">Due Date</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  id="dueDate"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="estimatedHours">Estimated Hours</Label>
-              <div className="relative">
-                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  id="estimatedHours"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={estimatedHours}
-                  onChange={(e) => setEstimatedHours(Number(e.target.value))}
-                  className="pl-10"
-                />
-              </div>
+          {/* Due Date */}
+          <div className="space-y-2">
+            <Label htmlFor="dueDate">Due Date</Label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                id="dueDate"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="pl-10"
+              />
             </div>
           </div>
 

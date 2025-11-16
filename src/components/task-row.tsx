@@ -28,14 +28,18 @@ interface TaskRowProps {
   showMultiSelect: boolean
   selectedTasks: string[]
   onTaskClick?: (taskId: string) => void
+  users?: Array<{ id: string; full_name: string; email: string }>
 }
 
-const teamMembers = [
-  { id: "NF", name: "Nicolas Figari", avatar: "" },
-  { id: "SC", name: "Sarah Chen", avatar: "" },
-  { id: "AR", name: "Alex Rivera", avatar: "" },
-  { id: "EW", name: "Emma Wilson", avatar: "" },
-]
+// Helper function to get initials from name
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
 
 const priorityLevels = [
   { id: "urgent", label: "Urgent", color: "text-red-600", dotColor: "bg-red-500" },
@@ -64,20 +68,17 @@ function getDueDateStatus(dueDate: string) {
     
     const daysUntilDue = differenceInDays(dateObj, today)
     
-    if (daysUntilDue < 0) {
+    // Only show red if within 1 day (overdue or due today/tomorrow)
+    if (daysUntilDue < 0 || daysUntilDue <= 1) {
       return { status: "overdue", color: "text-red-600", dotColor: "bg-red-500" }
-    } else if (daysUntilDue <= 3) {
-      return { status: "urgent", color: "text-orange-600", dotColor: "bg-orange-500" }
-    } else if (daysUntilDue <= 7) {
-      return { status: "soon", color: "text-yellow-600", dotColor: "bg-yellow-500" }
     }
-    return { status: "normal", color: "text-foreground", dotColor: null }
+    return { status: "normal", color: "text-muted-foreground", dotColor: null }
   } catch (e) {
-    return { status: "normal", color: "text-foreground", dotColor: null }
+    return { status: "normal", color: "text-muted-foreground", dotColor: null }
   }
 }
 
-export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, showMultiSelect, selectedTasks, onTaskClick }: TaskRowProps) {
+export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, showMultiSelect, selectedTasks, onTaskClick, users = [] }: TaskRowProps) {
   const [isEditingName, setIsEditingName] = useState(false)
   const [nameValue, setNameValue] = useState(task.name)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
@@ -249,17 +250,17 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
               <span className="text-muted-foreground">Unassigned</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {teamMembers.map((member) => (
+            {users.map((user) => (
               <DropdownMenuItem
-                key={member.id}
-                onClick={() => onUpdate(task.id, { assignee: member.id })}
+                key={user.id}
+                onClick={() => onUpdate(task.id, { assignee: user.id })}
               >
                 <div className="flex items-center gap-2">
                   <Avatar className="w-5 h-5">
-                    <AvatarImage src={member.avatar} />
-                    <AvatarFallback className="text-xs">{member.id}</AvatarFallback>
+                    <AvatarImage src="" />
+                    <AvatarFallback className="text-xs">{getInitials(user.full_name)}</AvatarFallback>
                   </Avatar>
-                  <span>{member.name}</span>
+                  <span>{user.full_name}</span>
                 </div>
               </DropdownMenuItem>
             ))}
@@ -295,11 +296,11 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
       </div>
 
       {/* Due Date Column - Editable with color indicators */}
-      <div className="col-span-2">
+      <div className="col-span-2 flex items-center justify-center">
         <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
           <PopoverTrigger asChild>
-            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors -ml-2">
-              <span className={`text-sm ${task.dueDate && task.dueDate !== "-" ? "text-red-600" : "text-muted-foreground"}`}>
+            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors">
+              <span className={`text-sm ${dueDateStatus?.color || "text-muted-foreground"}`}>
                 {task.dueDate || "-"}
               </span>
             </button>

@@ -6,11 +6,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect } from "react"
 import { fetchUsersOptimized, fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
+import { fetchRecentActivities, type RecentActivity } from "@/lib/database-functions"
 import { User } from "@/lib/supabase"
+import { formatDistanceToNow } from "date-fns"
 
 export function AdminTeam() {
   const [team, setTeam] = useState<User[]>([])
+  const [activities, setActivities] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
+  const [activitiesLoading, setActivitiesLoading] = useState(true)
 
   useEffect(() => {
     const loadData = async () => {
@@ -42,6 +46,22 @@ export function AdminTeam() {
     }
 
     loadData()
+  }, [])
+
+  useEffect(() => {
+    const loadActivities = async () => {
+      setActivitiesLoading(true)
+      try {
+        const recentActivities = await fetchRecentActivities(10)
+        setActivities(recentActivities)
+      } catch (error) {
+        console.error("Error loading activities:", error)
+      } finally {
+        setActivitiesLoading(false)
+      }
+    }
+
+    loadActivities()
   }, [])
 
   if (loading) {
@@ -102,51 +122,88 @@ export function AdminTeam() {
       {/* Activity Log */}
       <Card className="p-4 border-border/60">
         <h3 className="text-sm mb-3">Recent Activity</h3>
-        <div className="space-y-3">
-          <div className="flex items-start gap-3 pb-3 border-b border-border/40 last:border-0 last:pb-0">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src="" />
-              <AvatarFallback className="bg-muted text-xs">NF</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm">
-                <span>Nicolas Figari</span>
-                <span className="text-muted-foreground"> created project </span>
-                <span>Onboarding</span>
-                <span className="text-muted-foreground"> for Half Past Seven</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">2 hours ago</p>
-            </div>
+        {activitiesLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-muted-foreground text-sm">Loading activities...</div>
           </div>
-          <div className="flex items-start gap-3 pb-3 border-b border-border/40 last:border-0 last:pb-0">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src="" />
-              <AvatarFallback className="bg-muted text-xs">SC</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm">
-                <span>Sarah Chen</span>
-                <span className="text-muted-foreground"> completed task </span>
-                <span>Q3 Report</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">5 hours ago</p>
-            </div>
+        ) : activities.length === 0 ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-muted-foreground text-sm">No recent activity</div>
           </div>
-          <div className="flex items-start gap-3 pb-3 border-b border-border/40 last:border-0 last:pb-0">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src="" />
-              <AvatarFallback className="bg-muted text-xs">EW</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm">
-                <span>Emily Watson</span>
-                <span className="text-muted-foreground"> commented on </span>
-                <span>Brand Guidelines Development</span>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Yesterday</p>
-            </div>
+        ) : (
+          <div className="space-y-3">
+            {activities.map((activity) => {
+              const initials = activity.user_name
+                .split(' ')
+                .map(n => n[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2)
+
+              const getActivityText = () => {
+                switch (activity.type) {
+                  case 'project_created':
+                    return (
+                      <>
+                        <span className="font-medium">{activity.user_name}</span>
+                        <span className="text-muted-foreground"> created project </span>
+                        <span className="font-medium">{activity.project_name}</span>
+                        {activity.company_name && (
+                          <>
+                            <span className="text-muted-foreground"> for </span>
+                            <span className="font-medium">{activity.company_name}</span>
+                          </>
+                        )}
+                      </>
+                    )
+                  case 'task_created':
+                    return (
+                      <>
+                        <span className="font-medium">{activity.user_name}</span>
+                        <span className="text-muted-foreground"> created task </span>
+                        <span className="font-medium">{activity.task_title}</span>
+                      </>
+                    )
+                  case 'task_completed':
+                    return (
+                      <>
+                        <span className="font-medium">{activity.user_name}</span>
+                        <span className="text-muted-foreground"> completed task </span>
+                        <span className="font-medium">{activity.task_title}</span>
+                      </>
+                    )
+                  case 'comment_added':
+                    return (
+                      <>
+                        <span className="font-medium">{activity.user_name}</span>
+                        <span className="text-muted-foreground"> commented on </span>
+                        <span className="font-medium">{activity.task_title}</span>
+                      </>
+                    )
+                  default:
+                    return null
+                }
+              }
+
+              return (
+                <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-border/40 last:border-0 last:pb-0">
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src="" />
+                    <AvatarFallback className="bg-muted text-xs">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm">
+                      {getActivityText()}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-        </div>
+        )}
       </Card>
     </div>
   )

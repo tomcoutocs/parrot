@@ -1,13 +1,30 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { User, Calendar as CalendarIcon, Flag } from "lucide-react"
+import { User, Calendar as CalendarIcon, Flag, X, Check } from "lucide-react"
+import { format } from "date-fns"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+
+interface UserOption {
+  id: string
+  full_name: string
+}
 
 interface InlineTaskCreationProps {
-  onSave: (task: { name: string; assignee?: string; dueDate?: string; priority?: string }) => void
+  onSave: (task: { name: string; assignee?: string; dueDate?: string; priority?: string; status?: string }) => void
   onCancel: () => void
   statusColor: string
+  users?: UserOption[]
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
 }
 
 const assignees = [
@@ -22,14 +39,35 @@ const priorityOptions = [
   { id: "Low", label: "Low" },
 ]
 
-export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTaskCreationProps) {
+const statusLevels = [
+  { id: "todo", label: "TO DO", color: "#6b7280", displayColor: "text-gray-600", dotColor: "bg-gray-500" },
+  { id: "in_progress", label: "IN PROGRESS", color: "#8b5cf6", displayColor: "text-purple-600", dotColor: "bg-purple-500" },
+  { id: "review", label: "REVIEW", color: "#f59e0b", displayColor: "text-yellow-600", dotColor: "bg-yellow-500" },
+  { id: "done", label: "DONE", color: "#10b981", displayColor: "text-green-600", dotColor: "bg-green-500" },
+]
+
+export function InlineTaskCreation({ onSave, onCancel, statusColor, users = [] }: InlineTaskCreationProps) {
   const [taskName, setTaskName] = useState("")
   const [assignee, setAssignee] = useState<string | undefined>(undefined)
   const [dueDate, setDueDate] = useState<string | undefined>(undefined)
   const [priority, setPriority] = useState<string>("Normal")
+  // Determine initial status based on statusColor
+  const getInitialStatus = () => {
+    const statusMap: Record<string, string> = {
+      "#6b7280": "todo",
+      "#8b5cf6": "in_progress",
+      "#f59e0b": "review",
+      "#10b981": "done",
+    }
+    return statusMap[statusColor] || "todo"
+  }
+  const [status, setStatus] = useState<string>(getInitialStatus())
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false)
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const assigneeButtonRef = useRef<HTMLButtonElement>(null)
+  const priorityButtonRef = useRef<HTMLButtonElement>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -37,13 +75,16 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
 
   const handleSave = () => {
     if (taskName.trim()) {
-      onSave({ name: taskName, assignee, dueDate, priority })
+      onSave({ name: taskName, assignee, dueDate, priority, status })
       setTaskName("")
       setAssignee(undefined)
       setDueDate(undefined)
       setPriority("Normal")
+      setStatus(getInitialStatus())
     }
   }
+
+  const currentStatus = statusLevels.find(s => s.id === status) || statusLevels[0]
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -54,11 +95,11 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
     }
   }
 
-  const selectedAssignee = assignees.find(a => a.id === assignee)
+  const selectedAssignee = users.find(u => u.id === assignee)
 
   return (
     <div className="grid grid-cols-12 gap-4 px-12 py-2.5 items-center border-b border-border/20">
-      <div className="col-span-5 flex items-center gap-3">
+      <div className="col-span-4 flex items-center gap-2 -ml-8">
         <div className="w-3 h-3" /> {/* Spacer for chevron */}
         <div 
           className="w-4 h-4 rounded-full border-2 flex-shrink-0"
@@ -77,6 +118,7 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
 
       <div className="col-span-2 relative">
         <button
+          ref={assigneeButtonRef}
           onClick={() => setShowAssigneeMenu(!showAssigneeMenu)}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -84,7 +126,7 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
             <Avatar className="w-6 h-6 border border-border">
               <AvatarImage src="" />
               <AvatarFallback className="bg-muted text-xs">
-                {selectedAssignee.initials}
+                {getInitials(selectedAssignee.full_name)}
               </AvatarFallback>
             </Avatar>
           ) : (
@@ -101,12 +143,14 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
               className="fixed inset-0 z-10" 
               onClick={() => setShowAssigneeMenu(false)}
             />
-            <div className="absolute top-full left-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-20 py-1 min-w-[160px]">
-              {assignees.map((person) => (
+            <div 
+              className="absolute top-full left-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-20 py-1 min-w-[160px]"
+            >
+              {users.map((user) => (
                 <button
-                  key={person.id}
+                  key={user.id}
                   onClick={() => {
-                    setAssignee(person.id)
+                    setAssignee(user.id)
                     setShowAssigneeMenu(false)
                   }}
                   className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
@@ -114,10 +158,10 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
                   <Avatar className="w-5 h-5 border border-border">
                     <AvatarImage src="" />
                     <AvatarFallback className="bg-muted text-xs">
-                      {person.initials}
+                      {getInitials(user.full_name)}
                     </AvatarFallback>
                   </Avatar>
-                  {person.name}
+                  {user.full_name}
                 </button>
               ))}
             </div>
@@ -125,17 +169,61 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
         )}
       </div>
 
-      <div className="col-span-2">
+      {/* Status Column - Editable with dropdown */}
+      <div className="col-span-2 relative">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors -ml-2">
+              <div className={`w-1.5 h-1.5 rounded-full ${currentStatus.dotColor}`} />
+              <span className={`text-xs font-medium ${currentStatus.displayColor}`}>
+                {currentStatus.label}
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {statusLevels.map((statusOption) => (
+              <DropdownMenuItem
+                key={statusOption.id}
+                onClick={() => setStatus(statusOption.id)}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${statusOption.dotColor}`} />
+                  <span className={statusOption.displayColor}>{statusOption.label}</span>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="col-span-2 relative flex items-center justify-center">
         <input
+          ref={dateInputRef}
           type="date"
           value={dueDate || ""}
           onChange={(e) => setDueDate(e.target.value)}
-          className="bg-transparent text-sm outline-none text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          className="sr-only"
         />
+        {dueDate ? (
+          <button
+            onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {format(new Date(dueDate), "MM/dd/yy")}
+          </button>
+        ) : (
+          <button
+            onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <CalendarIcon className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
-      <div className="col-span-2 relative">
+      <div className="col-span-1 relative">
         <button
+          ref={priorityButtonRef}
           onClick={() => setShowPriorityMenu(!showPriorityMenu)}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -148,7 +236,9 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
               className="fixed inset-0 z-10" 
               onClick={() => setShowPriorityMenu(false)}
             />
-            <div className="absolute top-full left-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-20 py-1 min-w-[120px]">
+            <div 
+              className="absolute top-full left-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-20 py-1 min-w-[120px]"
+            >
               {priorityOptions.map((option) => (
                 <button
                   key={option.id}
@@ -166,18 +256,20 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor }: InlineTask
         )}
       </div>
 
-      <div className="col-span-1 flex items-center justify-end gap-2">
+      <div className="col-span-1 flex items-center justify-end gap-1">
         <button
           onClick={onCancel}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+          className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded hover:bg-muted/50"
+          title="Cancel"
         >
-          Cancel
+          <X className="w-4 h-4" />
         </button>
         <button
           onClick={handleSave}
-          className="text-xs bg-foreground text-background hover:bg-foreground/90 px-3 py-1 rounded transition-colors"
+          className="p-1.5 bg-foreground text-background hover:bg-foreground/90 rounded transition-colors"
+          title="Save"
         >
-          Save
+          <Check className="w-4 h-4" />
         </button>
       </div>
     </div>

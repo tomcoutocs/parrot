@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react"
 import dynamic from "next/dynamic"
-import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft } from "lucide-react"
+import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { 
@@ -352,6 +352,12 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
     setCurrentPath([...currentPath, folder.name])
   }
 
+  const handleBreadcrumbClick = (index: number) => {
+    // Navigate back to the folder at the specified index
+    // Index 0 is "Documents" (root), so we keep that and slice up to the clicked index
+    setCurrentPath(currentPath.slice(0, index + 1))
+  }
+
   const formatUpdateDate = (dateString: string) => {
     const date = new Date(dateString)
     const month = (date.getMonth() + 1).toString().padStart(2, '0')
@@ -526,6 +532,28 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
         >
           Spreadsheets
         </button>
+      </div>
+
+      {/* Breadcrumb Navigation */}
+      <div className="flex items-center gap-2 text-sm py-2 border-b border-border/50">
+        {currentPath.map((pathItem, index) => (
+          <div key={index} className="flex items-center gap-2">
+            {index > 0 && (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+            <button
+              onClick={() => handleBreadcrumbClick(index)}
+              className={`px-2 py-1 rounded-md transition-colors ${
+                index === currentPath.length - 1
+                  ? "text-foreground font-medium cursor-default"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+              }`}
+              disabled={index === currentPath.length - 1}
+            >
+              {pathItem}
+            </button>
+          </div>
+        ))}
       </div>
 
       {/* Search Bar */}

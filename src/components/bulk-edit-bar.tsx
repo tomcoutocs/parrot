@@ -22,14 +22,18 @@ interface BulkEditBarProps {
   onClearSelection: () => void
   onBulkUpdate: (updates: Record<string, unknown>) => void
   onBulkDelete: () => void
+  users?: Array<{ id: string; full_name: string; email: string }>
 }
 
-const teamMembers = [
-  { id: "NF", name: "Nicolas Figari", avatar: "" },
-  { id: "SC", name: "Sarah Chen", avatar: "" },
-  { id: "AR", name: "Alex Rivera", avatar: "" },
-  { id: "EW", name: "Emma Wilson", avatar: "" },
-]
+// Helper function to get initials from name
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
 
 const priorityLevels = [
   { id: "urgent", label: "Urgent", color: "text-red-600", dotColor: "bg-red-500" },
@@ -38,7 +42,7 @@ const priorityLevels = [
   { id: "low", label: "Low", color: "text-blue-600", dotColor: "bg-blue-500" },
 ]
 
-export function BulkEditBar({ selectedCount, onClearSelection, onBulkUpdate, onBulkDelete }: BulkEditBarProps) {
+export function BulkEditBar({ selectedCount, onClearSelection, onBulkUpdate, onBulkDelete, users = [] }: BulkEditBarProps) {
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       const formatted = format(date, "MM/dd/yy")
@@ -85,17 +89,17 @@ export function BulkEditBar({ selectedCount, onClearSelection, onBulkUpdate, onB
               <span className="text-muted-foreground">Unassigned</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {teamMembers.map((member) => (
+            {users.map((user) => (
               <DropdownMenuItem
-                key={member.id}
-                onClick={() => onBulkUpdate({ assignee: member.id })}
+                key={user.id}
+                onClick={() => onBulkUpdate({ assignee: user.id })}
               >
                 <div className="flex items-center gap-2">
                   <Avatar className="w-5 h-5">
-                    <AvatarImage src={member.avatar} />
-                    <AvatarFallback className="text-xs">{member.id}</AvatarFallback>
+                    <AvatarImage src="" />
+                    <AvatarFallback className="text-xs">{getInitials(user.full_name)}</AvatarFallback>
                   </Avatar>
-                  <span>{member.name}</span>
+                  <span>{user.full_name}</span>
                 </div>
               </DropdownMenuItem>
             ))}

@@ -45,25 +45,33 @@ export function ModernNavigation({ activeTab, onTabChange, userRole }: ModernNav
   return (
     <div className="border-b border-border/50">
       <div className="flex items-center gap-5">
-        {visibleItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onTabChange(item.id)}
-            className={`
-              relative flex items-center gap-2 px-1 pb-2.5 text-sm transition-colors
-              ${activeTab === item.id 
-                ? "text-foreground" 
-                : "text-muted-foreground hover:text-foreground"
-              }
-            `}
-          >
-            {item.icon}
-            <span>{item.label}</span>
-            {activeTab === item.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
-            )}
-          </button>
-        ))}
+        {visibleItems.map((item) => {
+          const isActive = activeTab === item.id
+          return (
+            <button
+              key={item.id}
+              onClick={() => onTabChange(item.id)}
+              className={`
+                group relative flex items-center gap-2 px-3 py-2.5 text-sm transition-all duration-200 rounded-t-md
+                ${isActive 
+                  ? "text-foreground" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                }
+              `}
+            >
+              <div className={`transition-transform duration-200 ${!isActive ? 'group-hover:scale-110' : ''}`}>
+                {item.icon}
+              </div>
+              <span className="transition-all duration-200">{item.label}</span>
+              {isActive && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
+              )}
+              {!isActive && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-transparent group-hover:bg-muted-foreground/30 transition-colors duration-200" />
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

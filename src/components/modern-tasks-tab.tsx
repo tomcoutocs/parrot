@@ -8,7 +8,9 @@ import { TaskRow } from "./task-row"
 import { InlineTaskCreation } from "./inline-task-creation"
 import { BulkEditBar } from "./bulk-edit-bar"
 import { fetchProjectsOptimized, fetchTasksOptimized, fetchUsersOptimized, updateTaskPosition } from "@/lib/simplified-database-functions"
-import { updateTaskStatus } from "@/lib/database-functions"
+import { supabase } from "@/lib/supabase"
+import { updateTaskStatus, createTask } from "@/lib/database-functions"
+import { formatDateForDatabase } from "@/lib/date-utils"
 import { ProjectWithDetails, TaskWithDetails } from "@/lib/supabase"
 import { format } from "date-fns"
 import { useSession } from "@/components/providers/session-provider"
@@ -22,6 +24,7 @@ interface Task {
   assignee: string
   dueDate: string
   priority: string
+  status?: string
   subtasks?: number
   completed?: boolean
 }
@@ -84,6 +87,7 @@ function transformTaskToDesignTask(task: TaskWithDetails): Task & { originalStat
     assignee,
     dueDate,
     priority,
+    status: task.status, // Set status for display
     subtasks: undefined, // TODO: Get subtask count if available
     completed: task.status === "done",
     originalStatus: task.status // Store original status for grouping
@@ -119,9 +123,9 @@ function groupTasksByStatus(tasks: (Task & { originalStatus?: string })[]): Stat
     groups[groupName].push(taskWithoutStatus)
   })
   
-  // Convert to StatusGroup array, maintaining order: IN PROGRESS, TO DO, REVIEW, DONE
+  // Convert to StatusGroup array, maintaining order: TO DO, IN PROGRESS, REVIEW, DONE
   // ALWAYS show all status groups, even if empty
-  const order = ["IN PROGRESS", "TO DO", "REVIEW", "DONE"]
+  const order = ["TO DO", "IN PROGRESS", "REVIEW", "DONE"]
   const orderedGroups: StatusGroup[] = []
   
   order.forEach(groupName => {
@@ -178,15 +182,51 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         // Fetch projects for this space
         const projectsData = await fetchProjectsOptimized(activeSpace)
         
-        // Fetch users for this space
+        // Fetch users for this space - only show users, managers, and admins
         const usersData = await fetchUsersOptimized()
-        const spaceUsers = usersData
-          .filter(user => user.company_id === activeSpace)
-          .map(user => ({
-            id: user.id,
-            full_name: user.full_name || "",
-            email: user.email || ""
-          }))
+        
+        // Get direct company users (users, managers, admins)
+        const directSpaceUsers = usersData.filter(user => 
+          user.company_id === activeSpace && 
+          user.is_active !== false &&
+          (user.role === 'user' || user.role === 'manager' || user.role === 'admin')
+        )
+        
+        // Get internal users assigned to this space via internal_user_companies
+        let internalUserIds: string[] = []
+        if (supabase) {
+          try {
+            const { data: internalAssignments } = await supabase
+              .from('internal_user_companies')
+              .select('user_id')
+              .eq('company_id', activeSpace)
+            
+            if (internalAssignments) {
+              internalUserIds = internalAssignments.map(ia => ia.user_id)
+            }
+          } catch (error) {
+            console.error('Error fetching internal user assignments:', error)
+          }
+        }
+        
+        // Get internal users who are assigned to this space
+        const internalUsers = usersData.filter(user => 
+          internalUserIds.includes(user.id) && 
+          user.is_active !== false &&
+          (user.role === 'admin' || user.role === 'manager')
+        )
+        
+        // Combine and deduplicate
+        const allSpaceUsers = [...directSpaceUsers, ...internalUsers]
+        const uniqueUsers = Array.from(
+          new Map(allSpaceUsers.map(user => [user.id, user])).values()
+        )
+        
+        const spaceUsers = uniqueUsers.map(user => ({
+          id: user.id,
+          full_name: user.full_name || "",
+          email: user.email || ""
+        }))
         setUsers(spaceUsers)
         
         // Fetch tasks for projects in this space
@@ -434,6 +474,12 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     const task = tasksMap.get(draggableId)
     if (!task) return
 
+    // Expand the destination status section if it's collapsed
+    const destStatusId = `${projectId}-${destStatusGroupName.toLowerCase().replace(/\s+/g, "-")}`
+    if (!expandedStatuses.includes(destStatusId)) {
+      setExpandedStatuses(prev => [...prev, destStatusId])
+    }
+
     // Convert status group name to database status
     const newStatus = statusGroupToDbStatus[destStatusGroupName] as TaskWithDetails['status']
     if (!newStatus) {
@@ -586,47 +632,49 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
               {isProjectExpanded && (
                 <DragDropContext onDragEnd={handleDragEnd}>
                   <div className="bg-muted/20">
-                    {project.statusGroups.map((statusGroup) => {
+                    {project.statusGroups
+                      .filter((statusGroup) => statusGroup.tasks.length > 0)
+                      .map((statusGroup) => {
                       const statusId = `${project.id}-${statusGroup.name.toLowerCase().replace(" ", "-")}`
                       const isStatusExpanded = expandedStatuses.includes(statusId)
                       const droppableId = `${project.id}-${statusGroup.name.toLowerCase().replace(/\s+/g, "-")}`
 
                       return (
-                        <div key={statusId} className="border-t border-border/40">
-                          {/* Status Group Header */}
-                          <button
-                            onClick={() => toggleStatus(statusId)}
-                            className="w-full flex items-center gap-2 px-8 py-2.5 hover:bg-muted/50 transition-colors"
-                          >
-                            <ChevronRight 
-                              className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${
-                                isStatusExpanded ? "rotate-90" : ""
-                              }`}
-                            />
+                        <Droppable droppableId={droppableId} key={statusId}>
+                          {(provided, snapshot) => (
                             <div 
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: statusGroup.color }}
-                            />
-                            <span className="text-xs font-medium tracking-wide" style={{ color: statusGroup.color }}>
-                              {statusGroup.name} {statusGroup.tasks.length}
-                            </span>
-                          </button>
+                              ref={provided.innerRef}
+                              {...provided.droppableProps}
+                              className={`border-t border-border/40 ${snapshot.isDraggingOver ? 'bg-muted/40' : ''}`}
+                            >
+                              {/* Status Group Header */}
+                              <button
+                                onClick={() => toggleStatus(statusId)}
+                                className="w-full flex items-center gap-2 px-8 py-2.5 hover:bg-muted/50 transition-colors"
+                              >
+                                <ChevronRight 
+                                  className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${
+                                    isStatusExpanded ? "rotate-90" : ""
+                                  }`}
+                                />
+                                <div 
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: statusGroup.color }}
+                                />
+                                <span className="text-xs font-medium tracking-wide" style={{ color: statusGroup.color }}>
+                                  {statusGroup.name} {statusGroup.tasks.length}
+                                </span>
+                              </button>
 
-                          {/* Tasks List */}
-                          {isStatusExpanded && (
-                            <Droppable droppableId={droppableId}>
-                              {(provided, snapshot) => (
-                                <div
-                                  {...provided.droppableProps}
-                                  ref={provided.innerRef}
-                                  className={`pb-2 ${snapshot.isDraggingOver ? 'bg-muted/40' : ''}`}
-                                >
+                              {/* Tasks List */}
+                              {isStatusExpanded && (
+                                <div className="pb-2">
                                   {/* Table Header */}
                                   <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
                                     <div className="col-span-4">Name</div>
                                     <div className="col-span-2">Assignee</div>
                                     <div className="col-span-2">Status</div>
-                                    <div className="col-span-2">Due date</div>
+                                    <div className="col-span-2 text-center">Due date</div>
                                     <div className="col-span-1">Priority</div>
                                     <div className="col-span-1"></div>
                                   </div>
@@ -652,20 +700,93 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                               showMultiSelect={isSelectionMode}
                                               selectedTasks={selectedTasks}
                                               onTaskClick={handleTaskClick}
+                                              users={users}
                                             />
                                           </div>
                                         )}
                                       </Draggable>
                                     )
                                   })}
-                                  {provided.placeholder}
 
                                   {/* Inline Task Creation */}
                                   {showingInlineCreate === statusId && (
                                     <InlineTaskCreation
                                       statusColor={statusGroup.color}
-                                      onSave={(task) => {
-                                        console.log("Creating task:", task)
+                                      users={users}
+                                      onSave={async (task) => {
+                                        if (!session?.user?.id || !project.id) {
+                                          console.error("Missing session or project ID")
+                                          setShowingInlineCreate(null)
+                                          return
+                                        }
+
+                                        try {
+                                          // Extract status from task or use the status group's default
+                                          const taskStatus = task.status || statusGroupToDbStatus[statusGroup.name] || "todo"
+                                          
+                                          // Map priority to database format
+                                          const priorityMap: Record<string, string> = {
+                                            "High": "high",
+                                            "Normal": "medium",
+                                            "Low": "low"
+                                          }
+                                          const dbPriority = task.priority ? priorityMap[task.priority] || "medium" : "medium"
+
+                                          // Use assignee ID directly (already in correct format)
+                                          const assigneeUserId = task.assignee
+
+                                          const taskData = {
+                                            project_id: project.id,
+                                            title: task.name.trim(),
+                                            description: undefined,
+                                            status: taskStatus as TaskWithDetails['status'],
+                                            priority: dbPriority as TaskWithDetails['priority'],
+                                            assigned_to: assigneeUserId || undefined,
+                                            due_date: task.dueDate ? formatDateForDatabase(task.dueDate) : undefined,
+                                            estimated_hours: 0,
+                                            actual_hours: 0,
+                                            position: statusGroup.tasks.length + 1,
+                                            created_by: session.user.id
+                                          }
+
+                                          const result = await createTask(taskData, session.user.id)
+                                          
+                                          if (result) {
+                                            // Reload data to show the new task
+                                            const loadData = async () => {
+                                              const projectsData = await fetchProjectsOptimized(activeSpace ?? undefined)
+                                              const projectIds = projectsData.map(p => p.id)
+                                              const allTasksData = projectIds.length > 0 
+                                                ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+                                                : []
+                                              
+                                              const newTasksMap = new Map<string, TaskWithDetails>()
+                                              allTasksData.forEach(task => {
+                                                newTasksMap.set(task.id, task)
+                                              })
+                                              setTasksMap(newTasksMap)
+                                              
+                                              const transformedProjects: Project[] = projectsData.map((p) => {
+                                                const projectTasks = allTasksData.filter(t => t.project_id === p.id)
+                                                const designTasks = projectTasks.map(transformTaskToDesignTask)
+                                                const statusGroups = groupTasksByStatus(designTasks)
+                                                return {
+                                                  id: p.id,
+                                                  name: p.name || "Unnamed Project",
+                                                  dueDate: "-",
+                                                  launchDate: undefined,
+                                                  statusGroups,
+                                                  taskCount: projectTasks.length
+                                                }
+                                              })
+                                              setProjects(transformedProjects)
+                                            }
+                                            await loadData()
+                                          }
+                                        } catch (error) {
+                                          console.error("Error creating task:", error)
+                                        }
+                                        
                                         setShowingInlineCreate(null)
                                       }}
                                       onCancel={() => setShowingInlineCreate(null)}
@@ -684,9 +805,10 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                   )}
                                 </div>
                               )}
-                            </Droppable>
+                              {provided.placeholder}
+                            </div>
                           )}
-                        </div>
+                        </Droppable>
                       )
                     })}
                   </div>
@@ -784,6 +906,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           onClearSelection={handleClearSelection}
           onBulkUpdate={handleBulkUpdate}
           onBulkDelete={handleBulkDelete}
+          users={users}
         />
       )}
     </div>
