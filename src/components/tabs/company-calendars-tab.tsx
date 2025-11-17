@@ -75,6 +75,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
   const [eventTitle, setEventTitle] = useState('')
   const [eventDescription, setEventDescription] = useState('')
   const [eventDate, setEventDate] = useState('')
+  const [eventEndDate, setEventEndDate] = useState('')
   const [eventStartTime, setEventStartTime] = useState('')
   const [eventEndTime, setEventEndTime] = useState('')
   const [includeTime, setIncludeTime] = useState(false)
@@ -219,7 +220,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
         title: eventTitle,
         description: eventDescription,
         start_date: eventDate,
-        end_date: eventDate, // For now, same day events
+        end_date: eventEndDate || eventDate, // Use end date if provided, otherwise same day
         created_by: session?.user?.id,
         company_id: selectedCompanyId
       }
@@ -246,6 +247,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
       setEventTitle('')
       setEventDescription('')
       setEventDate('')
+      setEventEndDate('')
       setEventStartTime('')
       setEventEndTime('')
       setIncludeTime(false)
@@ -1055,14 +1057,33 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
                 rows={3}
               />
             </div>
-            <div>
-              <Label htmlFor="event-date">Date *</Label>
-              <Input
-                id="event-date"
-                type="date"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="event-date">Start Date *</Label>
+                <Input
+                  id="event-date"
+                  type="date"
+                  value={eventDate}
+                  onChange={(e) => {
+                    setEventDate(e.target.value)
+                    // Auto-set end date to start date if not already set
+                    if (!eventEndDate) {
+                      setEventEndDate(e.target.value)
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="event-end-date">End Date (optional)</Label>
+                <Input
+                  id="event-end-date"
+                  type="date"
+                  value={eventEndDate}
+                  onChange={(e) => setEventEndDate(e.target.value)}
+                  min={eventDate}
+                  placeholder="Leave empty for single day event"
+                />
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <input

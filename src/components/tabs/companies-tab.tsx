@@ -593,7 +593,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
             <Card 
               key={company.id} 
               id={`company-${company.id}`}
-              className="hover:shadow-lg transition-shadow cursor-pointer group"
+              className="hover:shadow-[0_2.5px_6.25px_-3px_rgba(0,0,0,0.05),0_1px_1.5px_-2px_rgba(0,0,0,0.025)] transition-shadow cursor-pointer group"
               onClick={() => handleNavigateToCompany(company.id)}
             >
               <CardHeader className="pb-3">

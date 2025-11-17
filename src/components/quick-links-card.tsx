@@ -74,7 +74,7 @@ export function QuickLinksCard() {
   
   // Load bookmarks from localStorage
   const loadBookmarks = (key: string): BookmarkLink[] => {
-    if (typeof window === "undefined") return initialLinks
+    if (typeof window === "undefined") return []
     
     try {
       const stored = localStorage.getItem(key)
@@ -91,10 +91,10 @@ export function QuickLinksCard() {
       console.error("Error loading bookmarks:", error)
     }
     
-    return initialLinks
+    return []
   }
 
-  const [links, setLinks] = useState<BookmarkLink[]>(initialLinks)
+  const [links, setLinks] = useState<BookmarkLink[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
   
   // Load bookmarks from localStorage on mount and when user changes

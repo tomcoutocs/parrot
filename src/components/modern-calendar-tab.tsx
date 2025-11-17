@@ -58,6 +58,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
   const [eventTitle, setEventTitle] = useState('')
   const [eventDescription, setEventDescription] = useState('')
   const [eventDate, setEventDate] = useState('')
+  const [eventEndDate, setEventEndDate] = useState('')
   const [eventStartTime, setEventStartTime] = useState('')
   const [eventEndTime, setEventEndTime] = useState('')
   const [includeTime, setIncludeTime] = useState(false)
@@ -66,7 +67,9 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
   const [deleting, setDeleting] = useState(false)
 
   const loadEvents = async () => {
-    if (!activeSpace && !session?.user?.company_id) {
+    const isAdmin = session?.user?.role === 'admin'
+    // Admins can load events without a company/space
+    if (!isAdmin && !activeSpace && !session?.user?.company_id) {
       setLoading(false)
       return
     }
@@ -74,16 +77,27 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
     setLoading(true)
     try {
       const companyId = activeSpace || session?.user?.company_id
-      if (!companyId || !supabase) {
+      if (!supabase) {
         setLoading(false)
         return
       }
 
-      const { data, error } = await supabase
+      // Build query - admins without company_id can see all events
+      let query = supabase
         .from('company_events')
         .select('*')
-        .eq('company_id', companyId)
-        .order('start_date', { ascending: true })
+      
+      // Only filter by company_id if we have one (non-admin or admin with company)
+      if (companyId) {
+        query = query.eq('company_id', companyId)
+      } else if (!isAdmin) {
+        // Non-admins must have a company_id
+        setLoading(false)
+        return
+      }
+      // Admins without company_id will see all events
+      
+      const { data, error } = await query.order('start_date', { ascending: true })
 
       if (error) {
         console.error("Error loading events:", error)
@@ -148,10 +162,20 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       return
     }
 
+    // Admins can create events without a space/company
+    const isAdmin = session?.user?.role === 'admin'
     const companyId = activeSpace || session?.user?.company_id
-    if (!companyId) {
+    
+    if (!isAdmin && !companyId) {
       toastError('Please select a space first')
       return
+    }
+    
+    // For admin events without a company, we'll use null or handle it differently
+    // Note: Database might require company_id, so admins may need to select a company
+    if (isAdmin && !companyId) {
+      // Allow admin to proceed - they can create events for any company
+      // If database requires company_id, this will need to be handled at the database level
     }
 
     try {
@@ -160,7 +184,9 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       // Prepare the event data
       // Format dates properly to avoid timezone issues
       const formattedStartDate = formatDateForDatabase(eventDate)
-      const formattedEndDate = formatDateForDatabase(eventDate)
+      // Use end date if provided, otherwise use start date (single day event)
+      const endDateToUse = eventEndDate || eventDate
+      const formattedEndDate = formatDateForDatabase(endDateToUse)
       
       const eventData: {
         title: string
@@ -168,7 +194,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         start_date: string
         end_date: string
         created_by: string | undefined
-        company_id: string
+        company_id?: string | null
         start_time?: string
         end_time?: string
         event_type?: string
@@ -176,9 +202,9 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         title: eventTitle,
         description: eventDescription,
         start_date: formattedStartDate,
-        end_date: formattedEndDate, // For now, same day events
+        end_date: formattedEndDate,
         created_by: session?.user?.id,
-        company_id: companyId,
+        ...(companyId && { company_id: companyId }),
         event_type: eventType
       }
 
@@ -276,11 +302,23 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
     setEventTitle('')
     setEventDescription('')
     setEventDate('')
+    setEventEndDate('')
     setEventStartTime('')
     setEventEndTime('')
     setIncludeTime(false)
     setEventType('event')
     setEditingEvent(null)
+  }
+
+  // Handle clicking on a calendar day to create an event
+  const handleDayClick = (day: number) => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    // Format date as YYYY-MM-DD for the date input
+    const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    setEventDate(formattedDate)
+    setEventEndDate(formattedDate) // Set end date to same as start date
+    setIsCreateEventOpen(true)
   }
 
   const handleEditEvent = (event: BrandEvent) => {
@@ -293,6 +331,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
     setEventDescription('') // We don't store description in BrandEvent, but could load it
     // Format date correctly for input to avoid timezone issues
     setEventDate(formatDateForInput(fullEvent.startDate.toISOString()))
+    setEventEndDate(formatDateForInput(fullEvent.endDate.toISOString()))
     setEventType(fullEvent.type)
     setIncludeTime(false) // Could check if times exist
     setEventStartTime('')
@@ -306,10 +345,20 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       return
     }
 
+    // Admins can create events without a space/company
+    const isAdmin = session?.user?.role === 'admin'
     const companyId = activeSpace || session?.user?.company_id
-    if (!companyId) {
+    
+    if (!isAdmin && !companyId) {
       toastError('Please select a space first')
       return
+    }
+    
+    // For admin events without a company, we'll use null or handle it differently
+    // Note: Database might require company_id, so admins may need to select a company
+    if (isAdmin && !companyId) {
+      // Allow admin to proceed - they can create events for any company
+      // If database requires company_id, this will need to be handled at the database level
     }
 
     try {
@@ -317,13 +366,16 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       
       // Format dates properly to avoid timezone issues
       const formattedStartDate = formatDateForDatabase(eventDate)
-      const formattedEndDate = formatDateForDatabase(eventDate)
+      // Use end date if provided, otherwise use start date (single day event)
+      const endDateToUse = eventEndDate || eventDate
+      const formattedEndDate = formatDateForDatabase(endDateToUse)
       
       const eventData: {
         title: string
         description: string
         start_date: string
         end_date: string
+        company_id?: string | null
         start_time?: string
         end_time?: string
         event_type?: string
@@ -332,6 +384,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         description: eventDescription,
         start_date: formattedStartDate,
         end_date: formattedEndDate,
+        ...(companyId && { company_id: companyId }),
         event_type: eventType
       }
 
@@ -477,6 +530,213 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
     })
   }
 
+  // Get events that START on a specific day (for multi-day event rendering)
+  const getEventsStartingOnDay = (day: number) => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const date = new Date(year, month, day)
+    
+    // Normalize date to midnight for comparison
+    date.setHours(0, 0, 0, 0)
+    
+    return events.filter(event => {
+      const eventStart = new Date(event.startDate)
+      eventStart.setHours(0, 0, 0, 0)
+      
+      // Check if event starts on this day AND is within the current month view
+      const eventEnd = new Date(event.endDate)
+      eventEnd.setHours(0, 0, 0, 0)
+      
+      const monthStart = new Date(year, month, 1)
+      const monthEnd = new Date(year, month + 1, 0)
+      
+      // Event must start on this day and be visible in this month
+      return eventStart.getTime() === date.getTime() && 
+             eventStart <= monthEnd && 
+             eventEnd >= monthStart
+    })
+  }
+
+  // Calculate event layout with lanes to prevent overlaps
+  const calculateEventLayout = () => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const monthStart = new Date(year, month, 1)
+    const monthEnd = new Date(year, month + 1, 0)
+    
+    // Prepare events with their day ranges
+    interface EventLayout {
+      event: BrandEvent
+      startDay: number
+      endDay: number
+      startIndex: number
+      endIndex: number
+      days: Set<number>
+      lane: number
+    }
+    
+    const eventLayouts: EventLayout[] = events.map(event => {
+      const eventStart = new Date(event.startDate)
+      const eventEnd = new Date(event.endDate)
+      eventStart.setHours(0, 0, 0, 0)
+      eventEnd.setHours(0, 0, 0, 0)
+      
+      // Calculate visible range within month
+      const viewStart = eventStart < monthStart ? monthStart : eventStart
+      const viewEnd = eventEnd > monthEnd ? monthEnd : eventEnd
+      
+      // Get day numbers
+      const startDay = viewStart.getDate()
+      const endDay = viewEnd.getDate()
+      
+      // Get indices in the days array
+      const startingDayOfWeek = new Date(year, month, 1).getDay()
+      const startIndex = startingDayOfWeek + startDay - 1
+      const endIndex = startingDayOfWeek + endDay - 1
+      
+      // Create set of all days this event occupies
+      const days = new Set<number>()
+      for (let d = startDay; d <= endDay; d++) {
+        days.add(d)
+      }
+      
+      return {
+        event,
+        startDay,
+        endDay,
+        startIndex,
+        endIndex,
+        days,
+        lane: -1 // Will be assigned
+      }
+    }).filter(layout => {
+      // Only include events visible in this month
+      return layout.startIndex >= 0 && layout.startIndex < days.length
+    })
+    
+    // Sort events: multi-day events first (by start day), then single-day events
+    // Within multi-day events, sort by start day, then by end day (longer events first)
+    // Within single-day events, sort by start day
+    eventLayouts.sort((a, b) => {
+      const aIsMultiDay = a.startDay !== a.endDay
+      const bIsMultiDay = b.startDay !== b.endDay
+      
+      // Multi-day events come first
+      if (aIsMultiDay && !bIsMultiDay) return -1
+      if (!aIsMultiDay && bIsMultiDay) return 1
+      
+      // Within same type, sort by start day
+      if (a.startDay !== b.startDay) return a.startDay - b.startDay
+      
+      // For multi-day events, longer events first
+      if (aIsMultiDay) {
+        return b.endDay - a.endDay
+      }
+      
+      // For single-day events, just use start day (already handled above)
+      return 0
+    })
+    
+    // Assign lanes to prevent overlaps
+    // Multi-day events get lanes 0, 1, 2... (at the top)
+    // Single-day events get lanes after multi-day events
+    const lanes: EventLayout[][] = []
+    let multiDayLaneCount = 0
+    let firstMultiDayProcessed = false
+    
+    eventLayouts.forEach(layout => {
+      const isMultiDay = layout.startDay !== layout.endDay
+      
+      // Find the first lane where this event doesn't overlap
+      let assignedLane = -1
+      
+      if (isMultiDay) {
+        // Multi-day events: always start checking from lane 0
+        // The first multi-day event should always get lane 0
+        if (!firstMultiDayProcessed && lanes.length === 0) {
+          // First multi-day event gets lane 0
+          assignedLane = 0
+          firstMultiDayProcessed = true
+          // Initialize lane 0
+          if (!lanes[0]) {
+            lanes[0] = []
+          }
+        } else {
+          // Check existing multi-day lanes (0 to multiDayLaneCount) for non-overlapping slot
+          for (let laneIndex = 0; laneIndex <= multiDayLaneCount; laneIndex++) {
+            // If lane doesn't exist yet, we can use it
+            if (!lanes[laneIndex]) {
+              assignedLane = laneIndex
+              break
+            }
+            
+            const laneEvents = lanes[laneIndex]
+            const hasOverlap = laneEvents.some(existingLayout => {
+              // Check if events overlap by checking if their day sets intersect
+              for (const day of layout.days) {
+                if (existingLayout.days.has(day)) {
+                  return true
+                }
+              }
+              return false
+            })
+            
+            if (!hasOverlap) {
+              assignedLane = laneIndex
+              break
+            }
+          }
+        }
+      } else {
+        // Single-day events: start checking from multiDayLaneCount
+        for (let laneIndex = multiDayLaneCount; laneIndex < lanes.length; laneIndex++) {
+          const laneEvents = lanes[laneIndex]
+          const hasOverlap = laneEvents.some(existingLayout => {
+            for (const day of layout.days) {
+              if (existingLayout.days.has(day)) {
+                return true
+              }
+            }
+            return false
+          })
+          
+          if (!hasOverlap) {
+            assignedLane = laneIndex
+            break
+          }
+        }
+      }
+      
+      // If no lane found, create a new one
+      if (assignedLane === -1) {
+        assignedLane = lanes.length
+        lanes.push([])
+      }
+      
+      // Ensure the lane array exists
+      if (!lanes[assignedLane]) {
+        lanes[assignedLane] = []
+      }
+      
+      // Track how many lanes are used by multi-day events
+      if (isMultiDay) {
+        // Always update multiDayLaneCount for multi-day events
+        if (assignedLane >= multiDayLaneCount) {
+          multiDayLaneCount = assignedLane + 1
+        }
+        // Ensure first multi-day event sets multiDayLaneCount to at least 1
+        if (assignedLane === 0 && multiDayLaneCount === 0) {
+          multiDayLaneCount = 1
+        }
+      }
+      
+      layout.lane = assignedLane
+      lanes[assignedLane].push(layout)
+    })
+    
+    return eventLayouts
+  }
+
   const previousMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
   }
@@ -557,14 +817,46 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
 
             {/* Calendar days */}
             <div className="grid grid-cols-7">
+              
+              {/* Render day cells */}
               {days.map((day, index) => {
                 const dayEvents = day ? getEventsForDay(day) : []
+                const eventLayouts = calculateEventLayout()
+                
+                // Render all events for this day (both single-day and multi-day)
+                // Multi-day events will appear on each day they span
+                const allDayEvents = dayEvents
+                  .map(event => {
+                    const layout = eventLayouts.find(l => l.event.id === event.id)
+                    const eventStart = new Date(event.startDate)
+                    const eventEnd = new Date(event.endDate)
+                    eventStart.setHours(0, 0, 0, 0)
+                    eventEnd.setHours(0, 0, 0, 0)
+                    
+                    // Check if it's a multi-day event
+                    const isMultiDay = eventStart.getTime() !== eventEnd.getTime()
+                    
+                    return { 
+                      event, 
+                      lane: layout?.lane ?? 0,
+                      isMultiDay 
+                    }
+                  })
+                  .sort((a, b) => {
+                    // Multi-day events first, then single-day events
+                    if (a.isMultiDay && !b.isMultiDay) return -1
+                    if (!a.isMultiDay && b.isMultiDay) return 1
+                    // Within same type, sort by lane
+                    return a.lane - b.lane
+                  })
+                
                 return (
                   <div
                     key={index}
+                    onClick={() => day !== null && handleDayClick(day)}
                     className={`min-h-28 p-2 border-r border-b border-border/40 last:border-r-0 ${
                       index >= days.length - 7 ? "border-b-0" : ""
-                    } ${day === null ? "bg-muted/10" : "bg-background hover:bg-muted/20"} transition-colors`}
+                    } ${day === null ? "bg-muted/10" : "bg-background hover:bg-muted/20 cursor-pointer"} transition-colors relative`}
                   >
                     {day !== null && (
                       <div className="h-full flex flex-col">
@@ -576,7 +868,8 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                           {day}
                         </div>
                         <div className="space-y-1 flex-1 overflow-y-auto">
-                          {dayEvents.slice(0, 5).map(event => {
+                          {/* All events for this day */}
+                          {allDayEvents.slice(0, 5).map(({ event }) => {
                             // Truncate long event names for display (like "Holiday Po...")
                             const displayTitle = event.title.length > 20 
                               ? event.title.substring(0, 17) + '...' 
@@ -594,6 +887,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                               <DropdownMenu key={event.id}>
                                 <DropdownMenuTrigger asChild>
                                   <div
+                                    onClick={(e) => e.stopPropagation()}
                                     className="w-full text-xs px-2 py-1 rounded-md font-medium cursor-pointer hover:opacity-90 transition-opacity overflow-hidden text-ellipsis whitespace-nowrap relative group"
                                     style={{
                                       backgroundColor: hexToRgba(event.color, 0.2),
@@ -740,14 +1034,33 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                 rows={3}
               />
             </div>
-            <div>
-              <Label htmlFor="event-date">Date *</Label>
-              <Input
-                id="event-date"
-                type="date"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="event-date">Start Date *</Label>
+                <Input
+                  id="event-date"
+                  type="date"
+                  value={eventDate}
+                  onChange={(e) => {
+                    setEventDate(e.target.value)
+                    // Auto-set end date to start date if not already set
+                    if (!eventEndDate) {
+                      setEventEndDate(e.target.value)
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="event-end-date">End Date (optional)</Label>
+                <Input
+                  id="event-end-date"
+                  type="date"
+                  value={eventEndDate}
+                  onChange={(e) => setEventEndDate(e.target.value)}
+                  min={eventDate}
+                  placeholder="Leave empty for single day event"
+                />
+              </div>
             </div>
             <div>
               <Label htmlFor="event-type">Event Type *</Label>
@@ -869,14 +1182,33 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                 rows={3}
               />
             </div>
-            <div>
-              <Label htmlFor="edit-event-date">Date *</Label>
-              <Input
-                id="edit-event-date"
-                type="date"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-event-date">Start Date *</Label>
+                <Input
+                  id="edit-event-date"
+                  type="date"
+                  value={eventDate}
+                  onChange={(e) => {
+                    setEventDate(e.target.value)
+                    // Auto-set end date to start date if not already set
+                    if (!eventEndDate) {
+                      setEventEndDate(e.target.value)
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-event-end-date">End Date (optional)</Label>
+                <Input
+                  id="edit-event-end-date"
+                  type="date"
+                  value={eventEndDate}
+                  onChange={(e) => setEventEndDate(e.target.value)}
+                  min={eventDate}
+                  placeholder="Leave empty for single day event"
+                />
+              </div>
             </div>
             <div>
               <Label htmlFor="edit-event-type">Event Type *</Label>

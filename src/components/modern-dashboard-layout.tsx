@@ -60,8 +60,9 @@ export function ModernDashboardLayout({
   const [adminView, setAdminView] = useState("dashboard")
   const [spaces, setSpaces] = useState<Company[]>([])
   const [currentSpace, setCurrentSpace] = useState<Company | null>(null)
-  const [spaceManager, setSpaceManager] = useState<{ name: string; avatar?: string } | null>(null)
+  const [spaceManager, setSpaceManager] = useState<{ id?: string; name: string; avatar?: string } | null>(null)
   const [spaceServices, setSpaceServices] = useState<string[]>([])
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0)
 
   const isAdmin = session?.user?.role === "admin"
   
@@ -147,15 +148,41 @@ export function ModernDashboardLayout({
 
         if (selectedManager) {
           setSpaceManager({
+            id: selectedManager.id,
             name: selectedManager.full_name || "Unknown Manager",
-            avatar: undefined
+            avatar: ""
           })
         } else {
-          setSpaceManager({ name: "No Manager", avatar: undefined })
+          // Check if company has a manager_id
+          const { supabase } = await import("@/lib/supabase")
+          if (supabase) {
+            const { data: company } = await supabase
+              .from('companies')
+              .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name)')
+              .eq('id', currentSpaceId)
+              .single()
+            
+            if (company?.manager) {
+              const managerData = Array.isArray(company.manager) ? company.manager[0] : company.manager
+              if (managerData) {
+                setSpaceManager({
+                  id: managerData.id,
+                  name: managerData.full_name || "Unknown Manager",
+                  avatar: ""
+                })
+              } else {
+                setSpaceManager({ name: "No Manager", avatar: "" })
+              }
+            } else {
+              setSpaceManager({ name: "No Manager", avatar: "" })
+            }
+          } else {
+            setSpaceManager({ name: "No Manager", avatar: "" })
+          }
         }
       } catch (error) {
         console.error("Error fetching manager:", error)
-        setSpaceManager({ name: "No Manager", avatar: undefined })
+        setSpaceManager({ name: "No Manager", avatar: "" })
       }
     }
 
@@ -294,7 +321,11 @@ export function ModernDashboardLayout({
       name: "No Manager",
       avatar: undefined
     },
-    startDate: currentSpace.created_at ? new Date(currentSpace.created_at).toLocaleDateString() : "N/A",
+    startDate: currentSpace.created_at ? new Date(currentSpace.created_at).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    }) : "N/A",
     services: spaceServices
   } : null
 
@@ -440,6 +471,7 @@ export function ModernDashboardLayout({
                     spaces={spaces.map(s => ({ id: s.id, name: s.name, active: s.is_active !== false }))}
                     spaceData={{}}
                     onSpaceClick={handleSpaceClick}
+                    refreshKey={dashboardRefreshKey}
                   />
                 )}
                 {adminView === "calendar" && <ModernCalendarTab activeSpace={null} />}
@@ -453,6 +485,81 @@ export function ModernDashboardLayout({
                 {/* Space Overview */}
                 {spaceData && (
                   <SpaceOverview
+                    companyId={currentSpaceId || undefined}
+                    onManagerChange={() => {
+                      // Trigger admin dashboard refresh
+                      setDashboardRefreshKey(prev => prev + 1)
+                      
+                      // Reload manager when it changes
+                      const fetchManager = async () => {
+                        if (!currentSpaceId) return
+                        try {
+                          const projects = await fetchProjectsOptimized(currentSpaceId)
+                          const managersMap = new Map<string, { count: number; manager: { id: string; full_name: string | null } }>()
+                          
+                          projects.forEach(project => {
+                            if (project.manager_id && project.manager) {
+                              const existing = managersMap.get(project.manager_id)
+                              if (existing) {
+                                existing.count++
+                              } else {
+                                managersMap.set(project.manager_id, {
+                                  count: 1,
+                                  manager: project.manager
+                                })
+                              }
+                            }
+                          })
+
+                          let selectedManager = null
+                          if (managersMap.size > 0) {
+                            const sortedManagers = Array.from(managersMap.values()).sort((a, b) => b.count - a.count)
+                            selectedManager = sortedManagers[0].manager
+                          } else if (projects.length > 0 && projects[0].manager) {
+                            selectedManager = projects[0].manager
+                          }
+
+                          if (selectedManager) {
+                            setSpaceManager({
+                              id: selectedManager.id,
+                              name: selectedManager.full_name || "Unknown Manager",
+                              avatar: ""
+                            })
+                          } else {
+                            // Check if company has a manager_id
+                            const { supabase } = await import("@/lib/supabase")
+                            if (supabase) {
+                              const { data: company } = await supabase
+                                .from('companies')
+                                .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name)')
+                                .eq('id', currentSpaceId)
+                                .single()
+                              
+                              if (company?.manager) {
+                                const managerData = Array.isArray(company.manager) ? company.manager[0] : company.manager
+                                if (managerData) {
+                                  setSpaceManager({
+                                    id: managerData.id,
+                                    name: managerData.full_name || "Unknown Manager",
+                                    avatar: ""
+                                  })
+                                } else {
+                                  setSpaceManager({ name: "No Manager", avatar: "" })
+                                }
+                              } else {
+                                setSpaceManager({ name: "No Manager", avatar: "" })
+                              }
+                            } else {
+                              setSpaceManager({ name: "No Manager", avatar: "" })
+                            }
+                          }
+                        } catch (error) {
+                          console.error("Error fetching manager:", error)
+                          setSpaceManager({ name: "No Manager", avatar: "" })
+                        }
+                      }
+                      fetchManager()
+                    }}
                     manager={spaceData.manager}
                     startDate={spaceData.startDate}
                     services={spaceData.services}

@@ -1705,6 +1705,7 @@ export async function updateCompany(companyId: string, companyData: {
   is_partner: boolean
   retainer?: number
   revenue?: number
+  manager_id?: string | null
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1715,21 +1716,28 @@ export async function updateCompany(companyId: string, companyData: {
     console.log('Updating company:', companyId, companyData)
     await setAppContext()
     
+    const updateData: any = {
+      name: companyData.name,
+      description: companyData.description,
+      industry: companyData.industry,
+      website: companyData.website,
+      phone: companyData.phone,
+      address: companyData.address,
+      is_partner: companyData.is_partner,
+      is_active: companyData.is_active,
+      retainer: companyData.retainer,
+      revenue: companyData.revenue,
+      updated_at: new Date().toISOString()
+    }
+
+    // Only include manager_id if it's provided (can be null to remove manager)
+    if (companyData.manager_id !== undefined) {
+      updateData.manager_id = companyData.manager_id
+    }
+
     const { data, error } = await supabase
       .from('companies')
-      .update({
-        name: companyData.name,
-        description: companyData.description,
-        industry: companyData.industry,
-        website: companyData.website,
-        phone: companyData.phone,
-        address: companyData.address,
-        is_partner: companyData.is_partner,
-        is_active: companyData.is_active,
-        retainer: companyData.retainer,
-        revenue: companyData.revenue,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', companyId)
       .select()
       .single()

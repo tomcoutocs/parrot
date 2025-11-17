@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { UserPlus, Search, MoreHorizontal, Shield, User as UserIcon, Edit } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { UserPlus, Search, MoreHorizontal, Shield, User as UserIcon, Edit, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -20,17 +20,21 @@ import { fetchUsersOptimized, fetchCompaniesOptimized } from "@/lib/simplified-d
 import { fetchCompanyUsers } from "@/lib/company-detail-functions"
 import { User, Company } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
-import { updateUser } from "@/lib/database-functions"
+import { updateUser, deleteUser } from "@/lib/database-functions"
 import { toastSuccess, toastError } from "@/lib/toast"
+import { useSession } from "@/components/providers/session-provider"
 
 interface ModernUsersTabProps {
   activeSpace?: string | null
 }
 
 export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
+  const { data: session } = useSession()
   const [isAddUserOpen, setIsAddUserOpen] = useState(false)
   const [isEditUserOpen, setIsEditUserOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState<"all" | "internal" | "client">("all")
   const [filterRole, setFilterRole] = useState<"all" | "admin" | "manager" | "user">("all")
@@ -153,6 +157,75 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
         return <UserIcon className="w-3 h-3" />
       default:
         return <UserIcon className="w-3 h-3" />
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return
+
+    // Prevent users from deleting themselves
+    if (selectedUser.id === session?.user?.id) {
+      toastError("You cannot delete your own account")
+      return
+    }
+
+    setDeleting(true)
+    try {
+      const result = await deleteUser(selectedUser.id)
+      if (result.success) {
+        toastSuccess("User deleted successfully")
+        setIsDeleteDialogOpen(false)
+        setSelectedUser(null)
+        
+        // Reload users
+        setLoading(true)
+        try {
+          const companiesData = await fetchCompaniesOptimized()
+          
+          if (activeSpace) {
+            const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
+            const allUsers = await fetchUsersOptimized()
+            
+            let internalUserIds: string[] = []
+            if (supabase) {
+              try {
+                const { data: internalAssignments } = await supabase
+                  .from('internal_user_companies')
+                  .select('user_id')
+                  .eq('company_id', activeSpace)
+                
+                if (internalAssignments) {
+                  internalUserIds = internalAssignments.map(assignment => assignment.user_id)
+                }
+              } catch (err) {
+                console.error("Error fetching internal user assignments:", err)
+              }
+            }
+            
+            const internalUsers = allUsers.filter(user => internalUserIds.includes(user.id))
+            const allSpaceUsers = [...companyUsers, ...internalUsers]
+            const filteredUsers = allSpaceUsers.filter((user, index, self) => 
+              index === self.findIndex(u => u.id === user.id)
+            )
+            setUsers(filteredUsers)
+          } else {
+            const allUsers = await fetchUsersOptimized()
+            setUsers(allUsers)
+          }
+          setCompanies(companiesData)
+        } catch (error) {
+          console.error("Error loading users:", error)
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        toastError(result.error || "Failed to delete user")
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error)
+      toastError("An error occurred while deleting the user")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -672,6 +745,17 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
                           <Edit className="w-4 h-4 mr-2" />
                           Edit User
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setIsDeleteDialogOpen(true)
+                          }}
+                          disabled={user.id === session?.user?.id}
+                          className="text-red-500 focus:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete User
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -818,6 +902,37 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedUser?.full_name || selectedUser?.email}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false)
+                setSelectedUser(null)
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteUser}
+              disabled={deleting || selectedUser?.id === session?.user?.id}
+            >
+              {deleting ? "Deleting..." : "Delete User"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

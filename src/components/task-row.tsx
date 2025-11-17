@@ -96,7 +96,11 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-      const formatted = format(date, "MM/dd/yy")
+      // Use local date components to avoid timezone shifts
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const year = String(date.getFullYear()).slice(-2)
+      const formatted = `${month}/${day}/${year}`
       onUpdate(task.id, { dueDate: formatted })
     }
     setIsDatePickerOpen(false)
@@ -107,7 +111,8 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
     try {
       const [month, day, year] = dateStr.split("/")
       const fullYear = `20${year}`
-      return new Date(`${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
+      // Create date in local timezone to avoid timezone shifts
+      return new Date(parseInt(fullYear), parseInt(month) - 1, parseInt(day))
     } catch (e) {
       return undefined
     }
@@ -227,7 +232,7 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
       </div>
 
       {/* Assignee Column - Editable */}
-      <div className="col-span-2">
+      <div className="col-span-2 flex items-center justify-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             {task.assignee ? (
@@ -269,10 +274,10 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
       </div>
 
       {/* Status Column - Editable with dropdown */}
-      <div className="col-span-2">
+      <div className="col-span-2 flex items-center justify-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors -ml-2">
+            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors">
               <div className={`w-1.5 h-1.5 rounded-full ${currentStatus.dotColor}`} />
               <span className={`text-xs font-medium ${currentStatus.displayColor}`}>
                 {currentStatus.label}
@@ -338,10 +343,10 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
       </div>
 
       {/* Priority Column - Editable with colors */}
-      <div className="col-span-1">
+      <div className="col-span-1 flex items-center justify-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors -ml-2">
+            <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors">
               <div className={`w-1.5 h-1.5 rounded-full ${currentPriority.dotColor}`} />
               <span className={`text-xs ${currentPriority.color}`}>
                 {task.priority}

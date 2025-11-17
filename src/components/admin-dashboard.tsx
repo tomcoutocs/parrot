@@ -11,12 +11,15 @@ import {
 } from "@/components/ui/tooltip"
 import { useState, useEffect } from "react"
 import { fetchCompaniesOptimized, fetchProjectsOptimized, fetchTasksOptimized } from "@/lib/simplified-database-functions"
-import { Company, ProjectWithDetails, TaskWithDetails } from "@/lib/supabase"
+import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
+import { Company, ProjectWithDetails, TaskWithDetails, User } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase"
 
 interface AdminDashboardProps {
   spaces: Array<{ id: string; name: string; active: boolean }>
   spaceData: Record<string, unknown>
   onSpaceClick: (spaceId: string) => void
+  refreshKey?: number // Add refresh key to trigger reloads
 }
 
 // Service color mapping
@@ -40,7 +43,7 @@ const serviceColors: Record<string, string> = {
   "CRM": "#6366f1",
 }
 
-export function AdminDashboard({ spaces, spaceData, onSpaceClick }: AdminDashboardProps) {
+export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey }: AdminDashboardProps) {
   const [allSpaces, setAllSpaces] = useState<Array<{ id: string; name: string; active: boolean }>>([])
   const [loading, setLoading] = useState(true)
 
@@ -52,7 +55,37 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick }: AdminDashboa
         const projects = await fetchProjectsOptimized()
         const tasks = await fetchTasksOptimized()
         
-        const enrichedSpaces = companies.map(company => {
+        // Fetch all users to get manager information
+        const allUsers = await fetchUsersOptimized()
+        const usersMap = new Map<string, User>()
+        allUsers.forEach(user => {
+          usersMap.set(user.id, user)
+        })
+        
+        // Fetch companies with manager_id
+        let companiesWithManagers = companies
+        if (supabase) {
+          try {
+            const { data: companiesData, error } = await supabase
+              .from('companies')
+              .select('id, manager_id')
+            
+            if (!error && companiesData) {
+              // Enrich companies with manager_id
+              companiesWithManagers = companies.map(company => {
+                const companyData = companiesData.find((c: any) => c.id === company.id)
+                return {
+                  ...company,
+                  manager_id: companyData?.manager_id || null
+                }
+              })
+            }
+          } catch (err) {
+            console.error("Error fetching company managers:", err)
+          }
+        }
+        
+        const enrichedSpaces = companiesWithManagers.map(company => {
           const companyProjects = projects.filter(p => p.company_id === company.id)
           const activeProjects = companyProjects.filter(p => {
             const projectTasks = tasks.filter(t => t.project_id === p.id)
@@ -63,12 +96,28 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick }: AdminDashboa
             return hasOpenTasks
           }).length
           
+          // Get manager from company's manager_id
+          let manager = { name: "Unassigned", avatar: "" }
+          if ((company as any).manager_id) {
+            const managerUser = usersMap.get((company as any).manager_id)
+            if (managerUser) {
+              manager = {
+                name: managerUser.full_name || managerUser.email || "Unknown",
+                avatar: ""
+              }
+            }
+          }
+          
           return {
             id: company.id,
             name: company.name,
             active: company.is_active !== false,
-            manager: (spaceData[company.id] as { manager?: { name: string; avatar?: string } })?.manager || { name: "Unassigned", avatar: "" },
-            startDate: company.created_at ? new Date(company.created_at).toLocaleDateString() : "-",
+            manager,
+            startDate: company.created_at ? new Date(company.created_at).toLocaleDateString('en-US', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            }) : "-",
             services: ((spaceData[company.id] as { services?: string[] })?.services) || [],
             description: company.description || "",
             monthlySpend: ((spaceData[company.id] as { monthlySpend?: string })?.monthlySpend) || "$0",
@@ -90,7 +139,7 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick }: AdminDashboa
     }
 
     loadData()
-  }, [spaceData])
+  }, [spaceData, refreshKey])
 
   const totalMonthlyRevenue = allSpaces.reduce((sum, client) => {
     const monthlySpend = (client as { monthlySpend?: string }).monthlySpend || "$0"

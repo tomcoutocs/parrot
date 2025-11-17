@@ -2,13 +2,21 @@
 
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { MoreHorizontal, Calendar, Flag, Plus } from "lucide-react"
+import { MoreHorizontal, Calendar, Flag, Plus, Edit } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { fetchProjectsOptimized } from "@/lib/simplified-database-functions"
-import { ProjectWithDetails } from "@/lib/supabase"
+import { ProjectWithDetails, User } from "@/lib/supabase"
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import CreateProjectModal from "@/components/modals/create-project-modal"
+import EditProjectModal from "@/components/modals/edit-project-modal"
+import { fetchUsers } from "@/lib/database-functions"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface ProjectsOverviewProps {
   activeSpace?: string | null
@@ -18,6 +26,37 @@ export function ProjectsOverview({ activeSpace }: ProjectsOverviewProps) {
   const [projects, setProjects] = useState<ProjectWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<ProjectWithDetails | null>(null)
+  const [users, setUsers] = useState<User[]>([])
+
+  const handleProjectClick = (project: ProjectWithDetails) => {
+    // Navigate to projects tab with the selected project and space
+    if (project.company_id || activeSpace) {
+      const spaceId = project.company_id || activeSpace
+      window.location.href = `/dashboard?tab=projects&projectId=${project.id}&space=${spaceId}`
+    } else {
+      window.location.href = `/dashboard?tab=projects&projectId=${project.id}`
+    }
+  }
+
+  const handleProjectUpdated = () => {
+    // Reload projects after update
+    const loadProjects = async () => {
+      setLoading(true)
+      try {
+        const projectsData = await fetchProjectsOptimized(activeSpace || undefined)
+        setProjects(projectsData)
+      } catch (error) {
+        console.error("Error reloading projects:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadProjects()
+    setShowEditModal(false)
+    setSelectedProject(null)
+  }
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -34,6 +73,19 @@ export function ProjectsOverview({ activeSpace }: ProjectsOverviewProps) {
 
     loadProjects()
   }, [activeSpace])
+
+  // Load users for the edit modal
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const usersData = await fetchUsers()
+        setUsers(usersData)
+      } catch (error) {
+        console.error("Error loading users:", error)
+      }
+    }
+    loadUsers()
+  }, [])
 
   const calculateProgress = (project: ProjectWithDetails) => {
     if (!project.tasks || project.tasks.length === 0) {
@@ -72,9 +124,6 @@ export function ProjectsOverview({ activeSpace }: ProjectsOverviewProps) {
     <Card className="p-4 border-border/60">
       <div className="flex items-center justify-between mb-3">
         <h4>Projects</h4>
-        <button className="text-sm text-muted-foreground hover:text-foreground">
-          View all
-        </button>
       </div>
 
       {/* Table Header */}
@@ -101,7 +150,8 @@ export function ProjectsOverview({ activeSpace }: ProjectsOverviewProps) {
             return (
               <div
                 key={project.id}
-                className="grid grid-cols-12 gap-4 px-3 py-2.5 hover:bg-muted/30 transition-colors items-center group rounded-md"
+                onClick={() => handleProjectClick(project)}
+                className="grid grid-cols-12 gap-4 px-3 py-2.5 hover:bg-muted/30 transition-colors items-center group rounded-md cursor-pointer"
               >
                 <div className="col-span-4 flex items-center gap-2.5">
                   <svg
@@ -156,9 +206,28 @@ export function ProjectsOverview({ activeSpace }: ProjectsOverviewProps) {
                   )}
                 </div>
                 <div className="col-span-1 flex justify-end">
-                  <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
-                    <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                        }}
+                        className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all pointer-events-auto"
+                      >
+                        <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedProject(project)
+                        setShowEditModal(true)
+                      }}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             )
@@ -198,6 +267,18 @@ export function ProjectsOverview({ activeSpace }: ProjectsOverviewProps) {
           }}
         />
       )}
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setSelectedProject(null)
+        }}
+        onProjectUpdated={handleProjectUpdated}
+        project={selectedProject}
+        users={users}
+      />
     </Card>
   )
 }

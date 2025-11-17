@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckSquare, Clock, AlertCircle, MoreHorizontal, ChevronRight, Plus, Calendar, FolderKanban } from "lucide-react"
+import { CheckSquare, Clock, AlertCircle, MoreHorizontal, ChevronRight, Plus, Calendar, FolderKanban, Edit } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
@@ -9,16 +9,25 @@ import { InlineTaskCreation } from "./inline-task-creation"
 import { BulkEditBar } from "./bulk-edit-bar"
 import { fetchProjectsOptimized, fetchTasksOptimized, fetchUsersOptimized, updateTaskPosition } from "@/lib/simplified-database-functions"
 import { supabase } from "@/lib/supabase"
-import { updateTaskStatus, createTask } from "@/lib/database-functions"
+import { updateTaskStatus, createTask, fetchUsers, updateTask, deleteTask } from "@/lib/database-functions"
 import { formatDateForDatabase } from "@/lib/date-utils"
-import { ProjectWithDetails, TaskWithDetails } from "@/lib/supabase"
+import { toastSuccess, toastError } from "@/lib/toast"
+import { ProjectWithDetails, TaskWithDetails, User, Task } from "@/lib/supabase"
 import { format } from "date-fns"
 import { useSession } from "@/components/providers/session-provider"
 import CreateProjectModal from "@/components/modals/create-project-modal"
 import CreateTaskModal from "@/components/modals/create-task-modal"
 import TaskDetailSidebar from "@/components/task-detail-sidebar"
+import EditProjectModal from "@/components/modals/edit-project-modal"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
 
-interface Task {
+interface DesignTask {
   id: string
   name: string
   assignee: string
@@ -32,7 +41,7 @@ interface Task {
 interface StatusGroup {
   name: string
   color: string
-  tasks: Task[]
+  tasks: DesignTask[]
 }
 
 interface Project {
@@ -68,14 +77,39 @@ const statusGroupToDbStatus: Record<string, string> = {
   "DONE": "done",
 }
 
-function transformTaskToDesignTask(task: TaskWithDetails): Task & { originalStatus?: string } {
+function transformTaskToDesignTask(task: TaskWithDetails): DesignTask & { originalStatus?: string } {
   const assignee = task.assigned_user?.full_name 
     ? task.assigned_user.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : ""
   
-  const dueDate = task.due_date 
-    ? format(new Date(task.due_date), "MM/dd/yy")
-    : ""
+  // Parse date using local timezone to avoid shifts
+  let dueDate = ""
+  if (task.due_date) {
+    try {
+      // Handle both ISO string and YYYY-MM-DD format
+      let date: Date
+      if (typeof task.due_date === 'string' && task.due_date.includes('T')) {
+        // ISO string - extract date components in UTC to avoid timezone shifts
+        const isoDate = new Date(task.due_date)
+        const utcYear = isoDate.getUTCFullYear()
+        const utcMonth = isoDate.getUTCMonth()
+        const utcDay = isoDate.getUTCDate()
+        date = new Date(utcYear, utcMonth, utcDay) // Create in local timezone
+      } else {
+        // YYYY-MM-DD format - parse directly as local date
+        const [yearStr, monthStr, dayStr] = task.due_date.split('-')
+        date = new Date(parseInt(yearStr), parseInt(monthStr) - 1, parseInt(dayStr))
+      }
+      // Format using local date components
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const year = String(date.getFullYear()).slice(-2)
+      dueDate = `${month}/${day}/${year}`
+    } catch (e) {
+      console.error("Error parsing due_date:", e)
+      dueDate = ""
+    }
+  }
   
   const priority = task.priority 
     ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1)
@@ -91,11 +125,11 @@ function transformTaskToDesignTask(task: TaskWithDetails): Task & { originalStat
     subtasks: undefined, // TODO: Get subtask count if available
     completed: task.status === "done",
     originalStatus: task.status // Store original status for grouping
-  } as Task & { originalStatus?: string }
+  } as DesignTask & { originalStatus?: string }
 }
 
-function groupTasksByStatus(tasks: (Task & { originalStatus?: string })[]): StatusGroup[] {
-  const groups: Record<string, Task[]> = {}
+function groupTasksByStatus(tasks: (DesignTask & { originalStatus?: string })[]): StatusGroup[] {
+  const groups: Record<string, DesignTask[]> = {}
   
   tasks.forEach(task => {
     // Determine status group based on original database status
@@ -169,6 +203,10 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   const [selectedTaskForSidebar, setSelectedTaskForSidebar] = useState<TaskWithDetails | null>(null)
   const [isTaskSidebarOpen, setIsTaskSidebarOpen] = useState(false)
   const [tasksMap, setTasksMap] = useState<Map<string, TaskWithDetails>>(new Map())
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false)
+  const [selectedProjectForEdit, setSelectedProjectForEdit] = useState<ProjectWithDetails | null>(null)
+  const [editModalUsers, setEditModalUsers] = useState<User[]>([])
+  const [projectsData, setProjectsData] = useState<ProjectWithDetails[]>([])
 
   useEffect(() => {
     const loadData = async () => {
@@ -228,6 +266,9 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           email: user.email || ""
         }))
         setUsers(spaceUsers)
+        
+        // Store projects data for edit modal
+        setProjectsData(projectsData)
         
         // Fetch tasks for projects in this space
         // Get all project IDs first, then fetch tasks for those projects
@@ -301,6 +342,64 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     loadData()
   }, [activeSpace, searchParams])
 
+  // Load users for edit modal
+  useEffect(() => {
+    const loadEditModalUsers = async () => {
+      try {
+        const usersData = await fetchUsers()
+        setEditModalUsers(usersData)
+      } catch (error) {
+        console.error("Error loading users for edit modal:", error)
+      }
+    }
+    loadEditModalUsers()
+  }, [])
+
+  const handleProjectUpdated = () => {
+    // Reload projects after update
+    const loadData = async () => {
+      if (!activeSpace) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      try {
+        const projectsData = await fetchProjectsOptimized(activeSpace)
+        setProjectsData(projectsData)
+        
+        const projectIds = projectsData.map(p => p.id)
+        const allTasksData = projectIds.length > 0 
+          ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+          : []
+        
+        const transformedProjects: Project[] = projectsData.map((project) => {
+          const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+          const designTasks = projectTasks.map(transformTaskToDesignTask)
+          const statusGroups = groupTasksByStatus(designTasks)
+          
+          return {
+            id: project.id,
+            name: project.name || "Unnamed Project",
+            dueDate: "-",
+            launchDate: undefined,
+            statusGroups,
+            taskCount: projectTasks.length
+          }
+        })
+        
+        setProjects(transformedProjects)
+      } catch (error) {
+        console.error("Error reloading projects:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+    setShowEditProjectModal(false)
+    setSelectedProjectForEdit(null)
+  }
+
   const toggleProject = (projectId: string) => {
     setExpandedProjects(prev => 
       prev.includes(projectId) 
@@ -331,17 +430,144 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     }
   }
 
-  const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
+  const handleTaskUpdate = async (taskId: string, updates: Partial<DesignTask>) => {
     console.log("Updating task", taskId, updates)
     
-    // If status is being updated, update it in the database
-    if ('status' in updates && updates.status && session?.user?.id) {
-      try {
-        const task = tasksMap.get(taskId)
-        if (task) {
-          await updateTaskStatus(taskId, updates.status as TaskWithDetails['status'], session.user.id)
+    if (!session?.user?.id) return
+    
+    const task = tasksMap.get(taskId)
+    if (!task) return
+
+    try {
+      // Map TaskRow field names to database field names
+      const dbUpdates: Partial<{
+        title: string
+        assigned_to: string | null
+        status: string
+        priority: string
+        due_date: string | null
+      }> = {}
+
+      // Handle name -> title
+      if ('name' in updates && updates.name !== undefined && updates.name !== null && typeof updates.name === 'string') {
+        dbUpdates.title = updates.name
+      }
+
+      // Handle assignee -> assigned_to
+      if ('assignee' in updates && updates.assignee !== undefined) {
+        dbUpdates.assigned_to = (typeof updates.assignee === 'string' ? updates.assignee : null)
+      }
+
+      // Handle status
+      if ('status' in updates && updates.status) {
+        dbUpdates.status = updates.status
+      }
+
+      // Handle priority - map TaskRow labels to database values
+      if ('priority' in updates && updates.priority) {
+        const priorityMap: Record<string, Task['priority']> = {
+          'urgent': 'urgent',
+          'high': 'high',
+          'normal': 'medium',  // TaskRow uses "Normal" but DB expects "medium"
+          'low': 'low',
+          'medium': 'medium'
+        }
+        const normalizedPriority = updates.priority.toLowerCase()
+        dbUpdates.priority = priorityMap[normalizedPriority] || 'medium'
+      }
+
+      // Handle dueDate -> due_date (convert MM/dd/yy to database format)
+      if ('dueDate' in updates) {
+        if (updates.dueDate && typeof updates.dueDate === 'string') {
+          try {
+            const [month, day, year] = updates.dueDate.split("/")
+            const fullYear = `20${year}`
+            // Store as YYYY-MM-DD string (date-only, no time)
+            const dbDate = `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+            dbUpdates.due_date = dbDate
+          } catch (e) {
+            console.error("Error parsing date:", e)
+            dbUpdates.due_date = null
+          }
+        } else {
+          dbUpdates.due_date = null
+        }
+      }
+
+      // Optimistically update UI immediately
+      const updatedTask = { ...task }
+      if (dbUpdates.title) updatedTask.title = dbUpdates.title
+      if (dbUpdates.assigned_to !== undefined) updatedTask.assigned_to = dbUpdates.assigned_to || undefined
+      if (dbUpdates.status) updatedTask.status = dbUpdates.status as TaskWithDetails['status']
+      if (dbUpdates.priority) {
+        // Use the mapped database value for priority
+        updatedTask.priority = dbUpdates.priority as TaskWithDetails['priority']
+      }
+      if (dbUpdates.due_date !== undefined) updatedTask.due_date = dbUpdates.due_date || undefined
+
+      // Update tasksMap optimistically
+      const newTasksMap = new Map(tasksMap)
+      newTasksMap.set(taskId, updatedTask)
+      setTasksMap(newTasksMap)
+
+      // Update projects optimistically
+      setProjects(prevProjects => {
+        return prevProjects.map(project => {
+          const projectTasks = Array.from(newTasksMap.values()).filter(t => t.project_id === project.id)
+          const designTasks = projectTasks.map(transformTaskToDesignTask)
+          const statusGroups = groupTasksByStatus(designTasks)
           
-          // Reload projects to reflect the change
+          return {
+            ...project,
+            statusGroups,
+            taskCount: projectTasks.length
+          }
+        })
+      })
+
+      // Update database
+      const result = await updateTask(taskId, dbUpdates as Partial<Task>, session.user.id)
+      
+      if (!result.success) {
+        // Revert optimistic update on error
+        setTasksMap(tasksMap)
+        // Reload to get correct state
+        const loadData = async () => {
+          if (!activeSpace) return
+          const projectsData = await fetchProjectsOptimized(activeSpace)
+          const projectIds = projectsData.map(p => p.id)
+          const allTasksData = projectIds.length > 0 
+            ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+            : []
+          
+          const newTasksMap = new Map<string, TaskWithDetails>()
+          allTasksData.forEach(task => {
+            newTasksMap.set(task.id, task)
+          })
+          setTasksMap(newTasksMap)
+          
+          const transformedProjects: Project[] = projectsData.map((project) => {
+            const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+            const designTasks = projectTasks.map(transformTaskToDesignTask)
+            const statusGroups = groupTasksByStatus(designTasks)
+            
+            return {
+              id: project.id,
+              name: project.name || "Unnamed Project",
+              dueDate: "-",
+              launchDate: undefined,
+              statusGroups,
+              taskCount: projectTasks.length
+            }
+          })
+          
+          setProjects(transformedProjects)
+        }
+        loadData()
+        console.error("Error updating task:", result.error)
+      } else {
+        // For assignee changes, reload to get user info
+        if ('assignee' in updates) {
           const loadData = async () => {
             if (!activeSpace) return
             const projectsData = await fetchProjectsOptimized(activeSpace)
@@ -375,16 +601,195 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           }
           loadData()
         }
-      } catch (error) {
-        console.error("Error updating task status:", error)
       }
+    } catch (error) {
+      console.error("Error updating task:", error)
+      // Reload on error to ensure consistency
+      const loadData = async () => {
+        if (!activeSpace) return
+        const projectsData = await fetchProjectsOptimized(activeSpace)
+        const projectIds = projectsData.map(p => p.id)
+        const allTasksData = projectIds.length > 0 
+          ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+          : []
+        
+        const newTasksMap = new Map<string, TaskWithDetails>()
+        allTasksData.forEach(task => {
+          newTasksMap.set(task.id, task)
+        })
+        setTasksMap(newTasksMap)
+        
+        const transformedProjects: Project[] = projectsData.map((project) => {
+          const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+          const designTasks = projectTasks.map(transformTaskToDesignTask)
+          const statusGroups = groupTasksByStatus(designTasks)
+          
+          return {
+            id: project.id,
+            name: project.name || "Unnamed Project",
+            dueDate: "-",
+            launchDate: undefined,
+            statusGroups,
+            taskCount: projectTasks.length
+          }
+        })
+        
+        setProjects(transformedProjects)
+      }
+      loadData()
     }
-    // TODO: Handle other updates (priority, assignee, due date, etc.)
   }
 
-  const handleTaskDelete = (taskId: string) => {
-    console.log("Deleting task", taskId)
-    // TODO: Delete task from database
+  const handleTaskDelete = async (taskId: string) => {
+    if (!confirm('Are you sure you want to delete this task?')) {
+      return
+    }
+
+    try {
+      const result = await deleteTask(taskId)
+      if (result.success) {
+        // Optimistically remove task from UI
+        const newTasksMap = new Map(tasksMap)
+        newTasksMap.delete(taskId)
+        setTasksMap(newTasksMap)
+
+        // Update projects to remove the task
+        setProjects(prevProjects => {
+          return prevProjects.map(project => {
+            const updatedStatusGroups = project.statusGroups.map(statusGroup => ({
+              ...statusGroup,
+              tasks: statusGroup.tasks.filter(task => task.id !== taskId)
+            }))
+            
+            const totalTasks = updatedStatusGroups.reduce((sum, sg) => sum + sg.tasks.length, 0)
+            
+            return {
+              ...project,
+              statusGroups: updatedStatusGroups,
+              taskCount: totalTasks
+            }
+          })
+        })
+
+        // Close sidebar if the deleted task was open
+        if (selectedTaskForSidebar?.id === taskId) {
+          setIsTaskSidebarOpen(false)
+          setSelectedTaskForSidebar(null)
+        }
+
+        toastSuccess("Task deleted successfully")
+
+        // Reload data in background to ensure consistency
+        const loadData = async () => {
+          if (!activeSpace) return
+          const projectsData = await fetchProjectsOptimized(activeSpace)
+          const projectIds = projectsData.map(p => p.id)
+          const allTasksData = projectIds.length > 0 
+            ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+            : []
+          
+          const newTasksMap = new Map<string, TaskWithDetails>()
+          allTasksData.forEach(task => {
+            newTasksMap.set(task.id, task)
+          })
+          setTasksMap(newTasksMap)
+          
+          const transformedProjects: Project[] = projectsData.map((project) => {
+            const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+            const designTasks = projectTasks.map(transformTaskToDesignTask)
+            const statusGroups = groupTasksByStatus(designTasks)
+            
+            return {
+              id: project.id,
+              name: project.name || "Unnamed Project",
+              dueDate: "-",
+              launchDate: undefined,
+              statusGroups,
+              taskCount: projectTasks.length
+            }
+          })
+          
+          setProjects(transformedProjects)
+        }
+        
+        // Reload in background
+        loadData().catch(error => {
+          console.error("Error reloading data after delete:", error)
+        })
+      } else {
+        console.error("Failed to delete task:", result.error)
+        toastError(result.error || "Failed to delete task")
+        // Reload data on error to ensure consistency
+        const loadData = async () => {
+          if (!activeSpace) return
+          const projectsData = await fetchProjectsOptimized(activeSpace)
+          const projectIds = projectsData.map(p => p.id)
+          const allTasksData = projectIds.length > 0 
+            ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+            : []
+          
+          const newTasksMap = new Map<string, TaskWithDetails>()
+          allTasksData.forEach(task => {
+            newTasksMap.set(task.id, task)
+          })
+          setTasksMap(newTasksMap)
+          
+          const transformedProjects: Project[] = projectsData.map((project) => {
+            const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+            const designTasks = projectTasks.map(transformTaskToDesignTask)
+            const statusGroups = groupTasksByStatus(designTasks)
+            
+            return {
+              id: project.id,
+              name: project.name || "Unnamed Project",
+              dueDate: "-",
+              launchDate: undefined,
+              statusGroups,
+              taskCount: projectTasks.length
+            }
+          })
+          
+          setProjects(transformedProjects)
+        }
+        loadData()
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error)
+      toastError("An error occurred while deleting the task")
+      // Reload data on error
+      const loadData = async () => {
+        if (!activeSpace) return
+        const projectsData = await fetchProjectsOptimized(activeSpace)
+        const projectIds = projectsData.map(p => p.id)
+        const allTasksData = projectIds.length > 0 
+          ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+          : []
+        
+        const newTasksMap = new Map<string, TaskWithDetails>()
+        allTasksData.forEach(task => {
+          newTasksMap.set(task.id, task)
+        })
+        setTasksMap(newTasksMap)
+        
+        const transformedProjects: Project[] = projectsData.map((project) => {
+          const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+          const designTasks = projectTasks.map(transformTaskToDesignTask)
+          const statusGroups = groupTasksByStatus(designTasks)
+          
+          return {
+            id: project.id,
+            name: project.name || "Unnamed Project",
+            dueDate: "-",
+            launchDate: undefined,
+            statusGroups,
+            taskCount: projectTasks.length
+          }
+        })
+        
+        setProjects(transformedProjects)
+      }
+      loadData()
+    }
   }
 
   const handleTaskClick = (taskId: string) => {
@@ -487,47 +892,146 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
       return
     }
 
-    // Update task status in database
-    if (session?.user?.id) {
-      try {
-        await updateTaskPosition(draggableId, destination.index, newStatus, session.user.id)
-        
-        // Reload projects to reflect the change
-        const loadData = async () => {
-          if (!activeSpace) return
-          const projectsData = await fetchProjectsOptimized(activeSpace)
-          const projectIds = projectsData.map(p => p.id)
-          const allTasksData = projectIds.length > 0 
-            ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
-            : []
-          
-          const newTasksMap = new Map<string, TaskWithDetails>()
-          allTasksData.forEach(task => {
-            newTasksMap.set(task.id, task)
-          })
-          setTasksMap(newTasksMap)
-          
-          const transformedProjects: Project[] = projectsData.map((project) => {
-            const projectTasks = allTasksData.filter(t => t.project_id === project.id)
-            const designTasks = projectTasks.map(transformTaskToDesignTask)
-            const statusGroups = groupTasksByStatus(designTasks)
-            
-            return {
-              id: project.id,
-              name: project.name || "Unnamed Project",
-              dueDate: "-",
-              launchDate: undefined,
-              statusGroups,
-              taskCount: projectTasks.length
-            }
-          })
-          
-          setProjects(transformedProjects)
+    // Find source status group name
+    let sourceStatusGroupName = ''
+    for (const project of projects) {
+      if (source.droppableId.startsWith(project.id + '-')) {
+        const sourceStatusPart = source.droppableId.substring(project.id.length + 1)
+        const statusMap: Record<string, string> = {
+          'to-do': 'TO DO',
+          'in-progress': 'IN PROGRESS',
+          'review': 'REVIEW',
+          'done': 'DONE'
         }
-        loadData()
-      } catch (error) {
-        console.error("Error updating task status:", error)
+        sourceStatusGroupName = statusMap[sourceStatusPart.toLowerCase()] || sourceStatusPart.split('-').map(word => 
+          word.toUpperCase()
+        ).join(' ')
+        break
       }
+    }
+
+    // Optimistically update UI immediately for smooth experience
+    const updatedTask = { ...task, status: newStatus }
+    const newTasksMap = new Map(tasksMap)
+    newTasksMap.set(draggableId, updatedTask)
+    setTasksMap(newTasksMap)
+
+    // Optimistically update projects state
+    setProjects(prevProjects => {
+      return prevProjects.map(p => {
+        if (p.id !== projectId) return p
+
+        // Find source and destination status groups
+        const sourceStatusGroup = p.statusGroups.find(sg => sg.name === sourceStatusGroupName)
+        const destStatusGroup = p.statusGroups.find(sg => sg.name === destStatusGroupName)
+        
+        if (!sourceStatusGroup || !destStatusGroup) return p
+
+        // Remove task from source group
+        const sourceTasks = sourceStatusGroup.tasks.filter(t => t.id !== draggableId)
+        const movedTask = sourceStatusGroup.tasks.find(t => t.id === draggableId)
+        
+        if (!movedTask) return p
+
+        // Add task to destination group at the correct position
+        const destTasks = [...destStatusGroup.tasks]
+        destTasks.splice(destination.index, 0, { ...movedTask, status: newStatus })
+
+        // Update status groups
+        const updatedStatusGroups = p.statusGroups.map(sg => {
+          if (sg.name === sourceStatusGroupName) {
+            return { ...sg, tasks: sourceTasks }
+          }
+          if (sg.name === destStatusGroupName) {
+            return { ...sg, tasks: destTasks }
+          }
+          return sg
+        })
+
+        return {
+          ...p,
+          statusGroups: updatedStatusGroups
+        }
+      })
+    })
+
+    // Update database in the background (no loading state)
+    if (session?.user?.id) {
+      updateTaskPosition(draggableId, destination.index, newStatus, session.user.id)
+        .then(() => {
+          // Silently refresh data in background to ensure consistency
+          if (!activeSpace) return
+          fetchProjectsOptimized(activeSpace)
+            .then(projectsData => {
+              const projectIds = projectsData.map(p => p.id)
+              return projectIds.length > 0 
+                ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+                : Promise.resolve([])
+            })
+            .then(allTasksData => {
+              const refreshedTasksMap = new Map<string, TaskWithDetails>()
+              allTasksData.forEach(task => {
+                refreshedTasksMap.set(task.id, task)
+              })
+              setTasksMap(refreshedTasksMap)
+              
+              const transformedProjects: Project[] = projectsData.map((project) => {
+                const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+                const designTasks = projectTasks.map(transformTaskToDesignTask)
+                const statusGroups = groupTasksByStatus(designTasks)
+                
+                return {
+                  id: project.id,
+                  name: project.name || "Unnamed Project",
+                  dueDate: "-",
+                  launchDate: undefined,
+                  statusGroups,
+                  taskCount: projectTasks.length
+                }
+              })
+              
+              setProjects(transformedProjects)
+            })
+            .catch(error => {
+              console.error("Error refreshing data after drag:", error)
+            })
+        })
+        .catch(error => {
+          console.error("Error updating task position:", error)
+          // Revert optimistic update on error by reloading
+          if (!activeSpace) return
+          fetchProjectsOptimized(activeSpace)
+            .then(projectsData => {
+              const projectIds = projectsData.map(p => p.id)
+              return projectIds.length > 0 
+                ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+                : Promise.resolve([])
+            })
+            .then(allTasksData => {
+              const newTasksMap = new Map<string, TaskWithDetails>()
+              allTasksData.forEach(task => {
+                newTasksMap.set(task.id, task)
+              })
+              setTasksMap(newTasksMap)
+              
+              const transformedProjects: Project[] = projectsData.map((project) => {
+                const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+                const designTasks = projectTasks.map(transformTaskToDesignTask)
+                const statusGroups = groupTasksByStatus(designTasks)
+                
+                return {
+                  id: project.id,
+                  name: project.name || "Unnamed Project",
+                  dueDate: "-",
+                  launchDate: undefined,
+                  statusGroups,
+                  taskCount: projectTasks.length
+                }
+              })
+              
+              setProjects(transformedProjects)
+            })
+        })
     }
   }
 
@@ -579,29 +1083,31 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           No projects yet. Create your first project to get started.
         </div>
       ) : (
-        projects.map((project) => {
-          const isProjectExpanded = expandedProjects.includes(project.id)
-          
-          // Check if launch date is in the future
-          const isUpcomingLaunch = project.launchDate ? (() => {
-            try {
-              const [month, day, year] = project.launchDate.split('/')
-              const launchDate = new Date(2000 + parseInt(year), parseInt(month) - 1, parseInt(day))
-              const today = new Date()
-              today.setHours(0, 0, 0, 0)
-              return launchDate >= today
-            } catch (e) {
-              return false
-            }
-          })() : false
-          
-          return (
-            <div key={project.id} className="border-b border-border/50 last:border-0">
-              {/* Project Header */}
-              <button
-                onClick={() => toggleProject(project.id)}
-                className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors group"
-              >
+        <div className="space-y-4">
+          {projects.map((project) => {
+            const isProjectExpanded = expandedProjects.includes(project.id)
+            
+            // Check if launch date is in the future
+            const isUpcomingLaunch = project.launchDate ? (() => {
+              try {
+                const [month, day, year] = project.launchDate.split('/')
+                const launchDate = new Date(2000 + parseInt(year), parseInt(month) - 1, parseInt(day))
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                return launchDate >= today
+              } catch (e) {
+                return false
+              }
+            })() : false
+            
+            return (
+              <Card key={project.id} className="border-border/60 shadow-[0_0.5px_1.5px_0_rgba(0,0,0,0.05),0_0.5px_1px_-0.5px_rgba(0,0,0,0.05)]">
+                <CardContent className="p-0">
+                  {/* Project Header */}
+                  <div
+                    onClick={() => toggleProject(project.id)}
+                    className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors group cursor-pointer rounded-t-lg"
+                  >
                 <ChevronRight 
                   className={`w-4 h-4 text-muted-foreground transition-transform ${
                     isProjectExpanded ? "rotate-90" : ""
@@ -625,13 +1131,33 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                     </div>
                   )}
                 </div>
-                <MoreHorizontal className="w-4 h-4 ml-auto text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
+                <div className="ml-auto" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
+                        <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => {
+                        const projectData = projectsData.find(p => p.id === project.id)
+                        if (projectData) {
+                          setSelectedProjectForEdit(projectData)
+                          setShowEditProjectModal(true)
+                        }
+                      }}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit Project
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
 
-              {/* Project Content */}
-              {isProjectExpanded && (
-                <DragDropContext onDragEnd={handleDragEnd}>
-                  <div className="bg-muted/20">
+                  {/* Project Content */}
+                  {isProjectExpanded && (
+                    <DragDropContext onDragEnd={handleDragEnd}>
+                      <div className="bg-muted/20">
                     {project.statusGroups
                       .filter((statusGroup) => statusGroup.tasks.length > 0)
                       .map((statusGroup) => {
@@ -672,10 +1198,10 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                   {/* Table Header */}
                                   <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
                                     <div className="col-span-4">Name</div>
-                                    <div className="col-span-2">Assignee</div>
-                                    <div className="col-span-2">Status</div>
+                                    <div className="col-span-2 text-center">Assignee</div>
+                                    <div className="col-span-2 text-center">Status</div>
                                     <div className="col-span-2 text-center">Due date</div>
-                                    <div className="col-span-1">Priority</div>
+                                    <div className="col-span-1 text-center">Priority</div>
                                     <div className="col-span-1"></div>
                                   </div>
 
@@ -793,8 +1319,8 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                     />
                                   )}
 
-                                  {/* Add Task Button */}
-                                  {showingInlineCreate !== statusId && (
+                                  {/* Add Task Button - Move after placeholder when dragging */}
+                                  {!snapshot.isDraggingOver && showingInlineCreate !== statusId && (
                                     <button 
                                       onClick={() => setShowingInlineCreate(statusId)}
                                       className="flex items-center gap-1.5 px-12 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -806,17 +1332,29 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                 </div>
                               )}
                               {provided.placeholder}
+                              {/* Add Task Button - Show after placeholder when dragging over */}
+                              {snapshot.isDraggingOver && showingInlineCreate !== statusId && (
+                                <button 
+                                  onClick={() => setShowingInlineCreate(statusId)}
+                                  className="flex items-center gap-1.5 px-12 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Add task</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </Droppable>
                       )
-                    })}
-                  </div>
-                </DragDropContext>
-              )}
-            </div>
-          )
-        })
+                      })}
+                      </div>
+                    </DragDropContext>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
       )}
 
       {/* Creation Dialogs */}
@@ -888,6 +1426,18 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           users={users}
         />
       )}
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={showEditProjectModal}
+        onClose={() => {
+          setShowEditProjectModal(false)
+          setSelectedProjectForEdit(null)
+        }}
+        onProjectUpdated={handleProjectUpdated}
+        project={selectedProjectForEdit}
+        users={editModalUsers}
+      />
 
       {/* Task Detail Sidebar */}
       <TaskDetailSidebar
