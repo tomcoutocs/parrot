@@ -93,12 +93,36 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   const [loading, setLoading] = useState(true)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [author, setAuthor] = useState<string>('')
-  const titleInputRef = useRef<HTMLInputElement>(null)
   const isNewDocument = documentId === 'new'
   const [isWiki, setIsWiki] = useState(false)
   const [documentIcon, setDocumentIcon] = useState<string>('')
   const [coverImage, setCoverImage] = useState<string>('')
   const [isMounted, setIsMounted] = useState(false)
+  const [showFloatingToolbar, setShowFloatingToolbar] = useState(false)
+  const [showSlashMenu, setShowSlashMenu] = useState(false)
+  const [slashCommandQuery, setSlashCommandQuery] = useState('')
+  const [selectedSlashIndex, setSelectedSlashIndex] = useState(0)
+  const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0 })
+  const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 })
+  const floatingToolbarRef = useRef<HTMLDivElement>(null)
+  const slashMenuRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<any>(null)
+  const showSlashMenuRef = useRef(false)
+  const slashCommandQueryRef = useRef('')
+  const selectedSlashIndexRef = useRef(0)
+  
+  // Sync refs with state
+  useEffect(() => {
+    showSlashMenuRef.current = showSlashMenu
+  }, [showSlashMenu])
+  
+  useEffect(() => {
+    slashCommandQueryRef.current = slashCommandQuery
+  }, [slashCommandQuery])
+  
+  useEffect(() => {
+    selectedSlashIndexRef.current = selectedSlashIndex
+  }, [selectedSlashIndex])
   
   // Ensure we're on the client before rendering editor
   useEffect(() => {
@@ -163,9 +187,30 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     handleTabChange(internalTab)
   }
 
+  // Define quick insert actions - needs to be before editor for handleKeyDown
+  const getQuickInsertActions = (editorInstance: typeof editor) => [
+    { label: 'Heading 1', icon: Heading1, action: () => editorInstance?.chain().focus().toggleHeading({ level: 1 }).run() },
+    { label: 'Heading 2', icon: Heading2, action: () => editorInstance?.chain().focus().toggleHeading({ level: 2 }).run() },
+    { label: 'Heading 3', icon: Heading3, action: () => editorInstance?.chain().focus().toggleHeading({ level: 3 }).run() },
+    { label: 'Bullet List', icon: List, action: () => editorInstance?.chain().focus().toggleBulletList().run() },
+    { label: 'Numbered List', icon: ListOrdered, action: () => editorInstance?.chain().focus().toggleOrderedList().run() },
+    { label: 'To-do List', icon: CheckSquare, action: () => editorInstance?.chain().focus().toggleTaskList().run() },
+    { label: 'Quote', icon: Quote, action: () => editorInstance?.chain().focus().toggleBlockquote().run() },
+    { label: 'Code Block', icon: Code, action: () => editorInstance?.chain().focus().toggleCodeBlock().run() },
+    { label: 'Table', icon: TableIcon, action: () => {
+      if (!editorInstance) return
+      editorInstance.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+    }},
+    { label: 'Horizontal Rule', icon: Code2, action: () => editorInstance?.chain().focus().setHorizontalRule().run() },
+  ]
+
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+      }),
       Placeholder.configure({
         placeholder: 'Type "/" for commands or just start typing...',
       }),
@@ -199,11 +244,228 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg max-w-none focus:outline-none min-h-[600px] py-8 dark:prose-invert prose-headings:text-foreground prose-p:text-foreground',
+        class: 'prose prose-lg max-w-none focus:outline-none min-h-[600px] py-4 dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-foreground prose-p:leading-relaxed [&_h1]:text-5xl [&_h1]:font-bold [&_h1]:mb-4 [&_h1]:mt-0 [&_h2]:text-3xl [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-4 [&_h3]:text-2xl [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-3 [&_p]:text-base [&_p]:mb-4',
+      },
+      handleKeyDown: (view, event) => {
+        // Handle Escape to close menus
+        if (event.key === 'Escape') {
+          setShowSlashMenu(false)
+          setShowFloatingToolbar(false)
+          return false
+        }
+        
+        // Handle "/" command menu
+        if (event.key === '/' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+          const { state } = view
+          const { selection } = state
+          const { $from } = selection
+          const textBefore = $from.nodeBefore?.textContent || ''
+          
+          // Only trigger if at start of line or after space
+          if ($from.parentOffset === 0 || textBefore.endsWith(' ')) {
+            // Don't prevent default, let it insert "/"
+            return false
+          }
+        }
+        
+        // Handle arrow keys in slash menu
+        if (showSlashMenuRef.current && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+          event.preventDefault()
+          const editorInstance = editorRef.current
+          if (!editorInstance) return false
+          const actions = getQuickInsertActions(editorInstance)
+          const query = slashCommandQueryRef.current
+          const filteredActions = actions.filter(action => 
+            action.label.toLowerCase().includes(query)
+          )
+          
+          if (filteredActions.length > 0) {
+            const currentIndex = selectedSlashIndexRef.current
+            if (event.key === 'ArrowDown') {
+              setSelectedSlashIndex((currentIndex + 1) % filteredActions.length)
+            } else {
+              setSelectedSlashIndex((currentIndex - 1 + filteredActions.length) % filteredActions.length)
+            }
+          }
+          return true
+        }
+        
+        // Handle Enter to select from slash menu
+        if (event.key === 'Enter' && showSlashMenuRef.current) {
+          event.preventDefault()
+          const editorInstance = editorRef.current
+          if (!editorInstance) return false
+          const actions = getQuickInsertActions(editorInstance)
+          const query = slashCommandQueryRef.current
+          const filteredActions = actions.filter(action => 
+            action.label.toLowerCase().includes(query)
+          )
+          const currentIndex = selectedSlashIndexRef.current
+          
+          if (filteredActions.length > 0 && filteredActions[currentIndex]) {
+            const action = filteredActions[currentIndex]
+            // Remove the slash command text
+            const { from } = view.state.selection
+            let searchStart = from - 1
+            while (searchStart > 0) {
+              const char = view.state.doc.textBetween(searchStart - 1, searchStart)
+              if (char === ' ' || char === '\n') {
+                searchStart++
+                break
+              }
+              if (searchStart === from - 1 && char === '/') {
+                break
+              }
+              searchStart--
+            }
+            
+            // Delete the command text
+            view.dispatch(view.state.tr.delete(searchStart, from))
+            
+            // Execute the action
+            setTimeout(() => {
+              action.action()
+              setShowSlashMenu(false)
+              setSlashCommandQuery('')
+              setSelectedSlashIndex(0)
+            }, 0)
+          }
+          return true
+        }
+        
+        return false
+      },
+      handleDOMEvents: {
+        mouseup: () => {
+          // Check selection after mouseup
+          if (editor) {
+            setTimeout(() => {
+              const { from, to } = editor.state.selection
+              const hasSelection = from !== to
+              
+              if (hasSelection) {
+                try {
+                  const view = (editor as any).view
+                  if (view) {
+                    const start = view.coordsAtPos(from)
+                    const end = view.coordsAtPos(to)
+                    
+                    // Fixed positioning is relative to viewport, coordsAtPos already gives viewport coordinates
+                    setToolbarPosition({
+                      top: start.top - 10, // Position above selection
+                      left: (start.left + end.left) / 2,
+                    })
+                    setShowFloatingToolbar(true)
+                  }
+                } catch (error) {
+                  console.error('Error calculating toolbar position:', error)
+                }
+              } else {
+                setShowFloatingToolbar(false)
+              }
+            }, 10)
+          }
+          return false
+        },
       },
     },
-    onUpdate: () => {
-      // Auto-save could be implemented here
+    onUpdate: ({ editor }) => {
+      // Check for "/" command - simplified detection
+      const { from } = editor.state.selection
+      const { $from } = editor.state.selection
+      
+      // Get the paragraph/block node we're in
+      const paragraph = $from.node($from.depth)
+      const paragraphStart = $from.start($from.depth)
+      const paragraphEnd = $from.end($from.depth)
+      
+      // Get text from start of paragraph to cursor
+      const textToCursor = editor.state.doc.textBetween(paragraphStart, from)
+      
+      // Find the last "/" in this paragraph
+      const lastSlashIndex = textToCursor.lastIndexOf('/')
+      
+      if (lastSlashIndex >= 0) {
+        // Get text before the "/"
+        const textBeforeSlash = textToCursor.substring(0, lastSlashIndex)
+        // Get command text after "/"
+        const commandText = textToCursor.substring(lastSlashIndex)
+        const query = commandText.slice(1).toLowerCase()
+        
+        // Check if "/" is at start of paragraph or after whitespace only
+        const isAtStart = lastSlashIndex === 0
+        const isAfterWhitespace = textBeforeSlash.trim() === '' && (textBeforeSlash === '' || textBeforeSlash.endsWith(' ') || textBeforeSlash.endsWith('\n'))
+        
+        if (isAtStart || isAfterWhitespace) {
+          try {
+            const view = (editor as any).view
+            if (view) {
+              const coords = view.coordsAtPos(from)
+              
+              setSlashMenuPosition({
+                top: coords.bottom + 5,
+                left: coords.left,
+              })
+              setSlashCommandQuery(query)
+              setSelectedSlashIndex(0)
+              setShowSlashMenu(true)
+            } else {
+              setShowSlashMenu(false)
+            }
+          } catch (error) {
+            console.error('Error calculating slash menu position:', error)
+            setShowSlashMenu(false)
+          }
+        } else {
+          setShowSlashMenu(false)
+          setSlashCommandQuery('')
+          setSelectedSlashIndex(0)
+        }
+      } else {
+        // No "/" found, hide menu
+        setShowSlashMenu(false)
+        setSlashCommandQuery('')
+        setSelectedSlashIndex(0)
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      // This fires when selection changes
+      const { from, to } = editor.state.selection
+      const hasSelection = from !== to
+      
+      if (hasSelection) {
+        // Get selection coordinates for floating toolbar
+        try {
+          // Access the editor's view through the editor instance
+          const view = (editor as any).view
+          if (view) {
+            const start = view.coordsAtPos(from)
+            const end = view.coordsAtPos(to)
+            
+            // Use getBoundingClientRect for more accurate positioning
+            const editorElement = view.dom.closest('.ProseMirror') || view.dom
+            const editorRect = editorElement.getBoundingClientRect()
+            
+            // Calculate position relative to viewport (fixed positioning)
+            const relativeTop = (start.top + end.top) / 2 - 50 // Position above selection
+            const relativeLeft = (start.left + end.left) / 2
+            
+            setToolbarPosition({
+              top: relativeTop,
+              left: relativeLeft,
+            })
+            setShowFloatingToolbar(true)
+          } else {
+            setShowFloatingToolbar(false)
+          }
+        } catch (error) {
+          // If coordinates can't be calculated, hide toolbar
+          console.error('Error calculating toolbar position:', error)
+          setShowFloatingToolbar(false)
+        }
+      } else {
+        setShowFloatingToolbar(false)
+      }
     },
     onCreate: ({ editor }) => {
       console.log('Editor created:', editor)
@@ -229,9 +491,16 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
         try {
           const result = await getRichDocument(documentId)
           if (result.success && result.document) {
+            // Set title from document, but also include it in editor content as first heading
             setDocumentTitle(result.document.title)
             if (editor) {
-              editor.commands.setContent(result.document.content || '')
+              // If content exists, use it; otherwise create a heading with the title
+              const content = result.document.content || ''
+              if (content) {
+                editor.commands.setContent(content)
+              } else if (result.document.title) {
+                editor.commands.setContent(`<h1>${result.document.title}</h1>`)
+              }
             }
             setLastSaved(result.document.updated_at ? new Date(result.document.updated_at) : null)
             
@@ -279,23 +548,80 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     }
   }, [documentId, isNewDocument, session, editor])
 
-  // Focus title input on mount for new documents
+  // Focus editor on mount for new documents
   useEffect(() => {
-    if (isNewDocument && titleInputRef.current) {
+    if (isNewDocument && editor && !loading) {
       setTimeout(() => {
-        titleInputRef.current?.focus()
+        editor.commands.focus()
+        // Insert a heading placeholder for the title
+        editor.commands.insertContent('<h1>Untitled</h1><p></p>')
+        // Select "Untitled" so user can immediately start typing
+        editor.commands.setTextSelection({ from: 1, to: 9 })
       }, 100)
     }
-  }, [isNewDocument])
+  }, [isNewDocument, editor, loading])
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (
+        floatingToolbarRef.current &&
+        !floatingToolbarRef.current.contains(target) &&
+        slashMenuRef.current &&
+        !slashMenuRef.current.contains(target) &&
+        !target.closest('.ProseMirror')
+      ) {
+        setShowFloatingToolbar(false)
+        setShowSlashMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Extract title from editor content (first heading or first paragraph)
+  const extractTitleFromContent = (content: string): string => {
+    if (!content) return 'Untitled'
+    
+    try {
+      // Try to parse HTML and get first heading
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(content, 'text/html')
+      const firstHeading = doc.querySelector('h1, h2, h3')
+      if (firstHeading) {
+        return firstHeading.textContent?.trim() || 'Untitled'
+      }
+      
+      // Fallback to first paragraph
+      const firstParagraph = doc.querySelector('p')
+      if (firstParagraph) {
+        const text = firstParagraph.textContent?.trim() || ''
+        // Use first 50 characters as title
+        return text.substring(0, 50) || 'Untitled'
+      }
+      
+      return 'Untitled'
+    } catch {
+      return 'Untitled'
+    }
+  }
 
   const handleSave = async () => {
-    if (!documentTitle.trim()) {
-      toastError('Please enter a document title')
+    if (!editor || !session?.user?.id) {
+      toastError('Editor not initialized or user not authenticated')
       return
     }
 
-    if (!editor || !session?.user?.id) {
-      toastError('Editor not initialized or user not authenticated')
+    // Extract title from editor content
+    const content = editor.getHTML()
+    const extractedTitle = extractTitleFromContent(content)
+    
+    if (!extractedTitle || extractedTitle === 'Untitled') {
+      toastError('Please add a title (first heading) to your document')
       return
     }
 
@@ -312,7 +638,7 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
       }
 
       const result = await saveRichDocument(
-        documentTitle.trim(),
+        extractedTitle.trim(),
         content,
         companyId,
         session.user.id,
@@ -420,47 +746,32 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   const commonEmojis = ['📄', '📝', '📋', '📑', '📊', '📈', '📉', '💡', '⭐', '🔥', '✨', '🎯', '🚀', '💼', '📌', '🔖', '📎', '📐', '📏', '📓', '📔', '📕', '📗', '📘', '📙', '📚', '📖', '🔍', '💬', '📞']
 
   // Quick insert actions
-  const quickInsertActions = [
-    { label: 'Heading 1', icon: Heading1, action: () => editor?.chain().focus().toggleHeading({ level: 1 }).run() },
-    { label: 'Heading 2', icon: Heading2, action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
-    { label: 'Heading 3', icon: Heading3, action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
-    { label: 'Bullet List', icon: List, action: () => editor?.chain().focus().toggleBulletList().run() },
-    { label: 'Numbered List', icon: ListOrdered, action: () => editor?.chain().focus().toggleOrderedList().run() },
-    { label: 'To-do List', icon: CheckSquare, action: () => editor?.chain().focus().toggleTaskList().run() },
-    { label: 'Quote', icon: Quote, action: () => editor?.chain().focus().toggleBlockquote().run() },
-    { label: 'Code Block', icon: Code, action: () => editor?.chain().focus().toggleCodeBlock().run() },
-    { label: 'Table', icon: TableIcon, action: () => insertTable() },
-    { label: 'Horizontal Rule', icon: Code2, action: () => editor?.chain().focus().setHorizontalRule().run() },
-  ]
-
-  const insertTable = () => {
-    if (!editor) return
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-  }
+  // Get quick insert actions for rendering
+  const quickInsertActions = editor ? getQuickInsertActions(editor) : []
 
   // Toolbar buttons
   const toolbarButtons = [
-    { icon: Bold, onClick: () => editor?.chain().focus().toggleBold().run(), isActive: () => editor?.isActive('bold') || false },
-    { icon: Italic, onClick: () => editor?.chain().focus().toggleItalic().run(), isActive: () => editor?.isActive('italic') || false },
-    { icon: UnderlineIcon, onClick: () => editor?.chain().focus().toggleUnderline().run(), isActive: () => editor?.isActive('underline') || false },
-    { icon: Strikethrough, onClick: () => editor?.chain().focus().toggleStrike().run(), isActive: () => editor?.isActive('strike') || false },
-    { icon: Code, onClick: () => editor?.chain().focus().toggleCode().run(), isActive: () => editor?.isActive('code') || false },
+    { icon: Bold, onClick: () => editor?.chain().focus().toggleBold().run(), isActive: () => editor?.isActive('bold') || false, title: 'Bold (Ctrl+B)' },
+    { icon: Italic, onClick: () => editor?.chain().focus().toggleItalic().run(), isActive: () => editor?.isActive('italic') || false, title: 'Italic (Ctrl+I)' },
+    { icon: UnderlineIcon, onClick: () => editor?.chain().focus().toggleUnderline().run(), isActive: () => editor?.isActive('underline') || false, title: 'Underline (Ctrl+U)' },
+    { icon: Strikethrough, onClick: () => editor?.chain().focus().toggleStrike().run(), isActive: () => editor?.isActive('strike') || false, title: 'Strikethrough' },
+    { icon: Code, onClick: () => editor?.chain().focus().toggleCode().run(), isActive: () => editor?.isActive('code') || false, title: 'Inline Code' },
     { separator: true },
-    { icon: Heading1, onClick: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(), isActive: () => editor?.isActive('heading', { level: 1 }) || false },
-    { icon: Heading2, onClick: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), isActive: () => editor?.isActive('heading', { level: 2 }) || false },
-    { icon: Heading3, onClick: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), isActive: () => editor?.isActive('heading', { level: 3 }) || false },
+    { icon: Heading1, onClick: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(), isActive: () => editor?.isActive('heading', { level: 1 }) || false, title: 'Heading 1' },
+    { icon: Heading2, onClick: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), isActive: () => editor?.isActive('heading', { level: 2 }) || false, title: 'Heading 2' },
+    { icon: Heading3, onClick: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), isActive: () => editor?.isActive('heading', { level: 3 }) || false, title: 'Heading 3' },
     { separator: true },
-    { icon: List, onClick: () => editor?.chain().focus().toggleBulletList().run(), isActive: () => editor?.isActive('bulletList') || false },
-    { icon: ListOrdered, onClick: () => editor?.chain().focus().toggleOrderedList().run(), isActive: () => editor?.isActive('orderedList') || false },
-    { icon: CheckSquare, onClick: () => editor?.chain().focus().toggleTaskList().run(), isActive: () => editor?.isActive('taskList') || false },
-    { icon: Quote, onClick: () => editor?.chain().focus().toggleBlockquote().run(), isActive: () => editor?.isActive('blockquote') || false },
+    { icon: List, onClick: () => editor?.chain().focus().toggleBulletList().run(), isActive: () => editor?.isActive('bulletList') || false, title: 'Bullet List' },
+    { icon: ListOrdered, onClick: () => editor?.chain().focus().toggleOrderedList().run(), isActive: () => editor?.isActive('orderedList') || false, title: 'Numbered List' },
+    { icon: CheckSquare, onClick: () => editor?.chain().focus().toggleTaskList().run(), isActive: () => editor?.isActive('taskList') || false, title: 'To-do List' },
+    { icon: Quote, onClick: () => editor?.chain().focus().toggleBlockquote().run(), isActive: () => editor?.isActive('blockquote') || false, title: 'Quote' },
     { separator: true },
-    { icon: AlignLeft, onClick: () => editor?.chain().focus().setTextAlign('left').run(), isActive: () => editor?.isActive({ textAlign: 'left' }) || false },
-    { icon: AlignCenter, onClick: () => editor?.chain().focus().setTextAlign('center').run(), isActive: () => editor?.isActive({ textAlign: 'center' }) || false },
-    { icon: AlignRight, onClick: () => editor?.chain().focus().setTextAlign('right').run(), isActive: () => editor?.isActive({ textAlign: 'right' }) || false },
+    { icon: AlignLeft, onClick: () => editor?.chain().focus().setTextAlign('left').run(), isActive: () => editor?.isActive({ textAlign: 'left' }) || false, title: 'Align Left' },
+    { icon: AlignCenter, onClick: () => editor?.chain().focus().setTextAlign('center').run(), isActive: () => editor?.isActive({ textAlign: 'center' }) || false, title: 'Align Center' },
+    { icon: AlignRight, onClick: () => editor?.chain().focus().setTextAlign('right').run(), isActive: () => editor?.isActive({ textAlign: 'right' }) || false, title: 'Align Right' },
     { separator: true },
-    { icon: Undo, onClick: () => editor?.chain().focus().undo().run() },
-    { icon: Redo, onClick: () => editor?.chain().focus().redo().run() },
+    { icon: Undo, onClick: () => editor?.chain().focus().undo().run(), title: 'Undo (Ctrl+Z)' },
+    { icon: Redo, onClick: () => editor?.chain().focus().redo().run(), title: 'Redo (Ctrl+Y)' },
   ]
 
   console.log('Render check:', { loading, hasEditor: !!editor, editor, isMounted })
@@ -521,73 +832,6 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   const editorContent = (
     <>
       <div className="flex flex-col h-full bg-background">
-        {/* Document Header */}
-        <div className="border-b border-border/50 bg-background flex-shrink-0">
-          <div className="flex items-center justify-between px-6 py-3">
-            <div className="flex items-center gap-3">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="gap-2"
-                onClick={() => {
-                  const spaceQuery = currentSpaceId ? `?space=${currentSpaceId}` : ''
-                  router.push(`/documents/new${spaceQuery}`)
-                }}
-              >
-                <Plus className="h-4 w-4" />
-                Add page
-              </Button>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 text-sm gap-1"
-                onClick={() => setShowLinkModal(true)}
-              >
-                <Link2 className="h-3 w-3" />
-                Link Task or Doc
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-8 text-sm gap-1 ${isWiki ? 'bg-muted text-foreground' : ''}`}
-                onClick={() => setIsWiki(!isWiki)}
-              >
-                <CheckCircle2 className={`h-3 w-3 ${isWiki ? 'fill-current' : ''}`} />
-                Mark Wiki
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 text-sm gap-1"
-                onClick={() => setShowIconModal(true)}
-              >
-                <Palette className="h-3 w-3" />
-                Add icon
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 text-sm gap-1"
-                onClick={() => setShowCoverModal(true)}
-              >
-                <Image className="h-3 w-3" />
-                Add cover
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-8 text-sm gap-1"
-                onClick={() => setShowSettingsModal(true)}
-              >
-                <Settings className="h-3 w-3" />
-                Settings
-              </Button>
-            </div>
-          </div>
-        </div>
 
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto">
@@ -611,117 +855,181 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
             </div>
           )}
 
-            {/* Page Title */}
-            <div className="py-6 flex items-center gap-3">
-              {documentIcon && (
+            {/* Document Icon (if set) */}
+            {documentIcon && (
+              <div className="py-4 flex items-center gap-3">
                 <span className="text-5xl">{documentIcon}</span>
-              )}
-              <Input
-                ref={titleInputRef}
-                value={documentTitle}
-                onChange={(e) => setDocumentTitle(e.target.value)}
-                placeholder="Untitled"
-                className="text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-2 bg-transparent text-foreground placeholder:text-muted-foreground flex-1"
-              />
-            </div>
-
-            {/* Metadata */}
-            <div className="pb-4 flex items-center gap-4 text-sm text-muted-foreground">
-              {author && (
-                <div className="flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  <span>{author}</span>
-                </div>
-              )}
-              {lastSaved && (
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  <span>Last updated {format(lastSaved, 'MMM d')} at {format(lastSaved, 'h:mm a')}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Toolbar - Sticky within scrollable area */}
-            <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-2 -mx-8 mb-4">
-              <div className="flex items-center gap-1 overflow-x-auto">
-                {/* Notion-like Insert dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 gap-1">
-                      <Plus className="h-4 w-4" />
-                      <span className="text-sm">Insert</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    {quickInsertActions.map((action) => {
-                      const Icon = action.icon
-                      return (
-                        <DropdownMenuItem
-                          key={action.label}
-                          onClick={action.action}
-                          className="cursor-pointer gap-2"
-                        >
-                          <Icon className="h-4 w-4" />
-                          {action.label}
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                
-                <div className="w-px h-6 bg-border mx-1" />
-                
-                {toolbarButtons.map((button, index) => {
-                  if ('separator' in button) {
-                    return <div key={index} className="w-px h-6 bg-border mx-1" />
-                  }
-                  const Icon = button.icon
-                  const isActive = button.isActive ? button.isActive() : false
-                  return (
-                    <Button
-                      key={index}
-                      variant={isActive ? 'default' : 'ghost'}
-                      size="sm"
-                      onClick={button.onClick}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Icon className="h-4 w-4" />
-                    </Button>
-                  )
-                })}
-                
-                <div className="flex-1" />
-                
-                <Button
-                  className="bg-foreground text-background hover:bg-foreground/90 gap-2"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!documentTitle.trim() || saving}
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4" />
-                      Save
-                    </>
-                  )}
-                </Button>
               </div>
-            </div>
+            )}
 
-            {/* Editor */}
-            <div className="min-h-[600px] pb-16">
+            {/* Metadata - Minimal, only show when not editing */}
+            {!isNewDocument && (
+              <div className="pb-4 flex items-center gap-4 text-sm text-muted-foreground">
+                {author && (
+                  <div className="flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    <span>{author}</span>
+                  </div>
+                )}
+                {lastSaved && (
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    <span>Last updated {format(lastSaved, 'MMM d')} at {format(lastSaved, 'h:mm a')}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Editor - Notion-like free-form */}
+            <div className="min-h-[600px] pb-16 relative">
               {editor ? (
-                <EditorContent editor={editor} />
+                <>
+                  <EditorContent 
+                    editor={editor}
+                    className="prose prose-lg max-w-none dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-foreground prose-p:leading-relaxed focus:outline-none [&_h1]:text-5xl [&_h1]:font-bold [&_h1]:mb-4 [&_h1]:mt-0 [&_h2]:text-3xl [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-4 [&_h3]:text-2xl [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-3 [&_p]:text-base [&_p]:mb-4"
+                  />
+                  
+                  {/* Floating Toolbar - appears on text selection */}
+                  {showFloatingToolbar && editor && (
+                    <div
+                      ref={floatingToolbarRef}
+                      className="fixed z-50 bg-background border border-border rounded-lg shadow-lg p-1 flex items-center gap-1"
+                      style={{
+                        top: `${toolbarPosition.top}px`,
+                        left: `${toolbarPosition.left}px`,
+                        transform: 'translateX(-50%) translateY(-100%)',
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      {toolbarButtons.map((button, index) => {
+                        if ('separator' in button) {
+                          return <div key={index} className="w-px h-6 bg-border mx-1" />
+                        }
+                        const Icon = button.icon
+                        const isActive = button.isActive ? button.isActive() : false
+                        return (
+                          <Button
+                            key={index}
+                            variant={isActive ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              button.onClick()
+                            }}
+                            className="h-8 w-8 p-0"
+                            title={button.title || ''}
+                          >
+                            <Icon className="h-4 w-4" />
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  
+                  {/* Slash Command Menu */}
+                  {showSlashMenu && editor && (() => {
+                    // Filter actions based on query
+                    const filteredActions = quickInsertActions.filter(action => 
+                      action.label.toLowerCase().includes(slashCommandQuery)
+                    )
+                    
+                    return (
+                      <div
+                        ref={slashMenuRef}
+                        className="fixed z-50 bg-background border border-border rounded-lg shadow-lg w-64 max-h-80 overflow-y-auto py-1 scrollbar-thin"
+                        style={{
+                          top: `${slashMenuPosition.top}px`,
+                          left: `${slashMenuPosition.left}px`,
+                        }}
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
+                        {filteredActions.length > 0 ? (
+                          filteredActions.map((action, index) => {
+                            const Icon = action.icon
+                            const isSelected = index === selectedSlashIndex
+                            return (
+                              <button
+                                key={index}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  // Find the start of the slash command
+                                  const { from } = editor.state.selection
+                                  const { $from } = editor.state.selection
+                                  let searchStart = from - 1
+                                  while (searchStart > 0) {
+                                    const char = editor.state.doc.textBetween(searchStart - 1, searchStart)
+                                    if (char === ' ' || char === '\n') {
+                                      searchStart++
+                                      break
+                                    }
+                                    if (searchStart === from - 1 && char === '/') {
+                                      break
+                                    }
+                                    searchStart--
+                                  }
+                                  
+                                  // Delete the command text
+                                  editor.commands.deleteRange({ from: searchStart, to: from })
+                                  
+                                  // Then execute the action
+                                  setTimeout(() => {
+                                    action.action()
+                                    setShowSlashMenu(false)
+                                    setSlashCommandQuery('')
+                                    setSelectedSlashIndex(0)
+                                  }, 0)
+                                }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                }}
+                                onMouseEnter={() => setSelectedSlashIndex(index)}
+                                className={`w-full flex items-center gap-3 px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
+                                  isSelected ? 'bg-muted' : 'hover:bg-muted/50'
+                                }`}
+                              >
+                                <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <span>{action.label}</span>
+                              </button>
+                            )
+                          })
+                        ) : (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            No commands found
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </>
               ) : (
                 <div className="flex items-center justify-center h-[600px]">
                   <Loader2 className="h-8 w-8 animate-spin" />
                 </div>
               )}
+            </div>
+
+            {/* Floating Save Button - Bottom Right */}
+            <div className="fixed bottom-6 right-6 z-50">
+              <Button
+                className="bg-foreground text-background hover:bg-foreground/90 gap-2 shadow-lg"
+                size="sm"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

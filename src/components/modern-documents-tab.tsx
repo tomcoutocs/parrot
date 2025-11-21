@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react"
 import dynamic from "next/dynamic"
-import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft, ChevronRight } from "lucide-react"
+import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft, ChevronRight, Eye } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { 
@@ -37,6 +37,7 @@ import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { Loader2 } from "lucide-react"
+import DocumentPreviewModal from "@/components/modals/document-preview-modal"
 
 // Dynamically import DocumentEditorPage to avoid SSR issues
 const DocumentEditorPage = dynamic(
@@ -72,6 +73,8 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
   const [newFolderName, setNewFolderName] = useState("")
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
   const documentInputRef = useRef<HTMLInputElement>(null)
   const spreadsheetInputRef = useRef<HTMLInputElement>(null)
 
@@ -612,8 +615,9 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
                   if (item.type === 'rich') {
                     handleEditDocument(doc.id)
                   } else {
-                    // For regular documents, you might want to open a preview or download
-                    console.log('Opening document:', doc.id)
+                    // Open preview modal for regular documents
+                    setPreviewDocument(doc as Document)
+                    setShowPreview(true)
                   }
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
@@ -639,6 +643,16 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
           })
         )}
       </div>
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        document={previewDocument}
+        isOpen={showPreview}
+        onClose={() => {
+          setShowPreview(false)
+          setPreviewDocument(null)
+        }}
+      />
     </div>
   )
 }

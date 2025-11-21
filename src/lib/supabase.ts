@@ -131,6 +131,7 @@ export interface Project {
   manager_id?: string | null
   company_id?: string
   status: 'active' | 'archived' | 'completed'
+  position?: number
   created_at: string
   updated_at: string
 }

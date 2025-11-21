@@ -595,7 +595,26 @@ export function ModernDashboardLayout({
                   <ModernUsersTab activeSpace={currentSpaceId ?? null} />
                 )}
                 {activeTab === "settings" && (session?.user?.role === "admin" || session?.user?.role === "manager") && (
-                  <ModernSettingsTab activeSpace={currentSpaceId ?? null} />
+                  <ModernSettingsTab 
+                    activeSpace={currentSpaceId ?? null}
+                    onServicesUpdated={() => {
+                      // Refresh services when they're updated in settings
+                      const fetchServices = async () => {
+                        if (!currentSpaceId) {
+                          setSpaceServices([])
+                          return
+                        }
+                        try {
+                          const services = await getCompanyServices(currentSpaceId)
+                          setSpaceServices(services.map(service => service.name))
+                        } catch (error) {
+                          console.error("Error fetching services:", error)
+                          setSpaceServices([])
+                        }
+                      }
+                      fetchServices()
+                    }}
+                  />
                 )}
                 {activeTab !== "dashboard" && activeTab !== "projects" && activeTab !== "documents" && activeTab !== "company-calendars" && activeTab !== "reports" && activeTab !== "admin" && activeTab !== "settings" && children}
               </>

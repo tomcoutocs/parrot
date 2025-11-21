@@ -274,14 +274,14 @@ export function AdminAllTasks() {
       {/* Tasks List */}
       <Card className="p-4 border-border/60">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-4 px-3 py-2 text-xs text-muted-foreground border-b border-border/40 mb-1">
-          <div className="col-span-3">Task</div>
-          <div className="col-span-2">Client</div>
-          <div className="col-span-2">Project</div>
-          <div className="col-span-1">Assignee</div>
-          <div className="col-span-2">Due Date</div>
-          <div className="col-span-1">Priority</div>
-          <div className="col-span-1">Status</div>
+        <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
+          <div className="col-span-4">Name</div>
+          <div className="col-span-1 text-center">Client</div>
+          <div className="col-span-1 text-center">Project</div>
+          <div className="col-span-2 text-center">Assignee</div>
+          <div className="col-span-2 text-center">Due date</div>
+          <div className="col-span-1 text-center">Priority</div>
+          <div className="col-span-1 text-center">Status</div>
         </div>
 
         {/* Tasks */}
@@ -295,26 +295,69 @@ export function AdminAllTasks() {
               const priorityColor = getPriorityColor(task.priority || "")
               const statusColor = getStatusColor(task.status || "")
               
+              // Map priority to match TaskRow format
+              const priorityMap: Record<string, string> = {
+                "urgent": "Urgent",
+                "high": "High",
+                "medium": "Normal",
+                "low": "Low"
+              }
+              const priorityLabel = priorityMap[task.priority || "medium"] || "Normal"
+              
+              // Map status to match TaskRow format
+              const statusMap: Record<string, string> = {
+                "todo": "TO DO",
+                "in_progress": "IN PROGRESS",
+                "review": "REVIEW",
+                "done": "DONE"
+              }
+              const statusLabel = statusMap[task.status || "todo"] || "TO DO"
+              
+              // Get status color
+              const statusColors: Record<string, { dot: string; text: string }> = {
+                "todo": { dot: "bg-gray-500", text: "text-gray-600" },
+                "in_progress": { dot: "bg-purple-500", text: "text-purple-600" },
+                "review": { dot: "bg-yellow-500", text: "text-yellow-600" },
+                "done": { dot: "bg-green-500", text: "text-green-600" }
+              }
+              const currentStatus = statusColors[task.status || "todo"] || statusColors["todo"]
+              
+              // Get priority color
+              const priorityColors: Record<string, { dot: string; text: string }> = {
+                "urgent": { dot: "bg-red-500", text: "text-red-600" },
+                "high": { dot: "bg-orange-500", text: "text-orange-600" },
+                "medium": { dot: "bg-gray-400", text: "text-muted-foreground" },
+                "low": { dot: "bg-blue-500", text: "text-blue-600" }
+              }
+              const currentPriority = priorityColors[task.priority || "medium"] || priorityColors["medium"]
+              
               return (
                 <div
                   key={task.id}
                   onClick={() => handleTaskClick(task)}
-                  className="grid grid-cols-12 gap-4 px-3 py-3 hover:bg-muted/30 rounded-md transition-colors items-center group cursor-pointer"
+                  className="grid grid-cols-12 gap-4 px-12 py-2.5 hover:bg-muted/50 transition-colors items-center group rounded-md cursor-pointer"
                 >
-                  <div className="col-span-3 flex items-center gap-2">
+                  {/* Name Column */}
+                  <div className="col-span-4 flex items-center gap-2 -ml-8">
                     <button 
                       onClick={(e) => e.stopPropagation()}
-                      className="relative w-4 h-4 rounded-full border-2 border-border hover:border-muted-foreground transition-all flex items-center justify-center flex-shrink-0" 
+                      className="relative w-4 h-4 rounded border-2 border-border hover:border-muted-foreground transition-all flex items-center justify-center flex-shrink-0" 
                     />
                     <span className="text-sm truncate">{task.title || "Untitled Task"}</span>
                   </div>
-                  <div className="col-span-2">
-                    <span className="text-sm text-muted-foreground">{task.project?.company?.name || "-"}</span>
+                  
+                  {/* Client Column */}
+                  <div className="col-span-1 flex items-center justify-center">
+                    <span className="text-sm text-muted-foreground truncate">{task.project?.company?.name || "-"}</span>
                   </div>
-                  <div className="col-span-2">
-                    <span className="text-sm text-muted-foreground">{task.project?.name || "-"}</span>
+                  
+                  {/* Project Column */}
+                  <div className="col-span-1 flex items-center justify-center">
+                    <span className="text-sm text-muted-foreground truncate">{task.project?.name || "-"}</span>
                   </div>
-                  <div className="col-span-1">
+                  
+                  {/* Assignee Column */}
+                  <div className="col-span-2 flex items-center justify-center">
                     {task.assigned_user ? (
                       <Avatar className="w-6 h-6 border border-border">
                         <AvatarImage src="" />
@@ -326,29 +369,28 @@ export function AdminAllTasks() {
                       <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </div>
-                  <div className="col-span-2 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-sm">{formatDate(task.due_date)}</span>
+                  
+                  {/* Due Date Column */}
+                  <div className="col-span-2 flex items-center justify-center">
+                    <span className="text-sm text-muted-foreground">{formatDate(task.due_date)}</span>
                   </div>
-                  <div className="col-span-1">
+                  
+                  {/* Priority Column */}
+                  <div className="col-span-1 flex items-center justify-center">
                     <div className="flex items-center gap-2">
-                      <div 
-                        className="w-1.5 h-1.5 rounded-full" 
-                        style={{ backgroundColor: priorityColor.dot === "bg-red-500" ? "#ef4444" : priorityColor.dot === "bg-blue-500" ? "#3b82f6" : "#6b7280" }}
-                      />
-                      <span className="text-xs" style={{ color: priorityColor.dot === "bg-red-500" ? "#ef4444" : priorityColor.dot === "bg-blue-500" ? "#3b82f6" : "#6b7280" }}>
-                        {task.priority || "Normal"}
+                      <div className={`w-1.5 h-1.5 rounded-full ${currentPriority.dot}`} />
+                      <span className={`text-xs ${currentPriority.text}`}>
+                        {priorityLabel}
                       </span>
                     </div>
                   </div>
-                  <div className="col-span-1">
+                  
+                  {/* Status Column */}
+                  <div className="col-span-1 flex items-center justify-center">
                     <div className="flex items-center gap-2">
-                      <div 
-                        className="w-1.5 h-1.5 rounded-full" 
-                        style={{ backgroundColor: statusColor.dot === "bg-purple-500" ? "#8b5cf6" : statusColor.dot === "bg-gray-500" ? "#6b7280" : statusColor.dot === "bg-green-500" ? "#10b981" : "#6b7280" }}
-                      />
-                      <span className="text-xs" style={{ color: statusColor.dot === "bg-purple-500" ? "#8b5cf6" : statusColor.dot === "bg-gray-500" ? "#6b7280" : statusColor.dot === "bg-green-500" ? "#10b981" : "#6b7280" }}>
-                        {getStatusLabel(task.status || "")}
+                      <div className={`w-1.5 h-1.5 rounded-full ${currentStatus.dot}`} />
+                      <span className={`text-xs font-medium ${currentStatus.text}`}>
+                        {statusLabel}
                       </span>
                     </div>
                   </div>

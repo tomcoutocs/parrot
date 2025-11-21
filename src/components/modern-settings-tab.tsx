@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign } from "lucide-react"
+import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign, Trash2, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,30 +10,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { updateCompany, updateCompanyServices, getCompanyServices } from "@/lib/database-functions"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { updateCompany, updateCompanyServices, getCompanyServices, deleteCompany } from "@/lib/database-functions"
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { fetchServicesOptimized } from "@/lib/simplified-database-functions"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
 import { Service, Company } from "@/lib/supabase"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { useSession } from "@/components/providers/session-provider"
+import { useRouter } from "next/navigation"
+import { Loader2 } from "lucide-react"
 
 interface ModernSettingsTabProps {
   activeSpace: string | null
+  onServicesUpdated?: () => void
 }
 
-export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
+export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSettingsTabProps) {
   const { data: session } = useSession()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [company, setCompany] = useState<Company | null>(null)
   const [services, setServices] = useState<Service[]>([])
   const [managers, setManagers] = useState<Array<{ id: string; name: string }>>([])
-  
-  // Debug: Log when activeSpace changes
-  useEffect(() => {
-    console.log('ModernSettingsTab - activeSpace changed:', activeSpace)
-  }, [activeSpace])
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState("")
+  const [deleting, setDeleting] = useState(false)
+  const router = useRouter()
   
   const [formData, setFormData] = useState({
     name: "",
@@ -92,19 +96,27 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
         // Get the service IDs from the fetched company services
         const selectedServiceIds = companyServicesData.map(service => service.id)
         
-        setFormData({
-          name: spaceCompany.name || "",
-          description: spaceCompany.description || "",
-          industry: spaceCompany.industry || "",
-          website: spaceCompany.website || "",
-          phone: spaceCompany.phone || "",
-          address: spaceCompany.address || "",
-          is_active: spaceCompany.is_active !== false,
-          is_partner: spaceCompany.is_partner || false,
-          selectedServices: selectedServiceIds,
-          managerId: "", // We'll need to fetch this separately if needed
-          retainer: spaceCompany.retainer?.toString() || "",
-          revenue: spaceCompany.revenue?.toString() || "",
+        setFormData(prev => {
+          // Only update selectedServices if we actually got data, otherwise preserve current selection
+          const newSelectedServices = selectedServiceIds.length > 0 || companyServicesData.length === 0 
+            ? selectedServiceIds 
+            : prev.selectedServices
+          
+          return {
+            ...prev,
+            name: spaceCompany.name || "",
+            description: spaceCompany.description || "",
+            industry: spaceCompany.industry || "",
+            website: spaceCompany.website || "",
+            phone: spaceCompany.phone || "",
+            address: spaceCompany.address || "",
+            is_active: spaceCompany.is_active !== false,
+            is_partner: spaceCompany.is_partner || false,
+            selectedServices: newSelectedServices,
+            managerId: prev.managerId || "",
+            retainer: spaceCompany.retainer?.toString() || "",
+            revenue: spaceCompany.revenue?.toString() || "",
+          }
         })
       }
       
@@ -132,6 +144,9 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
       return
     }
 
+    // Store the selected services before saving to preserve them
+    const servicesToSave = [...formData.selectedServices]
+
     setSaving(true)
     try {
       // Update company details
@@ -153,14 +168,51 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
       }
 
       // Update services
-      const servicesResult = await updateCompanyServices(activeSpace, formData.selectedServices)
+      const servicesResult = await updateCompanyServices(activeSpace, servicesToSave)
       if (!servicesResult.success) {
         throw new Error(servicesResult.error || "Failed to update services")
       }
 
       toastSuccess("Space settings updated successfully")
-      // Reload data to reflect changes
-      await loadData()
+      
+      // Notify parent component to refresh services in header
+      onServicesUpdated?.()
+      
+      // Optimistically update the form to show the saved services immediately
+      // This prevents the UI from clearing while we verify the database
+      setFormData(prev => ({
+        ...prev,
+        selectedServices: servicesToSave
+      }))
+      
+      // Reload data after a delay to ensure database has updated
+      // Retry logic to handle potential timing issues
+      let retryCount = 0
+      const maxRetries = 3
+      
+      const reloadAndVerify = async () => {
+        // First verify the services were saved correctly before reloading form
+        const reloadedServices = await getCompanyServices(activeSpace)
+        const reloadedServiceIds = reloadedServices.map(s => s.id).sort()
+        const expectedIds = servicesToSave.sort()
+        
+        // If the reloaded services don't match what we saved, retry
+        if (JSON.stringify(expectedIds) !== JSON.stringify(reloadedServiceIds)) {
+          if (retryCount < maxRetries) {
+            retryCount++
+            setTimeout(reloadAndVerify, 500)
+            return // Don't reload form data yet
+          } else {
+            // Keep the optimistic update, don't reload form data
+            return
+          }
+        }
+        
+        // Only reload form data if verification succeeds
+        await loadData()
+      }
+      
+      setTimeout(reloadAndVerify, 500)
     } catch (error) {
       console.error("Error saving settings:", error)
       const errorMessage = error instanceof Error ? error.message : "Failed to save settings"
@@ -175,6 +227,34 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteSpace = async () => {
+    if (!activeSpace || !company) return
+    
+    if (deleteConfirmation !== company.name) {
+      toastError("Space name does not match")
+      return
+    }
+
+    setDeleting(true)
+    try {
+      const result = await deleteCompany(activeSpace)
+      
+      if (result.success) {
+        toastSuccess("Space deleted successfully")
+        setShowDeleteDialog(false)
+        setDeleteConfirmation("")
+        // Redirect to dashboard without a space selected
+        router.push("/dashboard")
+      } else {
+        toastError(result.error || "Failed to delete space")
+      }
+    } catch (error) {
+      toastError("An unexpected error occurred while deleting the space")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -216,10 +296,22 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
             Manage space information and configuration
           </p>
         </div>
-        <Button onClick={handleSave} disabled={saving} className="gap-2">
-          <Save className="w-4 h-4" />
-          {saving ? "Saving..." : "Save Changes"}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
+            <Save className="w-4 h-4" />
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
+          {activeSpace && (
+            <Button 
+              onClick={() => setShowDeleteDialog(true)} 
+              variant="destructive" 
+              className="gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Space
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -471,6 +563,72 @@ export function ModernSettingsTab({ activeSpace }: ModernSettingsTabProps) {
           {saving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
+
+      {/* Delete Space Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Delete Space
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the space and all associated data including projects, tasks, documents, and events.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Alert className="border-destructive/50 bg-destructive/10">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <AlertDescription className="text-destructive">
+              <strong>Warning:</strong> All data associated with this space will be permanently deleted.
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-2">
+            <Label htmlFor="delete-confirmation">
+              Type <strong>{company?.name || "the space name"}</strong> to confirm deletion:
+            </Label>
+            <Input
+              id="delete-confirmation"
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              placeholder="Enter space name"
+              className="font-mono"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDeleteDialog(false)
+                setDeleteConfirmation("")
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteSpace}
+              disabled={deleting || deleteConfirmation !== company?.name}
+              className="gap-2"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Delete Space
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

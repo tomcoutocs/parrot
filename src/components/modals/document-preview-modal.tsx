@@ -211,9 +211,6 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
               <Download className="h-4 w-4 mr-2" />
               Download
             </Button>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
           </div>
         </DialogHeader>
 

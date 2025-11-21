@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Edit, Trash2, MoreVertical } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Edit, Trash2, MoreVertical, Grid3x3, CalendarDays, Calendar } from "lucide-react"
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { useSession } from "@/components/providers/session-provider"
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatDateForDatabase, formatDateForInput } from "@/lib/date-utils"
 import { toastError, toastSuccess } from "@/lib/toast"
+import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 
 interface BrandEvent {
   id: string
@@ -21,6 +22,8 @@ interface BrandEvent {
   endDate: Date
   type: "launch" | "sale" | "event" | "deadline"
   color: string
+  companyId?: string
+  companyName?: string
 }
 
 interface ModernCalendarTabProps {
@@ -45,9 +48,12 @@ function inferEventType(title: string): "launch" | "sale" | "event" | "deadline"
   return "event"
 }
 
+type CalendarView = 'month' | 'week' | 'day'
+
 export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
   const { data: session } = useSession()
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [view, setView] = useState<CalendarView>('month')
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false)
   const [isEditEventOpen, setIsEditEventOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<BrandEvent | null>(null)
@@ -82,7 +88,21 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         return
       }
 
+      // Fetch companies for admin view to show company names with events
+      let companiesMap = new Map<string, string>()
+      if (isAdmin && !companyId) {
+        try {
+          const companies = await fetchCompaniesOptimized()
+          companies.forEach(company => {
+            companiesMap.set(company.id, company.name || 'Unknown Space')
+          })
+        } catch (error) {
+          console.error("Error fetching companies:", error)
+        }
+      }
+
       // Build query - admins without company_id can see all events
+      // Don't use join to avoid foreign key issues - we'll map company names separately
       let query = supabase
         .from('company_events')
         .select('*')
@@ -106,9 +126,12 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       }
 
       // Transform database events to BrandEvent format
-      const transformedEvents: BrandEvent[] = (data || []).map((event) => {
+      const transformedEvents: BrandEvent[] = (data || []).map((event: any) => {
         // Try to get event type from event_type field, or infer from title
-        const eventTypeValue = (event as any).event_type || inferEventType(event.title || "")
+        const eventTypeValue = event.event_type || inferEventType(event.title || "")
+        
+        // Get company name from map (we fetched companies separately)
+        const companyName = event.company_id ? companiesMap.get(event.company_id) || null : null
         
         // Parse dates correctly to avoid timezone shifts
         // Handle both date-only strings (YYYY-MM-DD) and full ISO strings
@@ -135,7 +158,9 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
           startDate: startDate,
           endDate: endDate,
           type: eventTypeValue,
-          color: eventTypeColors[eventTypeValue] || eventTypeColors.default
+          color: eventTypeColors[eventTypeValue] || eventTypeColors.default,
+          companyId: event.company_id,
+          companyName: companyName || undefined
         }
       })
 
@@ -149,7 +174,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
 
   useEffect(() => {
     loadEvents()
-  }, [activeSpace, session?.user?.company_id])
+  }, [activeSpace, session?.user?.company_id || null, session?.user?.role || null])
 
   const createEvent = async () => {
     if (!eventTitle.trim() || !eventDate) {
@@ -745,6 +770,70 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
   }
 
+  const previousWeek = () => {
+    const newDate = new Date(currentDate)
+    newDate.setDate(newDate.getDate() - 7)
+    setCurrentDate(newDate)
+  }
+
+  const nextWeek = () => {
+    const newDate = new Date(currentDate)
+    newDate.setDate(newDate.getDate() + 7)
+    setCurrentDate(newDate)
+  }
+
+  const previousDay = () => {
+    const newDate = new Date(currentDate)
+    newDate.setDate(newDate.getDate() - 1)
+    setCurrentDate(newDate)
+  }
+
+  const nextDay = () => {
+    const newDate = new Date(currentDate)
+    newDate.setDate(newDate.getDate() + 1)
+    setCurrentDate(newDate)
+  }
+
+  const goToToday = () => {
+    setCurrentDate(new Date())
+  }
+
+  // Get week start (Sunday) and end (Saturday) dates
+  const getWeekRange = () => {
+    const date = new Date(currentDate)
+    const day = date.getDay()
+    const diff = date.getDate() - day
+    const weekStart = new Date(date.setDate(diff))
+    const weekEnd = new Date(date.setDate(diff + 6))
+    return { weekStart, weekEnd }
+  }
+
+  // Get events for a specific date
+  const getEventsForDate = (date: Date) => {
+    const normalizedDate = new Date(date)
+    normalizedDate.setHours(0, 0, 0, 0)
+    
+    return events.filter(event => {
+      const eventStart = new Date(event.startDate)
+      const eventEnd = new Date(event.endDate)
+      eventStart.setHours(0, 0, 0, 0)
+      eventEnd.setHours(0, 0, 0, 0)
+      return normalizedDate >= eventStart && normalizedDate <= eventEnd
+    })
+  }
+
+  // Get days in current week
+  const getDaysInWeek = () => {
+    const { weekStart } = getWeekRange()
+    const days: Date[] = []
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(weekStart)
+      day.setDate(weekStart.getDate() + i)
+      days.push(day)
+    }
+    return days
+  }
+
   const days = getDaysInMonth(currentDate)
   const isToday = (day: number | null) => {
     if (day === null) return false
@@ -775,9 +864,57 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <CalendarIcon className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-lg">{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h2>
+          <h2 className="text-lg">
+            {view === 'month' && `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
+            {view === 'week' && (() => {
+              const { weekStart, weekEnd } = getWeekRange()
+              const startMonth = monthNames[weekStart.getMonth()].substring(0, 3)
+              const endMonth = monthNames[weekEnd.getMonth()].substring(0, 3)
+              if (weekStart.getMonth() === weekEnd.getMonth()) {
+                return `${startMonth} ${weekStart.getDate()} - ${weekEnd.getDate()}, ${weekStart.getFullYear()}`
+              }
+              return `${startMonth} ${weekStart.getDate()} - ${endMonth} ${weekEnd.getDate()}, ${weekStart.getFullYear()}`
+            })()}
+            {view === 'day' && `${monthNames[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`}
+          </h2>
         </div>
         <div className="flex items-center gap-3">
+          {/* View Switcher */}
+          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
+            <button
+              onClick={() => setView('month')}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                view === 'month' 
+                  ? 'bg-background text-foreground shadow-sm' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Month View"
+            >
+              <Grid3x3 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setView('week')}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                view === 'week' 
+                  ? 'bg-background text-foreground shadow-sm' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Week View"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setView('day')}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                view === 'day' 
+                  ? 'bg-background text-foreground shadow-sm' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Day View"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <button
             onClick={() => setIsCreateEventOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground bg-muted hover:bg-muted/80 rounded-md transition-colors"
@@ -787,13 +924,19 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
           </button>
           <div className="flex items-center gap-2">
             <button
-              onClick={previousMonth}
+              onClick={goToToday}
+              className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Today
+            </button>
+            <button
+              onClick={view === 'month' ? previousMonth : view === 'week' ? previousWeek : previousDay}
               className="p-2 hover:bg-muted rounded-lg transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={nextMonth}
+              onClick={view === 'month' ? nextMonth : view === 'week' ? nextWeek : nextDay}
               className="p-2 hover:bg-muted rounded-lg transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
@@ -802,21 +945,22 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        {/* Calendar Grid */}
-        <div className="col-span-2">
-          <div className="border border-border/60 rounded-lg overflow-hidden">
-            {/* Days of week header */}
-            <div className="grid grid-cols-7 bg-muted/20 border-b border-border/40">
-              {daysOfWeek.map(day => (
-                <div key={day} className="px-2 py-3 text-center text-xs text-muted-foreground">
-                  {day}
-                </div>
-              ))}
-            </div>
+      <div className="space-y-6">
+        {/* Calendar View */}
+        <div>
+          {view === 'month' && (
+            <div className="border border-border/80 rounded-lg overflow-hidden">
+              {/* Days of week header */}
+              <div className="grid grid-cols-7 bg-muted/20 border-b border-border/60">
+                {daysOfWeek.map(day => (
+                  <div key={day} className="px-2 py-3 text-center text-xs text-muted-foreground">
+                    {day}
+                  </div>
+                ))}
+              </div>
 
-            {/* Calendar days */}
-            <div className="grid grid-cols-7">
+              {/* Calendar days */}
+              <div className="grid grid-cols-7">
               
               {/* Render day cells */}
               {days.map((day, index) => {
@@ -853,18 +997,38 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                 return (
                   <div
                     key={index}
-                    onClick={() => day !== null && handleDayClick(day)}
-                    className={`min-h-28 p-2 border-r border-b border-border/40 last:border-r-0 ${
+                    onClick={(e) => {
+                      // Only open create dialog if clicking on empty space (not on an event)
+                      if (day !== null) {
+                        const target = e.target as HTMLElement
+                        // Check if click is on an event element or within an event
+                        const isEventClick = target.closest('.event-item') !== null
+                        // Check if click is on the day number
+                        const isDayNumberClick = target.closest('.day-number') !== null
+                        // Check if click is from a dropdown menu
+                        const isDropdownClick = target.closest('[role="menu"]') !== null || 
+                                                target.closest('[role="menuitem"]') !== null ||
+                                                target.closest('[data-radix-popper-content-wrapper]') !== null
+                        
+                        // Only open create dialog if clicking on empty space and not from dropdown
+                        if (!isEventClick && !isDayNumberClick && !isDropdownClick) {
+                          handleDayClick(day)
+                        }
+                      }
+                    }}
+                    className={`min-h-28 p-2 border-r border-b border-border/60 last:border-r-0 ${
                       index >= days.length - 7 ? "border-b-0" : ""
                     } ${day === null ? "bg-muted/10" : "bg-background hover:bg-muted/20 cursor-pointer"} transition-colors relative`}
                   >
                     {day !== null && (
                       <div className="h-full flex flex-col">
-                        <div className={`text-sm mb-1 ${
-                          isToday(day) 
-                            ? "w-6 h-6 rounded-full bg-foreground text-background flex items-center justify-center" 
-                            : "text-foreground"
-                        }`}>
+                        <div 
+                          className={`text-sm mb-1 day-number ${
+                            isToday(day) 
+                              ? "w-6 h-6 rounded-full bg-foreground text-background flex items-center justify-center" 
+                              : "text-foreground"
+                          }`}
+                        >
                           {day}
                         </div>
                         <div className="space-y-1 flex-1 overflow-y-auto">
@@ -883,29 +1047,49 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                               return `rgba(${r}, ${g}, ${b}, ${alpha})`
                             }
                             
+                            // For admin view, show company name if available
+                            const isAdmin = session?.user?.role === 'admin'
+                            const showCompanyName = isAdmin && event.companyName && !activeSpace
+                            
                             return (
                               <DropdownMenu key={event.id}>
                                 <DropdownMenuTrigger asChild>
                                   <div
                                     onClick={(e) => e.stopPropagation()}
-                                    className="w-full text-xs px-2 py-1 rounded-md font-medium cursor-pointer hover:opacity-90 transition-opacity overflow-hidden text-ellipsis whitespace-nowrap relative group"
+                                    className="w-full text-xs px-2 py-1 rounded-md font-medium cursor-pointer hover:opacity-90 transition-opacity overflow-hidden text-ellipsis whitespace-nowrap relative group event-item text-foreground"
                                     style={{
                                       backgroundColor: hexToRgba(event.color, 0.2),
-                                      color: event.color,
                                       borderLeft: `3px solid ${event.color}`,
                                     }}
-                                    title={event.title}
+                                    title={showCompanyName ? `${event.title} (${event.companyName})` : event.title}
                                   >
+                                    {showCompanyName && event.companyName && (
+                                      <span className="font-semibold text-[10px] opacity-70 mr-1 text-foreground">
+                                        {event.companyName.substring(0, 8)}:
+                                      </span>
+                                    )}
                                     {displayTitle}
                                   </div>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-48">
-                                  <DropdownMenuItem onClick={() => handleEditEvent(event)}>
+                                <DropdownMenuContent 
+                                  align="start" 
+                                  className="w-48"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <DropdownMenuItem 
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleEditEvent(event)
+                                    }}
+                                  >
                                     <Edit className="mr-2 h-4 w-4" />
                                     Edit Event
                                   </DropdownMenuItem>
                                   <DropdownMenuItem 
-                                    onClick={() => deleteEvent(event.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      deleteEvent(event.id)
+                                    }}
                                     className="text-red-500"
                                   >
                                     <Trash2 className="mr-2 h-4 w-4" />
@@ -916,7 +1100,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                             )
                           })}
                           {dayEvents.length > 5 && (
-                            <div className="text-xs text-muted-foreground px-1 font-medium">
+                            <div className="text-xs text-muted-foreground px-1 font-medium" onClick={(e) => e.stopPropagation()}>
                               +{dayEvents.length - 5} more
                             </div>
                           )}
@@ -928,11 +1112,247 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
               })}
             </div>
           </div>
+          )}
+
+          {view === 'week' && (
+            <div className="border border-border/80 rounded-lg overflow-hidden">
+              {/* Days of week header */}
+              <div className="grid grid-cols-7 bg-muted/20 border-b border-border/60">
+                {getDaysInWeek().map((date, index) => {
+                  const isToday = date.toDateString() === new Date().toDateString()
+                  return (
+                    <div key={index} className="px-2 py-3 text-center border-r border-border/60 last:border-r-0">
+                      <div className={`text-xs text-muted-foreground mb-1 ${isToday ? 'font-semibold text-foreground' : ''}`}>
+                        {daysOfWeek[date.getDay()]}
+                      </div>
+                      <div className={`text-sm ${isToday ? 'w-6 h-6 rounded-full bg-foreground text-background flex items-center justify-center mx-auto' : ''}`}>
+                        {date.getDate()}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Week view days */}
+              <div className="grid grid-cols-7 min-h-[600px]">
+                {getDaysInWeek().map((date, index) => {
+                  const dayEvents = getEventsForDate(date)
+                  const isToday = date.toDateString() === new Date().toDateString()
+                  
+                  return (
+                    <div
+                      key={index}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement
+                        const isEventClick = target.closest('.event-item') !== null
+                        const isDropdownClick = target.closest('[role="menu"]') !== null || 
+                                                target.closest('[role="menuitem"]') !== null ||
+                                                target.closest('[data-radix-popper-content-wrapper]') !== null
+                        
+                        if (!isEventClick && !isDropdownClick) {
+                          const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+                          setEventDate(formattedDate)
+                          setEventEndDate(formattedDate)
+                          setIsCreateEventOpen(true)
+                        }
+                      }}
+                      className={`min-h-[600px] p-3 border-r border-b border-border/60 last:border-r-0 ${
+                        index >= 6 ? "border-b-0" : ""
+                      } ${isToday ? "bg-muted/10" : "bg-background hover:bg-muted/20"} cursor-pointer transition-colors`}
+                    >
+                      <div className="space-y-2">
+                        {dayEvents.map((event) => {
+                          const hexToRgba = (hex: string, alpha: number) => {
+                            const r = parseInt(hex.slice(1, 3), 16)
+                            const g = parseInt(hex.slice(3, 5), 16)
+                            const b = parseInt(hex.slice(5, 7), 16)
+                            return `rgba(${r}, ${g}, ${b}, ${alpha})`
+                          }
+                          
+                          const isAdmin = session?.user?.role === 'admin'
+                          const showCompanyName = isAdmin && event.companyName && !activeSpace
+                          
+                          return (
+                            <DropdownMenu key={event.id}>
+                              <DropdownMenuTrigger asChild>
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full text-xs px-2 py-2 rounded-md font-medium cursor-pointer hover:opacity-90 transition-opacity event-item text-foreground"
+                                  style={{
+                                    backgroundColor: hexToRgba(event.color, 0.2),
+                                    borderLeft: `3px solid ${event.color}`,
+                                  }}
+                                  title={showCompanyName ? `${event.title} (${event.companyName})` : event.title}
+                                >
+                                  <div className="font-medium truncate">{event.title}</div>
+                                  {showCompanyName && (
+                                    <div className="text-[10px] opacity-70 mt-0.5 truncate text-foreground">{event.companyName}</div>
+                                  )}
+                                </div>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent 
+                                align="start" 
+                                className="w-48"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEditEvent(event)
+                                  }}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit Event
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    deleteEvent(event.id)
+                                  }}
+                                  className="text-red-500"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete Event
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {view === 'day' && (
+            <div className="border border-border/80 rounded-lg overflow-hidden">
+              {/* Day header */}
+              <div className="bg-muted/20 border-b border-border/60 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">
+                      {daysOfWeek[currentDate.getDay()]}
+                    </div>
+                    <div className="text-lg font-medium">
+                      {monthNames[currentDate.getMonth()]} {currentDate.getDate()}, {currentDate.getFullYear()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Day view - hourly timeline */}
+              <div className="min-h-[600px] p-4">
+                <div className="space-y-1">
+                  {Array.from({ length: 24 }, (_, i) => {
+                    const hour = i
+                    
+                    // Get events for this hour
+                    const hourEvents = getEventsForDate(currentDate).filter(event => {
+                      const eventStart = new Date(event.startDate)
+                      const eventHour = eventStart.getHours()
+                      return eventHour === hour || (eventHour < hour && new Date(event.endDate).getHours() >= hour)
+                    })
+                    
+                    return (
+                      <div key={hour} className="flex gap-4 min-h-[60px] border-b border-border/40">
+                        <div className="w-16 text-xs text-muted-foreground pt-2">
+                          {hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`}
+                        </div>
+                        <div 
+                          className="flex-1 pt-2 cursor-pointer hover:bg-muted/20 transition-colors rounded"
+                          onClick={(e) => {
+                            const target = e.target as HTMLElement
+                            const isEventClick = target.closest('.event-item') !== null
+                            const isDropdownClick = target.closest('[role="menu"]') !== null || 
+                                                    target.closest('[role="menuitem"]') !== null ||
+                                                    target.closest('[data-radix-popper-content-wrapper]') !== null
+                            
+                            if (!isEventClick && !isDropdownClick) {
+                              const formattedDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`
+                              setEventDate(formattedDate)
+                              setEventEndDate(formattedDate)
+                              setEventStartTime(`${String(hour).padStart(2, '0')}:00`)
+                              setEventEndTime(`${String(hour + 1).padStart(2, '0')}:00`)
+                              setIncludeTime(true)
+                              setIsCreateEventOpen(true)
+                            }
+                          }}
+                        >
+                          <div className="space-y-1">
+                            {hourEvents.map((event) => {
+                              const hexToRgba = (hex: string, alpha: number) => {
+                                const r = parseInt(hex.slice(1, 3), 16)
+                                const g = parseInt(hex.slice(3, 5), 16)
+                                const b = parseInt(hex.slice(5, 7), 16)
+                                return `rgba(${r}, ${g}, ${b}, ${alpha})`
+                              }
+                              
+                              const isAdmin = session?.user?.role === 'admin'
+                              const showCompanyName = isAdmin && event.companyName && !activeSpace
+                              
+                              return (
+                                <DropdownMenu key={event.id}>
+                                  <DropdownMenuTrigger asChild>
+                                    <div
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-xs px-2 py-1.5 rounded-md font-medium cursor-pointer hover:opacity-90 transition-opacity event-item text-foreground"
+                                      style={{
+                                        backgroundColor: hexToRgba(event.color, 0.2),
+                                        borderLeft: `3px solid ${event.color}`,
+                                      }}
+                                      title={showCompanyName ? `${event.title} (${event.companyName})` : event.title}
+                                    >
+                                      <div className="font-medium truncate">{event.title}</div>
+                                      {showCompanyName && (
+                                        <div className="text-[10px] opacity-70 mt-0.5 truncate text-foreground">{event.companyName}</div>
+                                      )}
+                                    </div>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent 
+                                    align="start" 
+                                    className="w-48"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleEditEvent(event)
+                                      }}
+                                    >
+                                      <Edit className="mr-2 h-4 w-4" />
+                                      Edit Event
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        deleteEvent(event.id)
+                                      }}
+                                      className="text-red-500"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete Event
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Upcoming Events Sidebar */}
-        <div className="col-span-1">
-          <div className="border border-border/60 rounded-lg p-4">
+        {/* Upcoming Events and Event Types */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* Upcoming Events */}
+          <div className="border border-border/80 rounded-lg p-4">
             <h3 className="text-sm font-medium mb-4">Upcoming Events</h3>
             {upcomingEvents.length === 0 ? (
               <div className="text-xs text-muted-foreground py-4">
@@ -948,7 +1368,14 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                         style={{ backgroundColor: event.color }}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{event.title}</p>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium truncate flex-1">{event.title}</p>
+                          {session?.user?.role === 'admin' && !activeSpace && event.companyName && (
+                            <span className="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground flex-shrink-0">
+                              {event.companyName}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {event.startDate.toLocaleDateString("en-US", { 
                             month: "short", 
@@ -957,7 +1384,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                           {event.startDate.getTime() !== event.endDate.getTime() && (
                             <> - {event.endDate.toLocaleDateString("en-US", { 
                               month: "short", 
-                              day: "numeric" 
+                              day: "numeric"
                             })}</>
                           )}
                         </p>
@@ -980,8 +1407,8 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
             )}
           </div>
 
-          {/* Event Legend */}
-          <div className="border border-border/60 rounded-lg p-4 mt-4">
+          {/* Event Types */}
+          <div className="border border-border/80 rounded-lg p-4">
             <h3 className="text-sm font-medium mb-3">Event Types</h3>
             <div className="space-y-2">
               <div className="flex items-center gap-2">

@@ -219,7 +219,7 @@ export function SpaceOverview({
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="text-xs text-muted-foreground flex-shrink-0">Services</div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              {services.map((service) => (
+              {services.slice(0, 5).map((service) => (
                 <span
                   key={service}
                   className="text-xs px-3 py-1 bg-muted rounded-md text-foreground font-medium"
@@ -227,6 +227,11 @@ export function SpaceOverview({
                   {service}
                 </span>
               ))}
+              {services.length > 5 && (
+                <span className="text-xs px-3 py-1 bg-muted rounded-md text-foreground font-medium">
+                  +{services.length - 5}
+                </span>
+              )}
             </div>
           </div>
         )}

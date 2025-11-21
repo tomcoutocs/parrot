@@ -17,7 +17,7 @@ export function ModernOverviewTab({ activeSpace }: ModernOverviewTabProps) {
           <MetricsCard activeSpace={activeSpace || "1"} />
         </div>
         <div className="col-span-1">
-          <QuickLinksCard />
+          <QuickLinksCard activeSpace={activeSpace} />
         </div>
       </div>
 

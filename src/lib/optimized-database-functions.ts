@@ -61,6 +61,8 @@ export async function fetchProjectsOptimized(companyId?: string): Promise<Projec
               user:users!project_members_user_id_fkey(id, full_name, email)
             )
           `)
+          .neq('status', 'archived')
+          .order('position', { ascending: true })
           .order('created_at', { ascending: false })
 
         if (companyId) {

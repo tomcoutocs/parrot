@@ -101,6 +101,8 @@ export async function fetchProjects(companyId?: string): Promise<ProjectWithDeta
           user:users!project_members_user_id_fkey(id, full_name, email)
         )
       `)
+      .neq('status', 'archived')
+      .order('position', { ascending: true })
       .order('created_at', { ascending: false })
 
     // Filter by company if provided
@@ -406,6 +408,88 @@ export async function updateProject(projectId: string, projectData: Partial<Proj
     return { success: true, data }
   } catch (error) {
     return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
+export async function archiveProject(projectId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        status: 'archived' as Project['status'],
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', projectId)
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to archive project' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while archiving project' }
+  }
+}
+
+export async function unarchiveProject(projectId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        status: 'active' as Project['status'],
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', projectId)
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to unarchive project' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while unarchiving project' }
+  }
+}
+
+export async function updateProjectPosition(
+  projectId: string,
+  newPosition: number,
+  companyId?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        position: newPosition,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', projectId)
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to update project position' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'An unexpected error occurred while updating project position' }
   }
 }
 
@@ -2188,11 +2272,8 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
   }
 
   try {
-    console.log('Updating company services:', { companyId, serviceIds })
-    
-    // Get current user for debugging and permission check
+    // Get current user for permission check
     const currentUser = getCurrentUser()
-    console.log('Current user context:', currentUser)
     
     // Verify user has admin or manager role
     if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
@@ -2212,10 +2293,32 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
       return { success: false, error: 'Service IDs must be an array' }
     }
 
-    // First, get all current services for this company
+    // Validate that all service IDs exist in the services table
+    if (serviceIds.length > 0) {
+      const { data: validServices, error: servicesError } = await supabase
+        .from('services')
+        .select('id')
+        .in('id', serviceIds)
+      
+      if (servicesError) {
+        console.error('Error validating service IDs:', servicesError)
+        return { success: false, error: `Failed to validate services: ${servicesError.message}` }
+      }
+      
+      const validServiceIds = new Set(validServices?.map(s => s.id) || [])
+      const invalidServiceIds = serviceIds.filter(id => !validServiceIds.has(id))
+      
+      if (invalidServiceIds.length > 0) {
+        console.error('Invalid service IDs:', invalidServiceIds)
+        return { success: false, error: `Invalid service IDs: ${invalidServiceIds.join(', ')}` }
+      }
+      
+    }
+
+    // First, get all current services for this company (including inactive ones)
     const { data: currentServices, error: fetchError } = await supabase
       .from('company_services')
-      .select('service_id')
+      .select('service_id, is_active')
       .eq('company_id', companyId)
 
     if (fetchError) {
@@ -2224,97 +2327,111 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
     }
 
     const currentServiceIds = new Set(currentServices?.map(cs => cs.service_id) || [])
+    const currentActiveServiceIds = new Set(
+      currentServices?.filter(cs => cs.is_active === true).map(cs => cs.service_id) || []
+    )
     const newServiceIds = new Set(serviceIds)
 
-    // Services to add (in newServiceIds but not in currentServiceIds)
-    const servicesToAdd = serviceIds.filter(id => !currentServiceIds.has(id))
+    // Services to add (in newServiceIds but not in currentActiveServiceIds)
+    // Also reactivate services that were previously deactivated
+    const servicesToAdd = serviceIds.filter(id => !currentActiveServiceIds.has(id))
 
-    // Services to remove (in currentServiceIds but not in newServiceIds)
-    const servicesToRemove = Array.from(currentServiceIds).filter(id => !newServiceIds.has(id))
-
-    console.log('Services to add:', servicesToAdd)
-    console.log('Services to remove:', servicesToRemove)
+    // Services to remove (in currentActiveServiceIds but not in newServiceIds)
+    const servicesToRemove = Array.from(currentActiveServiceIds).filter(id => !newServiceIds.has(id))
 
     // Add new services - try using upsert which sometimes works better with RLS
     if (servicesToAdd.length > 0) {
-      // Try upsert first (insert or update if exists) - this sometimes bypasses RLS issues
-      const servicesToUpsert = servicesToAdd.map(serviceId => ({
-        company_id: companyId,
-        service_id: serviceId,
-        is_active: true
-      }))
-
-      console.log('Upserting services:', servicesToUpsert)
-
-      // Re-set context before upsert
-      await setAppContext()
-
-      // Try upsert with onConflict - this will update if exists, insert if not
-      const { data: upsertData, error: upsertError } = await supabase
-        .from('company_services')
-        .upsert(servicesToUpsert, {
-          onConflict: 'company_id,service_id',
-          ignoreDuplicates: false
-        })
-        .select()
-
-      if (upsertError) {
-        console.error('Error upserting company services:', upsertError)
-        console.error('Error details:', JSON.stringify(upsertError, null, 2))
+      // Check if any of these services were previously deactivated
+      const servicesToReactivate = servicesToAdd.filter(id => currentServiceIds.has(id))
+      const servicesToInsert = servicesToAdd.filter(id => !currentServiceIds.has(id))
+      
+      // Reactivate previously deactivated services first
+      if (servicesToReactivate.length > 0) {
+        await setAppContext()
+        const { error: reactivateError } = await supabase
+          .from('company_services')
+          .update({ is_active: true })
+          .eq('company_id', companyId)
+          .in('service_id', servicesToReactivate)
         
-        // If upsert fails, try individual inserts as fallback
-        console.log('Upsert failed, trying individual inserts...')
-        let hasError = false
-        let lastError: Error | null = null
-        
-        for (const serviceId of servicesToAdd) {
-          const serviceToInsert = {
-            company_id: companyId,
-            service_id: serviceId,
-            is_active: true
-          }
-
-          console.log('Inserting service:', serviceToInsert)
-
-          // Re-set context before each insert
-          await setAppContext()
-
-          const { error: insertError } = await supabase
-            .from('company_services')
-            .insert(serviceToInsert)
-
-          if (insertError) {
-            console.error('Error adding company service:', insertError)
-            hasError = true
-            lastError = insertError
-            // Continue trying other services
-            continue
-          }
+        if (reactivateError) {
+          console.error('Error reactivating services:', reactivateError)
+          return { success: false, error: `Failed to reactivate services: ${reactivateError.message}` }
         }
-        
-        if (hasError && lastError) {
-          const errorMessage = lastError.message || (lastError as any).code || 'Unknown error'
-          
-          // If RLS error (42501), provide detailed message with SQL fix suggestion
-          if ((lastError as any).code === '42501' || errorMessage.includes('row-level security') || errorMessage.includes('RLS')) {
-            return { 
-              success: false, 
-              error: `Database security policy error (Code 42501): The row-level security (RLS) policy on the 'company_services' table is blocking this operation. Your account has the '${currentUser.role}' role, but the database policy needs to be updated. 
+      }
+      
+      // Insert new services
+      if (servicesToInsert.length > 0) {
+        // Try upsert first (insert or update if exists) - this sometimes bypasses RLS issues
+        const servicesToUpsert = servicesToInsert.map(serviceId => ({
+          company_id: companyId,
+          service_id: serviceId,
+          is_active: true
+        }))
 
-The database administrator needs to update the RLS policy to allow admins and managers to insert/update company_services. The policy should check the user role from the set_user_context function.` 
+        // Re-set context before upsert
+        await setAppContext()
+
+        // Try upsert with onConflict - this will update if exists, insert if not
+        const { data: upsertData, error: upsertError } = await supabase
+          .from('company_services')
+          .upsert(servicesToUpsert, {
+            onConflict: 'company_id,service_id',
+            ignoreDuplicates: false
+          })
+          .select()
+
+        if (upsertError) {
+          console.error('Error upserting company services:', upsertError)
+          
+          // If upsert fails, try individual inserts as fallback
+          let hasError = false
+          let lastError: Error | null = null
+          
+          for (const serviceId of servicesToInsert) {
+            const serviceToInsertData = {
+              company_id: companyId,
+              service_id: serviceId,
+              is_active: true
+            }
+
+            // Re-set context before each insert
+            await setAppContext()
+
+            const { error: insertError } = await supabase
+              .from('company_services')
+              .insert(serviceToInsertData)
+
+            if (insertError) {
+              console.error('Error adding company service:', insertError)
+              hasError = true
+              lastError = insertError
+              // Continue trying other services
+              continue
             }
           }
           
-          return { success: false, error: `Failed to add services: ${errorMessage}` }
+          if (hasError && lastError) {
+            const errorMessage = lastError.message || (lastError as any).code || 'Unknown error'
+            
+            // If RLS error (42501), provide detailed message with SQL fix suggestion
+            if ((lastError as any).code === '42501' || errorMessage.includes('row-level security') || errorMessage.includes('RLS')) {
+              return { 
+                success: false, 
+                error: `Database security policy error (Code 42501): The row-level security (RLS) policy on the 'company_services' table is blocking this operation. Your account has the '${currentUser.role}' role, but the database policy needs to be updated. 
+
+The database administrator needs to update the RLS policy to allow admins and managers to insert/update company_services. The policy should check the user role from the set_user_context function.` 
+              }
+            }
+            
+            return { success: false, error: `Failed to add services: ${errorMessage}` }
+          }
         }
-      } else {
-        console.log('Services upserted successfully:', upsertData)
       }
     }
 
     // Remove services (deactivate them)
     if (servicesToRemove.length > 0) {
-      console.log('Deactivating services:', servicesToRemove)
 
       const { error: updateError } = await supabase
         .from('company_services')
@@ -2328,7 +2445,6 @@ The database administrator needs to update the RLS policy to allow admins and ma
       }
     }
 
-    console.log('Company services updated successfully')
     return { success: true }
   } catch (error) {
     console.error('Error updating company services:', error)
@@ -2344,18 +2460,16 @@ export async function getCompanyServices(companyId: string): Promise<Service[]> 
   }
 
   try {
-    console.log('Fetching company services from Supabase...', { companyId })
     await setAppContext()
     const { data, error } = await supabase
       .from('company_services')
       .select(`
         service_id,
+        is_active,
         services (*)
       `)
       .eq('company_id', companyId)
       .eq('is_active', true)
-
-    console.log('Supabase company services response:', { data, error })
 
     if (error) {
       console.error('Error fetching company services:', error)
@@ -3293,6 +3407,172 @@ export async function isFavorited(
     return { success: true, isFavorited: !!data }
   } catch (error) {
     return { success: false, error: 'Failed to check favorite status' }
+  }
+}
+
+// Space Bookmarks functions
+export interface SpaceBookmark {
+  id: string
+  company_id: string
+  name: string
+  url: string
+  icon_name: string
+  color: string
+  favicon_url?: string | null
+  position: number
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchSpaceBookmarks(
+  companyId: string
+): Promise<{ success: boolean; bookmarks?: SpaceBookmark[]; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('space_bookmarks')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, bookmarks: data || [] }
+  } catch (error) {
+    return { success: false, error: 'Failed to fetch space bookmarks' }
+  }
+}
+
+export async function createSpaceBookmark(
+  companyId: string,
+  bookmarkData: {
+    name: string
+    url: string
+    icon_name?: string
+    color?: string
+    favicon_url?: string
+    position?: number
+  },
+  userId: string
+): Promise<{ success: boolean; bookmark?: SpaceBookmark; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    await setAppContext()
+
+    // Get the maximum position for this company to add at the end
+    const { data: existingBookmarks } = await supabase
+      .from('space_bookmarks')
+      .select('position')
+      .eq('company_id', companyId)
+      .order('position', { ascending: false })
+      .limit(1)
+      .single()
+
+    const maxPosition = existingBookmarks?.position ?? -1
+    const newPosition = maxPosition + 1
+
+    const { data, error } = await supabase
+      .from('space_bookmarks')
+      .insert({
+        company_id: companyId,
+        name: bookmarkData.name,
+        url: bookmarkData.url,
+        icon_name: bookmarkData.icon_name || 'ExternalLink',
+        color: bookmarkData.color || '#6b7280',
+        favicon_url: bookmarkData.favicon_url || null,
+        position: bookmarkData.position ?? newPosition,
+        created_by: userId
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, bookmark: data }
+  } catch (error) {
+    return { success: false, error: 'Failed to create space bookmark' }
+  }
+}
+
+export async function updateSpaceBookmark(
+  bookmarkId: string,
+  bookmarkData: {
+    name?: string
+    url?: string
+    icon_name?: string
+    color?: string
+    favicon_url?: string
+    position?: number
+  }
+): Promise<{ success: boolean; bookmark?: SpaceBookmark; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('space_bookmarks')
+      .update({
+        ...(bookmarkData.name && { name: bookmarkData.name }),
+        ...(bookmarkData.url && { url: bookmarkData.url }),
+        ...(bookmarkData.icon_name && { icon_name: bookmarkData.icon_name }),
+        ...(bookmarkData.color && { color: bookmarkData.color }),
+        ...(bookmarkData.favicon_url !== undefined && { favicon_url: bookmarkData.favicon_url }),
+        ...(bookmarkData.position !== undefined && { position: bookmarkData.position }),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', bookmarkId)
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, bookmark: data }
+  } catch (error) {
+    return { success: false, error: 'Failed to update space bookmark' }
+  }
+}
+
+export async function deleteSpaceBookmark(
+  bookmarkId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('space_bookmarks')
+      .delete()
+      .eq('id', bookmarkId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to delete space bookmark' }
   }
 }
 

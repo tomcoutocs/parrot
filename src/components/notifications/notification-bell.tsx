@@ -125,7 +125,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
   useEffect(() => {
     if (!userId || !supabase) return
 
-    console.log('Setting up real-time subscription for user:', userId)
+    // Set up real-time subscription for notifications
     
     let channel: ReturnType<typeof supabase.channel> | null = null
     let retryTimeout: NodeJS.Timeout | null = null
@@ -152,7 +152,6 @@ export function NotificationBell({ className }: NotificationBellProps) {
               filter: `user_id=eq.${userId}`
             },
             (payload) => {
-              console.log('Notification change detected:', payload)
               // Reload notifications when new ones arrive
               if (userId) {
                 loadNotifications()
@@ -160,16 +159,17 @@ export function NotificationBell({ className }: NotificationBellProps) {
             }
           )
           .subscribe((status, err) => {
-            console.log('Subscription status:', status)
             if (status === 'SUBSCRIBED') {
-              console.log('Successfully subscribed to notifications')
               retryCount = 0 // Reset retry count on success
             } else if (status === 'CHANNEL_ERROR') {
-              console.warn('Error subscribing to notifications channel:', err)
+              // Only log error details if err is provided
+              // Sometimes Supabase doesn't pass the error object, which is fine
+              if (err) {
+                console.warn('Error subscribing to notifications channel:', err)
+              }
               // Don't log as error unless we've exhausted retries
               if (retryCount < maxRetries) {
                 retryCount++
-                console.log(`Retrying subscription (attempt ${retryCount}/${maxRetries})...`)
                 // Wait 2 seconds before retrying
                 retryTimeout = setTimeout(() => {
                   if (channel && supabase) {
@@ -178,10 +178,10 @@ export function NotificationBell({ className }: NotificationBellProps) {
                   setupSubscription()
                 }, 2000)
               } else {
-                console.warn('Real-time notifications unavailable. Notifications will still work, but updates may be delayed.')
+                // Only log warning after all retries exhausted
+                console.warn('Real-time notifications unavailable after retries. Notifications will still work, but updates may be delayed.')
               }
             } else if (status === 'TIMED_OUT') {
-              console.warn('Notification subscription timed out. Retrying...')
               if (retryCount < maxRetries && !retryTimeout) {
                 retryCount++
                 retryTimeout = setTimeout(() => {
@@ -191,8 +191,6 @@ export function NotificationBell({ className }: NotificationBellProps) {
                   setupSubscription()
                 }, 2000)
               }
-            } else if (status === 'CLOSED') {
-              console.log('Notification subscription closed')
             }
           })
       } catch (error) {
@@ -208,7 +206,6 @@ export function NotificationBell({ className }: NotificationBellProps) {
         clearTimeout(retryTimeout)
       }
       if (channel && supabase) {
-        console.log('Cleaning up notification subscription')
         supabase.removeChannel(channel)
       }
     }

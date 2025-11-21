@@ -2,10 +2,16 @@
 
 import { Card } from "@/components/ui/card"
 import { ExternalLink, MessageSquare, FolderOpen, FileText, Calendar, Mail, Plus, X } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useSession } from "@/components/providers/session-provider"
+import { 
+  fetchSpaceBookmarks, 
+  createSpaceBookmark, 
+  deleteSpaceBookmark,
+  type SpaceBookmark 
+} from "@/lib/database-functions"
 
 const initialLinks = [
   { id: 1, name: "Slack Channel", iconName: "MessageSquare", url: "#", color: "#4A154B" },
@@ -35,7 +41,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string; style?: 
 }
 
 interface BookmarkLink {
-  id: number
+  id: string | number
   name: string
   iconName: string
   url: string
@@ -65,103 +71,147 @@ function getFaviconUrl(url: string): string {
   return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
 }
 
-const STORAGE_KEY = "bookmarks"
+interface QuickLinksCardProps {
+  activeSpace?: string | null
+}
 
-export function QuickLinksCard() {
+export function QuickLinksCard({ activeSpace }: QuickLinksCardProps) {
   const { data: session } = useSession()
-  const userId = session?.user?.id || "default"
-  const storageKey = `${STORAGE_KEY}_${userId}`
-  
-  // Load bookmarks from localStorage
-  const loadBookmarks = (key: string): BookmarkLink[] => {
-    if (typeof window === "undefined") return []
-    
+  const userId = session?.user?.id
+  const [links, setLinks] = useState<BookmarkLink[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isAdding, setIsAdding] = useState(false)
+  const [newLink, setNewLink] = useState({ name: "", url: "", iconName: "ExternalLink", color: "#6b7280" })
+  const [editingId, setEditingId] = useState<string | number | null>(null)
+
+  // Convert SpaceBookmark to BookmarkLink
+  const convertBookmarkToLink = useCallback((bookmark: SpaceBookmark): BookmarkLink => ({
+    id: bookmark.id,
+    name: bookmark.name,
+    iconName: bookmark.icon_name,
+    url: bookmark.url,
+    color: bookmark.color,
+    faviconUrl: bookmark.favicon_url || undefined,
+  }), [])
+
+  // Load bookmarks from database
+  const loadBookmarks = useCallback(async (companyId: string | null | undefined) => {
+    if (!companyId) {
+      setLinks([])
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
     try {
-      const stored = localStorage.getItem(key)
-      if (stored) {
-        const parsed = JSON.parse(stored) as BookmarkLink[]
-        // Validate that all links have required fields
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter(link => 
-            link.id && link.name && link.iconName && link.url && link.color
-          )
-        }
+      const result = await fetchSpaceBookmarks(companyId)
+      if (result.success && result.bookmarks) {
+        setLinks(result.bookmarks.map(convertBookmarkToLink))
+      } else {
+        console.error("Error loading bookmarks:", result.error)
+        setLinks([])
       }
     } catch (error) {
       console.error("Error loading bookmarks:", error)
+      setLinks([])
+    } finally {
+      setIsLoading(false)
     }
-    
-    return []
-  }
+  }, [convertBookmarkToLink])
 
-  const [links, setLinks] = useState<BookmarkLink[]>([])
-  const [isInitialized, setIsInitialized] = useState(false)
-  
-  // Load bookmarks from localStorage on mount and when user changes
+  // Load bookmarks when activeSpace changes
   useEffect(() => {
-    const loaded = loadBookmarks(storageKey)
-    setLinks(loaded)
-    setIsInitialized(true)
-  }, [storageKey])
-  
-  // Save bookmarks to localStorage whenever they change (but not on initial load)
-  useEffect(() => {
-    if (!isInitialized || typeof window === "undefined") return
-    
+    loadBookmarks(activeSpace)
+  }, [activeSpace, loadBookmarks])
+
+  const handleAddLink = async () => {
+    if (!newLink.name || !newLink.url || !activeSpace || !userId) {
+      return
+    }
+
+    const selectedIcon = availableIcons.find(i => i.name === newLink.iconName) || availableIcons[5]
+    const faviconUrl = getFaviconUrl(newLink.url)
+
     try {
-      localStorage.setItem(storageKey, JSON.stringify(links))
-    } catch (error) {
-      console.error("Error saving bookmarks:", error)
-    }
-  }, [links, storageKey, isInitialized])
-  const [isAdding, setIsAdding] = useState(false)
-  const [newLink, setNewLink] = useState({ name: "", url: "", iconName: "ExternalLink", color: "#6b7280" })
-  const [editingId, setEditingId] = useState<number | null>(null)
-
-  const handleAddLink = () => {
-    if (newLink.name && newLink.url) {
-      const selectedIcon = availableIcons.find(i => i.name === newLink.iconName) || availableIcons[5]
-      const faviconUrl = getFaviconUrl(newLink.url)
-      setLinks([
-        ...links,
+      const result = await createSpaceBookmark(
+        activeSpace,
         {
-          id: Date.now(),
           name: newLink.name,
-          iconName: newLink.iconName,
           url: newLink.url,
+          icon_name: newLink.iconName,
           color: selectedIcon.color,
-          faviconUrl: faviconUrl || undefined,
+          favicon_url: faviconUrl || undefined,
         },
-      ])
-      setNewLink({ name: "", url: "", iconName: "ExternalLink", color: "#6b7280" })
-      setIsAdding(false)
+        userId
+      )
+
+      if (result.success && result.bookmark) {
+        setLinks([...links, convertBookmarkToLink(result.bookmark)])
+        setNewLink({ name: "", url: "", iconName: "ExternalLink", color: "#6b7280" })
+        setIsAdding(false)
+      } else {
+        console.error("Error adding bookmark:", result.error)
+      }
+    } catch (error) {
+      console.error("Error adding bookmark:", error)
     }
   }
 
-  const handleRemoveLink = (id: number) => {
-    setLinks(links.filter(link => link.id !== id))
+  const handleRemoveLink = async (id: string | number) => {
+    if (typeof id !== 'string') {
+      // Legacy support for numeric IDs (shouldn't happen with database)
+      setLinks(links.filter(link => link.id !== id))
+      return
+    }
+
+    try {
+      const result = await deleteSpaceBookmark(id)
+      if (result.success) {
+        setLinks(links.filter(link => link.id !== id))
+      } else {
+        console.error("Error deleting bookmark:", result.error)
+      }
+    } catch (error) {
+      console.error("Error deleting bookmark:", error)
+    }
   }
 
   return (
     <Card className="p-4 border-border/60 h-full">
       <div className="flex items-center justify-between mb-3">
         <h4>Bookmarks</h4>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsAdding(!isAdding)}
-          className="h-7 px-2"
-        >
-          {isAdding ? (
-            <X className="w-3.5 h-3.5" />
-          ) : (
-            <Plus className="w-3.5 h-3.5" />
-          )}
-        </Button>
+        {activeSpace && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsAdding(!isAdding)}
+            className="h-7 px-2"
+            disabled={isLoading}
+          >
+            {isAdding ? (
+              <X className="w-3.5 h-3.5" />
+            ) : (
+              <Plus className="w-3.5 h-3.5" />
+            )}
+          </Button>
+        )}
       </div>
 
       <div className="space-y-0.5">
-        {links.map((link) => {
+        {isLoading ? (
+          <div className="text-sm text-muted-foreground py-4 text-center">
+            Loading bookmarks...
+          </div>
+        ) : !activeSpace ? (
+          <div className="text-sm text-muted-foreground py-4 text-center">
+            Select a space to view bookmarks
+          </div>
+        ) : links.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-4 text-center">
+            No bookmarks yet. Click + to add one.
+          </div>
+        ) : (
+          links.map((link) => {
           const Icon = iconMap[link.iconName] || ExternalLink
           const faviconUrl = link.faviconUrl || getFaviconUrl(link.url)
           
@@ -203,7 +253,7 @@ export function QuickLinksCard() {
                 <span className="text-sm flex-1">{link.name}</span>
                 <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </a>
-              {editingId === link.id && (
+              {editingId === link.id && activeSpace && (
                 <button
                   onClick={() => handleRemoveLink(link.id)}
                   className="opacity-0 group-hover:opacity-100 transition-opacity"
@@ -213,7 +263,8 @@ export function QuickLinksCard() {
               )}
             </div>
           )
-        })}
+          })
+        )}
 
         {isAdding && (
           <div className="pt-2 space-y-2 border-t border-border/50 mt-2">
