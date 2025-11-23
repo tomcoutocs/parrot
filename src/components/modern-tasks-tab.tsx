@@ -1429,7 +1429,6 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                     <DragDropContext onDragEnd={handleDragEnd}>
                       <div className="bg-muted/20">
                     {project.statusGroups
-                      .filter((statusGroup) => statusGroup.tasks.length > 0)
                       .map((statusGroup) => {
                       const statusId = `${project.id}-${statusGroup.name.toLowerCase().replace(" ", "-")}`
                       const isStatusExpanded = expandedStatuses.includes(statusId)
@@ -1465,53 +1464,61 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                               {/* Tasks List */}
                               {isStatusExpanded && (
                                 <div className="pb-2">
-                                  {/* Table Header */}
-                                  <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
-                                    <div className="col-span-4">Name</div>
-                                    <div className="col-span-2 text-center">Assignee</div>
-                                    <div className="col-span-2 text-center">Status</div>
-                                    <div className="col-span-2 text-center">Due date</div>
-                                    <div className="col-span-1 text-center">Priority</div>
-                                    <div className="col-span-1"></div>
-                                  </div>
+                                  {/* Table Header - Only show when there are tasks */}
+                                  {statusGroup.tasks.length > 0 && (
+                                    <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
+                                      <div className="col-span-4">Name</div>
+                                      <div className="col-span-2 text-center">Assignee</div>
+                                      <div className="col-span-2 text-center">Status</div>
+                                      <div className="col-span-2 text-center">Due date</div>
+                                      <div className="col-span-1 text-center">Priority</div>
+                                      <div className="col-span-1"></div>
+                                    </div>
+                                  )}
 
                                   {/* Tasks */}
-                                  {statusGroup.tasks.map((task, index) => {
-                                    const taskData = tasksMap.get(task.id)
-                                    return (
-                                      <Draggable key={task.id} draggableId={task.id} index={index}>
-                                        {(provided, snapshot) => (
-                                          <div
-                                            ref={provided.innerRef}
-                                            {...provided.draggableProps}
-                                            {...provided.dragHandleProps}
-                                            style={{
-                                              ...provided.draggableProps.style,
-                                              // Ensure smooth animations for same-section dragging
-                                              willChange: snapshot.isDragging ? 'transform' : 'auto',
-                                            }}
-                                            className={`${
-                                              snapshot.isDragging 
-                                                ? 'opacity-50 shadow-lg z-50' 
-                                                : ''
-                                            }`}
-                                          >
-                                            <TaskRow
-                                              task={task}
-                                              isSelected={selectedTasks.includes(task.id)}
-                                              onToggleSelect={handleToggleSelect}
-                                              onUpdate={handleTaskUpdate}
-                                              onDelete={handleTaskDelete}
-                                              showMultiSelect={isSelectionMode}
-                                              selectedTasks={selectedTasks}
-                                              onTaskClick={handleTaskClick}
-                                              users={users}
-                                            />
-                                          </div>
-                                        )}
-                                      </Draggable>
-                                    )
-                                  })}
+                                  {statusGroup.tasks.length === 0 ? (
+                                    <div className="px-12 py-4 text-center text-muted-foreground text-sm">
+                                      No tasks in {statusGroup.name.toLowerCase()}
+                                    </div>
+                                  ) : (
+                                    statusGroup.tasks.map((task, index) => {
+                                      const taskData = tasksMap.get(task.id)
+                                      return (
+                                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                                          {(provided, snapshot) => (
+                                            <div
+                                              ref={provided.innerRef}
+                                              {...provided.draggableProps}
+                                              {...provided.dragHandleProps}
+                                              style={{
+                                                ...provided.draggableProps.style,
+                                                // Ensure smooth animations for same-section dragging
+                                                willChange: snapshot.isDragging ? 'transform' : 'auto',
+                                              }}
+                                              className={`${
+                                                snapshot.isDragging 
+                                                  ? 'opacity-50 shadow-lg z-50' 
+                                                  : ''
+                                              }`}
+                                            >
+                                              <TaskRow
+                                                task={task}
+                                                isSelected={selectedTasks.includes(task.id)}
+                                                onToggleSelect={handleToggleSelect}
+                                                onUpdate={handleTaskUpdate}
+                                                onDelete={handleTaskDelete}
+                                                showMultiSelect={isSelectionMode}
+                                                selectedTasks={selectedTasks}
+                                                onTaskClick={handleTaskClick}
+                                                users={users}
+                                              />
+                                            </div>
+                                          )}
+                                        </Draggable>
+                                      )
+                                    })
+                                  )}
 
                                   {/* Inline Task Creation */}
                                   {showingInlineCreate === statusId && (
@@ -1647,6 +1654,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         <CreateProjectModal
           isOpen={isCreateProjectOpen}
           onClose={() => setIsCreateProjectOpen(false)}
+          activeSpace={activeSpace}
           onProjectCreated={() => {
             setIsCreateProjectOpen(false)
             // Reload projects

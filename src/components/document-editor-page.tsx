@@ -102,14 +102,17 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   const [showSlashMenu, setShowSlashMenu] = useState(false)
   const [slashCommandQuery, setSlashCommandQuery] = useState('')
   const [selectedSlashIndex, setSelectedSlashIndex] = useState(0)
-  const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0 })
+  const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0, isAbove: true })
   const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 })
+  const [hasCalculatedPosition, setHasCalculatedPosition] = useState(false)
   const floatingToolbarRef = useRef<HTMLDivElement>(null)
   const slashMenuRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<any>(null)
   const showSlashMenuRef = useRef(false)
   const slashCommandQueryRef = useRef('')
   const selectedSlashIndexRef = useRef(0)
+  const lastToolbarPositionRef = useRef({ top: 0, left: 0 })
+  const isFirstPositionRef = useRef(true)
   
   // Sync refs with state
   useEffect(() => {
@@ -293,20 +296,29 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
         // Handle Enter to select from slash menu
         if (event.key === 'Enter' && showSlashMenuRef.current) {
           event.preventDefault()
+          event.stopPropagation()
           const editorInstance = editorRef.current
-          if (!editorInstance) return false
+          if (!editorInstance) return true
+          
+          // Use the exact same filtering logic as the UI
           const actions = getQuickInsertActions(editorInstance)
           const query = slashCommandQueryRef.current
           const filteredActions = actions.filter(action => 
-            action.label.toLowerCase().includes(query)
+            action.label.toLowerCase().includes(query.toLowerCase())
           )
           const currentIndex = selectedSlashIndexRef.current
           
-          if (filteredActions.length > 0 && filteredActions[currentIndex]) {
-            const action = filteredActions[currentIndex]
+          // Ensure index is within bounds
+          const validIndex = Math.max(0, Math.min(currentIndex, filteredActions.length - 1))
+          
+          if (filteredActions.length > 0 && filteredActions[validIndex]) {
+            const action = filteredActions[validIndex]
+            
             // Remove the slash command text
             const { from } = view.state.selection
             let searchStart = from - 1
+            
+            // Find the start of the slash command (look backwards for '/' or whitespace)
             while (searchStart > 0) {
               const char = view.state.doc.textBetween(searchStart - 1, searchStart)
               if (char === ' ' || char === '\n') {
@@ -319,16 +331,30 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
               searchStart--
             }
             
-            // Delete the command text
-            view.dispatch(view.state.tr.delete(searchStart, from))
+            // Delete the command text including the '/'
+            if (searchStart < from) {
+              view.dispatch(view.state.tr.delete(searchStart, from))
+            }
             
             // Execute the action
             setTimeout(() => {
-              action.action()
-              setShowSlashMenu(false)
-              setSlashCommandQuery('')
-              setSelectedSlashIndex(0)
+              try {
+                action.action()
+                setShowSlashMenu(false)
+                setSlashCommandQuery('')
+                setSelectedSlashIndex(0)
+              } catch (error) {
+                console.error('Error executing slash command:', error)
+                setShowSlashMenu(false)
+                setSlashCommandQuery('')
+                setSelectedSlashIndex(0)
+              }
             }, 0)
+          } else {
+            // If no valid action, just close the menu
+            setShowSlashMenu(false)
+            setSlashCommandQuery('')
+            setSelectedSlashIndex(0)
           }
           return true
         }
@@ -337,39 +363,18 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
       },
       handleDOMEvents: {
         mouseup: () => {
-          // Check selection after mouseup
-          if (editor) {
-            setTimeout(() => {
-              const { from, to } = editor.state.selection
-              const hasSelection = from !== to
-              
-              if (hasSelection) {
-                try {
-                  const view = (editor as any).view
-                  if (view) {
-                    const start = view.coordsAtPos(from)
-                    const end = view.coordsAtPos(to)
-                    
-                    // Fixed positioning is relative to viewport, coordsAtPos already gives viewport coordinates
-                    setToolbarPosition({
-                      top: start.top - 10, // Position above selection
-                      left: (start.left + end.left) / 2,
-                    })
-                    setShowFloatingToolbar(true)
-                  }
-                } catch (error) {
-                  console.error('Error calculating toolbar position:', error)
-                }
-              } else {
-                setShowFloatingToolbar(false)
-              }
-            }, 10)
-          }
+          // Let onSelectionUpdate handle positioning - this just ensures toolbar shows/hides correctly
+          // Position updates are handled smoothly by onSelectionUpdate during selection
           return false
         },
       },
     },
     onUpdate: ({ editor }) => {
+      // Check if editor is mounted and ready
+      if (!editor || !editor.view) {
+        return
+      }
+      
       // Check for "/" command - simplified detection
       const { from } = editor.state.selection
       const { $from } = editor.state.selection
@@ -399,21 +404,25 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
         if (isAtStart || isAfterWhitespace) {
           try {
             const view = (editor as any).view
-            if (view) {
+            if (view && typeof view.coordsAtPos === 'function') {
               const coords = view.coordsAtPos(from)
               
-              setSlashMenuPosition({
-                top: coords.bottom + 5,
-                left: coords.left,
-              })
-              setSlashCommandQuery(query)
-              setSelectedSlashIndex(0)
-              setShowSlashMenu(true)
+              if (coords) {
+                setSlashMenuPosition({
+                  top: coords.bottom + 5,
+                  left: coords.left,
+                })
+                setSlashCommandQuery(query)
+                setSelectedSlashIndex(0)
+                setShowSlashMenu(true)
+              } else {
+                setShowSlashMenu(false)
+              }
             } else {
               setShowSlashMenu(false)
             }
           } catch (error) {
-            console.error('Error calculating slash menu position:', error)
+            // Silently handle - view may not be mounted yet
             setShowSlashMenu(false)
           }
         } else {
@@ -430,41 +439,150 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     },
     onSelectionUpdate: ({ editor }) => {
       // This fires when selection changes
+      // Check if editor is mounted and ready
+      if (!editor || !editor.view) {
+        return
+      }
+      
       const { from, to } = editor.state.selection
       const hasSelection = from !== to
       
       if (hasSelection) {
-        // Get selection coordinates for floating toolbar
-        try {
-          // Access the editor's view through the editor instance
-          const view = (editor as any).view
-          if (view) {
-            const start = view.coordsAtPos(from)
-            const end = view.coordsAtPos(to)
-            
-            // Use getBoundingClientRect for more accurate positioning
-            const editorElement = view.dom.closest('.ProseMirror') || view.dom
-            const editorRect = editorElement.getBoundingClientRect()
-            
-            // Calculate position relative to viewport (fixed positioning)
-            const relativeTop = (start.top + end.top) / 2 - 50 // Position above selection
-            const relativeLeft = (start.left + end.left) / 2
-            
-            setToolbarPosition({
-              top: relativeTop,
-              left: relativeLeft,
-            })
-            setShowFloatingToolbar(true)
-          } else {
+        // Use requestAnimationFrame to batch position updates and reduce jitter
+        requestAnimationFrame(() => {
+          try {
+            // Access the editor's view through the editor instance
+            const view = (editor as any).view
+            if (view && typeof view.coordsAtPos === 'function') {
+              // Use the end position (to) so toolbar follows the cursor as user drags
+              let centerX = 0
+              let centerY = 0
+              
+              // Use end position to follow the selection cursor
+              const endCoords = view.coordsAtPos(to)
+              if (!endCoords) {
+                setShowFloatingToolbar(false)
+                return
+              }
+              centerX = endCoords.left
+              centerY = endCoords.top
+              
+              // Get actual toolbar width from ref if available, otherwise estimate
+              const toolbarHeight = 40
+              const padding = 10
+              let toolbarWidth = 400 // Default estimate
+              
+              // Try to get actual toolbar width from the ref
+              if (floatingToolbarRef.current) {
+                const toolbarRect = floatingToolbarRef.current.getBoundingClientRect()
+                toolbarWidth = toolbarRect.width || 400
+              }
+              
+              // Get viewport dimensions
+              const viewportWidth = window.innerWidth
+              const viewportHeight = window.innerHeight
+              
+              // Get sidebar width - check multiple possible selectors
+              let sidebarWidth = 0
+              
+              // Method 1: Check editor container's left offset (most reliable)
+              const editorElement = view.dom.closest('.ProseMirror') || view.dom
+              const editorContainer = editorElement.closest('[class*="max-w"], [class*="container"], main, [role="main"]')
+              if (editorContainer) {
+                const containerRect = editorContainer.getBoundingClientRect()
+                if (containerRect.left > 0) {
+                  sidebarWidth = containerRect.left
+                }
+              }
+              
+              // Method 2: Try multiple selectors to find the sidebar
+              if (sidebarWidth === 0) {
+                const sidebarSelectors = [
+                  '[data-slot="sidebar"]',
+                  '.bg-sidebar.border-r',
+                  '.w-60.bg-sidebar',
+                  '.w-16.bg-sidebar',
+                  'aside[class*="w-"]',
+                  '.parrot-sidebar-gradient',
+                  'div[class*="sidebar"]'
+                ]
+                
+                for (const selector of sidebarSelectors) {
+                  const sidebarElement = document.querySelector(selector)
+                  if (sidebarElement) {
+                    const sidebarRect = sidebarElement.getBoundingClientRect()
+                    if (sidebarRect.width > 0 && sidebarRect.left === 0) {
+                      sidebarWidth = sidebarRect.width
+                      break
+                    }
+                  }
+                }
+              }
+              
+              // Method 3: Check for any fixed/absolute element at left edge
+              if (sidebarWidth === 0) {
+                const editorRect = editorElement.getBoundingClientRect()
+                if (editorRect.left > 0) {
+                  sidebarWidth = editorRect.left
+                }
+              }
+              
+              // Calculate horizontal position with boundary checks
+              // Position toolbar at start of selection, offset slightly to the right
+              let finalLeft = centerX + 20 // Small offset so it doesn't overlap the text
+              const halfToolbarWidth = toolbarWidth / 2
+              const leftBoundary = sidebarWidth + padding
+              
+              // Check left boundary (accounting for sidebar)
+              if (finalLeft - halfToolbarWidth < leftBoundary) {
+                finalLeft = halfToolbarWidth + leftBoundary
+              }
+              // Check right boundary
+              else if (finalLeft + halfToolbarWidth > viewportWidth - padding) {
+                finalLeft = viewportWidth - halfToolbarWidth - padding
+              }
+              
+              // Calculate vertical position with boundary checks
+              let finalTop = centerY - toolbarHeight - padding
+              let isAbove = true
+              const spaceAbove = centerY
+              const spaceBelow = viewportHeight - centerY
+              
+              // If not enough space above, show below instead
+              if (spaceAbove < toolbarHeight + padding && spaceBelow > toolbarHeight + padding) {
+                finalTop = centerY + padding
+                isAbove = false
+              }
+              // If not enough space above or below, position at top of viewport
+              else if (spaceAbove < toolbarHeight + padding && spaceBelow < toolbarHeight + padding) {
+                finalTop = padding
+                isAbove = true
+              }
+              
+              // Always update position smoothly during selection - no threshold to prevent snapping
+              lastToolbarPositionRef.current = { top: finalTop, left: finalLeft }
+              isFirstPositionRef.current = false
+              setHasCalculatedPosition(true)
+              setToolbarPosition({
+                top: finalTop,
+                left: finalLeft,
+                isAbove,
+              })
+              setShowFloatingToolbar(true)
+            } else {
+              setShowFloatingToolbar(false)
+            }
+          } catch (error) {
+            // If coordinates can't be calculated, hide toolbar
+            console.error('Error calculating toolbar position:', error)
             setShowFloatingToolbar(false)
           }
-        } catch (error) {
-          // If coordinates can't be calculated, hide toolbar
-          console.error('Error calculating toolbar position:', error)
-          setShowFloatingToolbar(false)
-        }
+        })
       } else {
         setShowFloatingToolbar(false)
+        // Reset flags when selection is cleared
+        isFirstPositionRef.current = true
+        setHasCalculatedPosition(false)
       }
     },
     onCreate: ({ editor }) => {
@@ -480,6 +598,134 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
       console.log('Editor is ready:', editor.isEditable, editor.isEmpty)
     }
   }, [editor])
+
+  // Recalculate toolbar position when it becomes visible to account for actual width
+  useEffect(() => {
+    if (showFloatingToolbar && floatingToolbarRef.current && editor && editor.view) {
+      requestAnimationFrame(() => {
+        try {
+          const { from, to } = editor.state.selection
+          const hasSelection = from !== to
+          
+          if (!hasSelection) return
+          
+          const view = (editor as any).view
+          if (!view || typeof view.coordsAtPos !== 'function') return
+          
+          // Use the end position (to) so toolbar follows the cursor as user drags
+          let centerX = 0
+          let centerY = 0
+          
+          // Use end position to follow the selection cursor
+          const endCoords = view.coordsAtPos(to)
+          if (!endCoords) return
+          centerX = endCoords.left
+          centerY = endCoords.top
+          
+          // Get actual toolbar width
+          const toolbarRect = floatingToolbarRef.current?.getBoundingClientRect()
+          const toolbarWidth = toolbarRect?.width || 400
+          const toolbarHeight = 40
+          const padding = 10
+          
+          // Get viewport dimensions
+          const viewportWidth = window.innerWidth
+          const viewportHeight = window.innerHeight
+          
+          // Get sidebar width - check editor container's left offset (most reliable)
+          let sidebarWidth = 0
+          const editorElement = view.dom.closest('.ProseMirror') || view.dom
+          const editorContainer = editorElement.closest('[class*="max-w"], [class*="container"], main, [role="main"]')
+          if (editorContainer) {
+            const containerRect = editorContainer.getBoundingClientRect()
+            if (containerRect.left > 0) {
+              sidebarWidth = containerRect.left
+            }
+          }
+          
+          // Fallback: Try multiple selectors to find the sidebar
+          if (sidebarWidth === 0) {
+            const sidebarSelectors = [
+              '[data-slot="sidebar"]',
+              '.bg-sidebar.border-r',
+              '.w-60.bg-sidebar',
+              '.w-16.bg-sidebar',
+              'aside[class*="w-"]',
+              '.parrot-sidebar-gradient',
+              'div[class*="sidebar"]'
+            ]
+            
+            for (const selector of sidebarSelectors) {
+              const sidebarElement = document.querySelector(selector)
+              if (sidebarElement) {
+                const sidebarRect = sidebarElement.getBoundingClientRect()
+                if (sidebarRect.width > 0 && sidebarRect.left === 0) {
+                  sidebarWidth = sidebarRect.width
+                  break
+                }
+              }
+            }
+          }
+          
+          // Final fallback: Use editor element's left offset
+          if (sidebarWidth === 0) {
+            const editorRect = editorElement.getBoundingClientRect()
+            if (editorRect.left > 0) {
+              sidebarWidth = editorRect.left
+            }
+          }
+          
+          // Calculate horizontal position with boundary checks
+          // Position toolbar at start of selection, offset slightly to the right
+          let finalLeft = centerX + 20 // Small offset so it doesn't overlap the text
+          const halfToolbarWidth = toolbarWidth / 2
+          const leftBoundary = sidebarWidth + padding
+          
+          // Check left boundary (accounting for sidebar)
+          if (finalLeft - halfToolbarWidth < leftBoundary) {
+            finalLeft = halfToolbarWidth + leftBoundary
+          }
+          // Check right boundary
+          else if (finalLeft + halfToolbarWidth > viewportWidth - padding) {
+            finalLeft = viewportWidth - halfToolbarWidth - padding
+          }
+          
+          // Calculate vertical position
+          let finalTop = centerY - toolbarHeight - padding
+          let isAbove = true
+          const spaceAbove = centerY
+          const spaceBelow = viewportHeight - centerY
+          
+          if (spaceAbove < toolbarHeight + padding && spaceBelow > toolbarHeight + padding) {
+            finalTop = centerY + padding
+            isAbove = false
+          } else if (spaceAbove < toolbarHeight + padding && spaceBelow < toolbarHeight + padding) {
+            finalTop = padding
+            isAbove = true
+          }
+          
+          // Update position smoothly - use small threshold only to prevent micro-jitter
+          const threshold = 2
+          const lastPos = lastToolbarPositionRef.current
+          const hasSignificantChange = 
+            Math.abs(finalTop - lastPos.top) > threshold || 
+            Math.abs(finalLeft - lastPos.left) > threshold
+          
+          if (hasSignificantChange) {
+            lastToolbarPositionRef.current = { top: finalTop, left: finalLeft }
+            setHasCalculatedPosition(true)
+            setToolbarPosition({
+              top: finalTop,
+              left: finalLeft,
+              isAbove,
+            })
+          }
+        } catch (error) {
+          console.error('Error recalculating toolbar position:', error)
+        }
+      })
+    }
+  }, [showFloatingToolbar, editor])
 
   // Load existing document if editing
   useEffect(() => {
@@ -890,14 +1136,16 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
                   />
                   
                   {/* Floating Toolbar - appears on text selection */}
-                  {showFloatingToolbar && editor && (
+                  {showFloatingToolbar && editor && hasCalculatedPosition && (
                     <div
                       ref={floatingToolbarRef}
-                      className="fixed z-50 bg-background border border-border rounded-lg shadow-lg p-1 flex items-center gap-1"
+                      className="fixed z-50 bg-background border border-border rounded-lg shadow-lg p-1 flex items-center gap-1 transition-all duration-150 ease-out"
                       style={{
                         top: `${toolbarPosition.top}px`,
                         left: `${toolbarPosition.left}px`,
-                        transform: 'translateX(-50%) translateY(-100%)',
+                        transform: toolbarPosition.isAbove 
+                          ? 'translateX(-50%) translateY(-100%)' 
+                          : 'translateX(-50%)',
                       }}
                       onMouseDown={(e) => e.preventDefault()}
                     >
@@ -928,9 +1176,9 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
                   
                   {/* Slash Command Menu */}
                   {showSlashMenu && editor && (() => {
-                    // Filter actions based on query
+                    // Filter actions based on query (case-insensitive)
                     const filteredActions = quickInsertActions.filter(action => 
-                      action.label.toLowerCase().includes(slashCommandQuery)
+                      action.label.toLowerCase().includes(slashCommandQuery.toLowerCase())
                     )
                     
                     return (

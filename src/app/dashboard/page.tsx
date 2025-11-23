@@ -63,7 +63,7 @@ function DashboardContent() {
       }
     }
     
-    const validTabs: TabType[] = ['spaces', 'dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug', 'reports', 'settings']
+    const validTabs: TabType[] = ['spaces', 'dashboard', 'user-dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug', 'reports', 'settings']
     // Only update activeTab if it's different to prevent unnecessary re-renders
     // Only sync from URL if we're not already in the process of changing tabs or spaces
     // IMPORTANT: If we have a space param, don't show the spaces tab - switch to dashboard instead
@@ -266,7 +266,7 @@ function DashboardContent() {
     }
     
     // If switching to a space tab that requires being in a space, ensure we have a space
-    // Reports can be accessed without a space (shows all data or a message)
+    // Reports and user-dashboard can be accessed without a space (shows all data or aggregates from all spaces)
     const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'forms', 'services', 'company-calendars', 'documents']
     if (spaceRequiredTabs.includes(tab) && !currentSpaceId) {
       // For non-admin users, automatically use their company_id as space
@@ -445,6 +445,7 @@ function DashboardContent() {
       // Client view tabs
       const clientTabMap: Record<TabType, string> = {
         'dashboard': 'overview',
+        'user-dashboard': 'overview', // Dashboard is in sidebar, so map to overview for navigation
         'projects': 'tasks',
         'documents': 'documents',
         'company-calendars': 'calendar',
@@ -464,9 +465,18 @@ function DashboardContent() {
   }
 
   const handleModernTabChange = (tabId: string) => {
+    // Check if tabId is already an internal tab name (like "user-dashboard")
+    const validInternalTabs: TabType[] = ['spaces', 'dashboard', 'user-dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug', 'reports', 'settings']
+    if (validInternalTabs.includes(tabId as TabType)) {
+      // It's already an internal tab name, use it directly
+      handleTabChange(tabId as TabType)
+      return
+    }
+    
     // Map modern tab IDs back to internal tab names
     const tabMap: Record<string, TabType> = {
       'overview': 'dashboard',
+      'dashboard': 'user-dashboard',
       'tasks': 'projects',
       'documents': 'documents',
       'calendar': 'company-calendars',
@@ -506,7 +516,7 @@ function DashboardContent() {
                {/* Lazy Loaded Tab Content - only show for tabs not handled by ModernDashboardLayout */}
                {/* ModernDashboardLayout now handles: dashboard, projects, documents, company-calendars, reports, admin, settings */}
                {/* Only render LazyTabComponent for other tabs */}
-               {!['dashboard', 'projects', 'documents', 'company-calendars', 'reports', 'admin', 'settings'].includes(activeTab) && (
+               {!['dashboard', 'user-dashboard', 'projects', 'documents', 'company-calendars', 'reports', 'admin', 'settings'].includes(activeTab) && (
                  <LazyTabComponent 
                    tabName={activeTab} 
                    selectedCompany={selectedCompany} 

@@ -57,8 +57,10 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
   }
 
   const validateUsers = () => {
-    if (!selectedCompany) {
-      return 'Please select a company'
+    // Company is required unless all users are internal or admin
+    const allInternalOrAdmin = users.every(u => u.role === 'internal' || u.role === 'admin')
+    if (!selectedCompany && !allInternalOrAdmin) {
+      return 'Please select a company (or set all users as internal/admin)'
     }
     
     for (const user of users) {
@@ -93,7 +95,7 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
       const invitations = users.map(user => ({
         email: user.email,
         full_name: user.full_name,
-        company_id: selectedCompany,
+        company_id: selectedCompany || null, // Allow null for internal/admin users
         role: user.role,
         invited_by: session.user.id,
         tab_permissions: defaultTabPermissions
@@ -166,14 +168,16 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
         <div className="space-y-4">
           {/* Company Selection */}
           <div className="space-y-2">
-            <Label htmlFor="company-select">Select Company *</Label>
+            <Label htmlFor="company-select">
+              Select Company {users.every(u => u.role === 'internal' || u.role === 'admin') ? '(Optional)' : '*'}
+            </Label>
             <Select
               value={selectedCompany}
               onValueChange={setSelectedCompany}
               disabled={sending}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Choose a company" />
+                <SelectValue placeholder="Choose a company (optional for internal/admin)" />
               </SelectTrigger>
               <SelectContent>
                 {companies.map((company) => (
@@ -183,6 +187,11 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
                 ))}
               </SelectContent>
             </Select>
+            {users.every(u => u.role === 'internal' || u.role === 'admin') && (
+              <p className="text-xs text-muted-foreground">
+                Internal users and admins can be invited without a company assignment
+              </p>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -285,7 +294,7 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={sending || users.some(u => !u.email || !u.full_name) || !selectedCompany}
+            disabled={sending || users.some(u => !u.email || !u.full_name) || (!selectedCompany && !users.every(u => u.role === 'internal' || u.role === 'admin'))}
           >
             {sending ? (
               <>

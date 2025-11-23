@@ -54,7 +54,7 @@ interface DashboardLayoutProps {
   onSpaceChange?: (spaceId: string | null) => void
 }
 
-export type TabType = 'spaces' | 'dashboard' | 'projects' | 'forms' | 'services' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug' | 'reports' | 'settings'
+export type TabType = 'spaces' | 'dashboard' | 'user-dashboard' | 'projects' | 'forms' | 'services' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug' | 'reports' | 'settings'
 
 // Admin-only navigation items (shown when not in a space)
 const adminNavItems = [

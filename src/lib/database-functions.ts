@@ -73,6 +73,40 @@ async function setAppContext() {
   }
 }
 
+// Helper function to log activities to activity_logs table
+export async function logActivity(data: {
+  user_id: string
+  action_type: string
+  entity_type: string
+  entity_id?: string
+  description?: string
+  metadata?: Record<string, unknown>
+  company_id?: string
+  project_id?: string
+  task_id?: string
+}): Promise<void> {
+  if (!supabase) return
+
+  try {
+    await supabase
+      .from('activity_logs')
+      .insert({
+        user_id: data.user_id,
+        action_type: data.action_type,
+        entity_type: data.entity_type,
+        entity_id: data.entity_id || null,
+        description: data.description || null,
+        metadata: data.metadata || {},
+        company_id: data.company_id || null,
+        project_id: data.project_id || null,
+        task_id: data.task_id || null,
+      })
+  } catch (error) {
+    // Silent error handling - don't fail operations if logging fails
+    console.error('Error logging activity:', error)
+  }
+}
+
 // Database Functions for Project Management
 
 export async function fetchProjects(companyId?: string): Promise<ProjectWithDetails[]> {
@@ -208,7 +242,26 @@ export async function updateTaskStatus(taskId: string, newStatus: Task['status']
       return false
     }
 
-    // Log activity
+    // Log activity to activity_logs
+    const actionType = newStatus === 'done' ? 'task_completed' : 'task_status_changed'
+    await logActivity({
+      user_id: userId,
+      action_type: actionType,
+      entity_type: 'task',
+      entity_id: taskId,
+      description: newStatus === 'done' 
+        ? `Completed task "${currentTask.title}"`
+        : `Changed task "${currentTask.title}" status to ${newStatus}`,
+      metadata: { 
+        old_status: currentTask.status, 
+        new_status: newStatus,
+        title: currentTask.title 
+      },
+      project_id: currentTask.project_id,
+      task_id: taskId,
+    })
+
+    // Also log to task_activities for backward compatibility
     await supabase
       .from('task_activities')
       .insert({
@@ -294,7 +347,31 @@ export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'upd
       return null
     }
 
-    // Log activity
+    // Fetch project to get company_id
+    let companyId: string | undefined = undefined
+    if (taskData.project_id) {
+      const { data: projectData } = await supabase
+        .from('projects')
+        .select('company_id')
+        .eq('id', taskData.project_id)
+        .single()
+      companyId = projectData?.company_id || undefined
+    }
+
+    // Log activity to activity_logs
+    await logActivity({
+      user_id: userId,
+      action_type: 'task_created',
+      entity_type: 'task',
+      entity_id: data.id,
+      description: `Created task "${taskData.title}"`,
+      metadata: { title: taskData.title, status: taskData.status },
+      project_id: taskData.project_id,
+      company_id: companyId,
+      task_id: data.id,
+    })
+
+    // Also log to task_activities for backward compatibility
     await supabase
       .from('task_activities')
       .insert({
@@ -375,6 +452,19 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
     }
 
     console.log('Project created successfully:', data)
+    
+    // Log activity to activity_logs
+    await logActivity({
+      user_id: insertData.created_by,
+      action_type: 'project_created',
+      entity_type: 'project',
+      entity_id: data.id,
+      description: `Created project "${data.name}"`,
+      metadata: { name: data.name, status: data.status },
+      company_id: data.company_id,
+      project_id: data.id,
+    })
+    
     return { success: true, data }
   } catch (error) {
     console.error('Unexpected error creating project:', error)
@@ -1206,9 +1296,9 @@ export async function createUser(userData: {
       return { success: false, error: error.message || 'Failed to create user' }
     }
 
-    // If this is an internal user and company_ids are provided, create company assignments
-    if (data.role === 'internal' && userData.company_ids && userData.company_ids.length > 0) {
-      console.log('Processing internal user company assignments for new user:', data.id)
+    // If this is an internal user, admin, or manager and company_ids are provided, create company assignments
+    if ((data.role === 'internal' || data.role === 'admin' || data.role === 'manager') && userData.company_ids && userData.company_ids.length > 0) {
+      console.log('Processing company assignments for new user:', data.id, 'role:', data.role)
       console.log('Company IDs to assign:', userData.company_ids)
       
       // Check if the table exists first
@@ -1254,6 +1344,21 @@ export async function createUser(userData: {
 
     console.log('User created successfully:', data)
     console.log('Created user tab permissions:', data.tab_permissions)
+
+    // Log activity to activity_logs
+    await logActivity({
+      user_id: data.id, // The new user's ID
+      action_type: 'user_created',
+      entity_type: 'user',
+      entity_id: data.id,
+      description: `Created user "${data.full_name || data.email}"`,
+      metadata: { 
+        email: data.email, 
+        role: data.role,
+        full_name: data.full_name 
+      },
+      company_id: data.company_id || undefined,
+    })
 
     return { success: true, data }
   } catch (error) {
@@ -1320,9 +1425,9 @@ export async function updateUser(userId: string, userData: {
       return { success: false, error: error.message || 'Failed to update user' }
     }
 
-    // If this is an internal user and company_ids are provided, update company assignments
-    if (data.role === 'internal' && userData.company_ids) {
-      console.log('Processing internal user company assignments for user:', userId)
+    // If this is an internal user, admin, or manager and company_ids are provided, update company assignments
+    if ((data.role === 'internal' || data.role === 'admin' || data.role === 'manager') && userData.company_ids) {
+      console.log('Processing company assignments for user:', userId, 'role:', data.role)
       console.log('Company IDs to assign:', userData.company_ids)
       
       // Check if the table exists first
@@ -1383,6 +1488,25 @@ export async function updateUser(userId: string, userData: {
 
     console.log('User updated successfully:', data)
     console.log('Updated user tab permissions:', data.tab_permissions)
+    
+    // Log activity to activity_logs
+    const currentUser = getCurrentUser()
+    if (currentUser) {
+      await logActivity({
+        user_id: currentUser.id, // The user who made the change
+        action_type: 'user_updated',
+        entity_type: 'user',
+        entity_id: userId,
+        description: `Updated user "${data.full_name || data.email}"`,
+        metadata: { 
+          email: data.email, 
+          role: data.role,
+          full_name: data.full_name 
+        },
+        company_id: data.company_id || undefined,
+      })
+    }
+    
     return { success: true, data }
   } catch (error) {
     console.error('Error updating user:', error)
@@ -1400,6 +1524,13 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
     console.log('Deleting user:', userId)
     await setAppContext()
     
+    // Get user info before deleting for activity log
+    const { data: userToDelete } = await supabase
+      .from('users')
+      .select('id, email, full_name, company_id')
+      .eq('id', userId)
+      .single()
+    
     const { error } = await supabase
       .from('users')
       .delete()
@@ -1408,6 +1539,23 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
     if (error) {
       console.error('Error deleting user:', error)
       return { success: false, error: error.message || 'Failed to delete user' }
+    }
+
+    // Log activity to activity_logs
+    const currentUser = getCurrentUser()
+    if (currentUser && userToDelete) {
+      await logActivity({
+        user_id: currentUser.id, // The user who performed the deletion
+        action_type: 'user_deleted',
+        entity_type: 'user',
+        entity_id: userId,
+        description: `Deleted user "${userToDelete.full_name || userToDelete.email}"`,
+        metadata: { 
+          deleted_user_email: userToDelete.email,
+          deleted_user_name: userToDelete.full_name 
+        },
+        company_id: userToDelete.company_id || undefined,
+      })
     }
 
     console.log('User deleted successfully')
@@ -3433,8 +3581,7 @@ export async function fetchSpaceBookmarks(
       throw new Error('Supabase client not initialized')
     }
 
-    await setAppContext()
-
+    // RLS removed - using custom access control in application code
     const { data, error } = await supabase
       .from('space_bookmarks')
       .select('*')
@@ -3469,7 +3616,20 @@ export async function createSpaceBookmark(
       throw new Error('Supabase client not initialized')
     }
 
-    await setAppContext()
+    // Custom admin access check - remove RLS dependency
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    // Verify user has access to this company
+    // Admins can create bookmarks in any company
+    // Managers and other users can only create bookmarks in their own company
+    if (currentUser.role !== 'admin') {
+      if (currentUser.companyId !== companyId) {
+        return { success: false, error: 'You can only create bookmarks in your own company' }
+      }
+    }
 
     // Get the maximum position for this company to add at the end
     const { data: existingBookmarks } = await supabase
@@ -3524,7 +3684,31 @@ export async function updateSpaceBookmark(
       throw new Error('Supabase client not initialized')
     }
 
-    await setAppContext()
+    // Custom admin access check - remove RLS dependency
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    // First, get the bookmark to check company access
+    const { data: existingBookmark, error: fetchError } = await supabase
+      .from('space_bookmarks')
+      .select('company_id, created_by')
+      .eq('id', bookmarkId)
+      .single()
+
+    if (fetchError || !existingBookmark) {
+      return { success: false, error: 'Bookmark not found' }
+    }
+
+    // Verify user has access to this bookmark's company
+    // Admins can update any bookmark
+    // Managers and other users can only update bookmarks in their own company
+    if (currentUser.role !== 'admin') {
+      if (currentUser.companyId !== existingBookmark.company_id) {
+        return { success: false, error: 'You can only update bookmarks in your own company' }
+      }
+    }
 
     const { data, error } = await supabase
       .from('space_bookmarks')
@@ -3559,7 +3743,31 @@ export async function deleteSpaceBookmark(
       throw new Error('Supabase client not initialized')
     }
 
-    await setAppContext()
+    // Custom admin access check - remove RLS dependency
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    // First, get the bookmark to check company access
+    const { data: existingBookmark, error: fetchError } = await supabase
+      .from('space_bookmarks')
+      .select('company_id, created_by')
+      .eq('id', bookmarkId)
+      .single()
+
+    if (fetchError || !existingBookmark) {
+      return { success: false, error: 'Bookmark not found' }
+    }
+
+    // Verify user has access to this bookmark's company
+    // Admins can delete any bookmark
+    // Managers and other users can only delete bookmarks in their own company
+    if (currentUser.role !== 'admin') {
+      if (currentUser.companyId !== existingBookmark.company_id) {
+        return { success: false, error: 'You can only delete bookmarks in your own company' }
+      }
+    }
 
     const { error } = await supabase
       .from('space_bookmarks')
@@ -4266,7 +4474,7 @@ export async function deleteRichDocument(
 
 export interface RecentActivity {
   id: string
-  type: 'project_created' | 'task_created' | 'task_completed' | 'task_updated' | 'comment_added'
+  type: string // Expanded to support all action types
   user_id: string
   user_name: string
   user_email?: string
@@ -4277,13 +4485,64 @@ export interface RecentActivity {
   task_id?: string
   task_title?: string
   comment_content?: string
+  description?: string
+  metadata?: Record<string, unknown>
 }
 
-export async function fetchRecentActivities(limit: number = 10): Promise<RecentActivity[]> {
+export async function fetchRecentActivities(limit: number = 50, daysBack: number = 90): Promise<RecentActivity[]> {
   if (!supabase) return []
 
   try {
     await setAppContext()
+    
+    // Calculate date threshold
+    const dateThreshold = new Date()
+    dateThreshold.setDate(dateThreshold.getDate() - daysBack)
+
+    // Try to fetch from activity_logs table first (new approach)
+    const { data: activityLogs, error: logsError } = await supabase
+      .from('activity_logs')
+      .select(`
+        id,
+        user_id,
+        action_type,
+        entity_type,
+        entity_id,
+        description,
+        metadata,
+        company_id,
+        project_id,
+        task_id,
+        created_at,
+        user:users!activity_logs_user_id_fkey(id, full_name, email),
+        company:companies!activity_logs_company_id_fkey(id, name),
+        project:projects!activity_logs_project_id_fkey(id, name),
+        task:tasks!activity_logs_task_id_fkey(id, title)
+      `)
+      .gte('created_at', dateThreshold.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    // If activity_logs table exists and has data, use it
+    if (!logsError && activityLogs && activityLogs.length > 0) {
+      return activityLogs.map(log => ({
+        id: log.id,
+        type: log.action_type,
+        user_id: log.user_id,
+        user_name: (log.user as any)?.full_name || 'Unknown',
+        user_email: (log.user as any)?.email,
+        timestamp: log.created_at,
+        project_id: log.project_id,
+        project_name: (log.project as any)?.name,
+        company_name: (log.company as any)?.name,
+        task_id: log.task_id,
+        task_title: (log.task as any)?.title,
+        description: log.description,
+        metadata: log.metadata || {},
+      }))
+    }
+
+    // Fallback to old method if activity_logs table doesn't exist or is empty
     const activities: RecentActivity[] = []
     const oneWeekAgo = new Date()
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)

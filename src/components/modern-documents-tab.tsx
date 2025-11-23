@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef, Suspense } from "react"
 import dynamic from "next/dynamic"
-import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft, ChevronRight, Eye } from "lucide-react"
+import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft, ChevronRight, Eye, Trash2, MoreVertical } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -26,6 +27,8 @@ import {
   getCompanyRichDocuments,
   createFolder,
   createDocumentRecord,
+  deleteDocument,
+  deleteRichDocument,
   type Document,
   type DocumentFolder,
   type RichDocument
@@ -75,6 +78,9 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
   const [uploading, setUploading] = useState(false)
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'document' | 'rich'; id: string; name: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const documentInputRef = useRef<HTMLInputElement>(null)
   const spreadsheetInputRef = useRef<HTMLInputElement>(null)
 
@@ -369,6 +375,45 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
     return `${month}/${day}/${year}`
   }
 
+  const handleDelete = async () => {
+    if (!deleteTarget || !activeSpace) return
+
+    setDeleting(true)
+    try {
+      let result
+      if (deleteTarget.type === 'document') {
+        result = await deleteDocument(deleteTarget.id)
+      } else {
+        result = await deleteRichDocument(deleteTarget.id)
+      }
+
+      if (result.success) {
+        toastSuccess('Document deleted successfully')
+        // Reload data
+        const folderPath = currentPath.length > 1 ? `/${currentPath.slice(1).join('/')}` : '/'
+        const [docsResult, foldersResult, richDocsResult] = await Promise.all([
+          getCompanyDocuments(activeSpace, folderPath),
+          getCompanyFolders(activeSpace, folderPath),
+          getCompanyRichDocuments(activeSpace, folderPath)
+        ])
+        if (docsResult.success) setDocuments(docsResult.documents || [])
+        if (foldersResult.success) setFolders(foldersResult.folders || [])
+        if (richDocsResult.success) setRichDocuments(richDocsResult.documents || [])
+      } else {
+        toastError(result.error || 'Failed to delete document')
+      }
+    } catch (error) {
+      console.error('Error deleting document:', error)
+      toastError('Failed to delete document', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    } finally {
+      setDeleting(false)
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
+    }
+  }
+
   // If editing a document, show inline editor
   if (editingDocumentId) {
     const spaceId = activeSpace || session?.user?.company_id || null
@@ -609,36 +654,88 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
             const authorId = item.type === 'rich' ? (doc as RichDocument).created_by : (doc as Document).uploaded_by
 
             return (
-              <button
+              <div
                 key={doc.id}
-                onClick={() => {
-                  if (item.type === 'rich') {
-                    handleEditDocument(doc.id)
-                  } else {
-                    // Open preview modal for regular documents
-                    setPreviewDocument(doc as Document)
-                    setShowPreview(true)
-                  }
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group"
               >
-                {isSpreadsheetDoc ? (
-                  <Grid3x3 className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                ) : (
-                  <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground truncate">{doc.name}</span>
-                    {(doc as any).is_favorite && (
-                      <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                <button
+                  onClick={() => {
+                    if (item.type === 'rich') {
+                      handleEditDocument(doc.id)
+                    } else {
+                      // Open preview modal for regular documents
+                      setPreviewDocument(doc as Document)
+                      setShowPreview(true)
+                    }
+                  }}
+                  className="flex-1 flex items-center gap-3 text-left min-w-0"
+                >
+                  {isSpreadsheetDoc ? (
+                    <Grid3x3 className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground truncate">{doc.name}</span>
+                      {(doc as any).is_favorite && (
+                        <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Updated {formatUpdateDate(updateDate)} · {getUserName(authorId)}
+                    </div>
+                  </div>
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {item.type === 'rich' ? (
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation()
+                        handleEditDocument(doc.id)
+                      }}>
+                        <FileEdit className="h-4 w-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation()
+                        setPreviewDocument(doc as Document)
+                        setShowPreview(true)
+                      }}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        Preview
+                      </DropdownMenuItem>
                     )}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Updated {formatUpdateDate(updateDate)} · {getUserName(authorId)}
-                  </div>
-                </div>
-              </button>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget({ 
+                          type: item.type === 'rich' ? 'rich' : 'document', 
+                          id: doc.id, 
+                          name: doc.name 
+                        })
+                        setShowDeleteModal(true)
+                      }}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )
           })
         )}
@@ -653,6 +750,47 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
           setPreviewDocument(null)
         }}
       />
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Document</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteTarget?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDeleteModal(false)
+                setDeleteTarget(null)
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

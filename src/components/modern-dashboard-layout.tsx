@@ -19,7 +19,9 @@ import { AdminAllTasks } from "./admin-all-tasks"
 import { AdminDashboard } from "./admin-dashboard"
 import { AdminAnalytics } from "./admin-analytics"
 import { AdminTeam } from "./admin-team"
+import { AdminAllUsers } from "./admin-all-users"
 import { ModernOverviewTab } from "./modern-overview-tab"
+import { ModernDashboardTab } from "./modern-dashboard-tab"
 import { ModernTasksTab } from "./modern-tasks-tab"
 import { ModernProjectsTab } from "./modern-projects-tab"
 import { ModernDocumentsTab } from "./modern-documents-tab"
@@ -274,7 +276,7 @@ export function ModernDashboardLayout({
       projects: "spaces", // Use spaces tab for admin projects view (shows AdminAllProjects)
       tasks: "spaces", // Use spaces tab for admin tasks view (shows AdminAllTasks)
       calendar: "spaces", // Use spaces tab for admin calendar view
-      documents: "spaces", // Use spaces tab for admin documents view
+      "all-users": "spaces", // Use spaces tab for admin all users view
       analytics: "spaces", // Use spaces tab for admin analytics view
       team: "admin", // Use admin tab for team view
     }
@@ -339,6 +341,8 @@ export function ModernDashboardLayout({
         onViewModeChange={handleViewModeChange}
         adminView={adminView}
         onAdminViewChange={handleAdminViewChange}
+        onTabChange={handleClientTabChange}
+        activeTab={activeTab}
       />
 
       {/* Main Content */}
@@ -353,11 +357,16 @@ export function ModernDashboardLayout({
                 {adminView === "dashboard" && "Admin Dashboard"}
                 {adminView === "tasks" && "All Tasks"}
                 {adminView === "calendar" && "Calendar"}
-                {adminView === "documents" && "Documents"}
+                {adminView === "all-users" && "All Users"}
                 {adminView === "analytics" && "Analytics"}
                 {adminView === "team" && "Team"}
-                {!["projects", "dashboard", "tasks", "calendar", "documents", "analytics", "team"].includes(adminView) && "Admin Dashboard"}
+                {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics", "team"].includes(adminView) && "Admin Dashboard"}
               </h2>
+            </div>
+          ) : activeTab === "user-dashboard" ? (
+            <div className="flex items-center gap-2">
+              <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
+              <h2 className="text-lg font-medium">Dashboard</h2>
             </div>
           ) : currentSpace ? (
             <DropdownMenu>
@@ -475,15 +484,15 @@ export function ModernDashboardLayout({
                   />
                 )}
                 {adminView === "calendar" && <ModernCalendarTab activeSpace={null} />}
-                {adminView === "documents" && <ModernDocumentsTab activeSpace={null} />}
+                {adminView === "all-users" && <AdminAllUsers />}
                 {adminView === "analytics" && <AdminAnalytics />}
                 {adminView === "team" && <AdminTeam />}
-                {!["projects", "dashboard", "tasks", "calendar", "documents", "analytics", "team"].includes(adminView) && children}
+                {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics", "team"].includes(adminView) && children}
               </>
             ) : (
               <>
-                {/* Space Overview */}
-                {spaceData && (
+                {/* Space Overview - Hide for user-dashboard tab */}
+                {spaceData && activeTab !== "user-dashboard" && (
                   <SpaceOverview
                     companyId={currentSpaceId || undefined}
                     onManagerChange={() => {
@@ -566,27 +575,31 @@ export function ModernDashboardLayout({
                   />
                 )}
 
-                {/* Navigation */}
-                <ModernNavigation
-                  activeTab={(() => {
-                    // Map internal tab names to display tab names
-                    const tabMap: Record<string, string> = {
-                      "dashboard": "overview",
-                      "projects": "tasks",
-                      "documents": "documents",
-                      "company-calendars": "calendar",
-                      "reports": "reports",
-                      "admin": "users",
-                      "settings": "settings",
-                    }
-                    return tabMap[activeTab] || "overview"
-                  })()}
-                  onTabChange={handleClientTabChange}
-                  userRole={session?.user?.role}
-                />
+                {/* Navigation - Hide for user-dashboard tab */}
+                {activeTab !== "user-dashboard" && (
+                  <ModernNavigation
+                    activeTab={(() => {
+                      // Map internal tab names to display tab names
+                      const tabMap: Record<string, string> = {
+                        "dashboard": "overview",
+                        "user-dashboard": "dashboard",
+                        "projects": "tasks",
+                        "documents": "documents",
+                        "company-calendars": "calendar",
+                        "reports": "reports",
+                        "admin": "users",
+                        "settings": "settings",
+                      }
+                      return tabMap[activeTab] || "overview"
+                    })()}
+                    onTabChange={handleClientTabChange}
+                    userRole={session?.user?.role}
+                  />
+                )}
 
                 {/* Content */}
                 {activeTab === "dashboard" && <ModernOverviewTab activeSpace={currentSpaceId ?? null} />}
+                {activeTab === "user-dashboard" && <ModernDashboardTab activeSpace={currentSpaceId ?? null} />}
                 {activeTab === "projects" && <ModernTasksTab activeSpace={currentSpaceId ?? null} />}
                 {activeTab === "documents" && <ModernDocumentsTab activeSpace={currentSpaceId ?? null} />}
                 {activeTab === "company-calendars" && <ModernCalendarTab activeSpace={currentSpaceId ?? null} />}

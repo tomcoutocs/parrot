@@ -110,3 +110,79 @@ This script adds the `event_type` column to the `company_events` table. This col
 - Existing events without an event_type will have their type inferred from the title
 - New events will save the event_type selected in the form
 
+## space_bookmarks_rls_fix.sql
+
+This script disables Row-Level Security (RLS) for the `space_bookmarks` table to allow custom admin access checks in the application code.
+
+### How to Use
+
+1. Open your Supabase Dashboard
+2. Go to SQL Editor
+3. Copy and paste the contents of `space_bookmarks_rls_fix.sql`
+4. Review the script
+5. Run the script
+
+### What It Does
+
+- **Disables RLS completely** on the `space_bookmarks` table
+- Removes all row-level security restrictions
+- Allows the application code to handle access control using custom admin checks
+
+### Notes
+
+- This script disables RLS to allow the application's custom admin access logic to work
+- Access control is now handled in the application code (`createSpaceBookmark`, `updateSpaceBookmark`, `deleteSpaceBookmark` functions)
+- Admins can manage bookmarks in any company
+- Non-admin users can only manage bookmarks in their own company
+- After running this script, try creating bookmarks again - the RLS error should be resolved
+
+## create_activity_logs_table.sql
+
+This script creates the `activity_logs` table for comprehensive user activity tracking across the system.
+
+### How to Use
+
+1. Open your Supabase Dashboard
+2. Go to SQL Editor
+3. Copy and paste the contents of `create_activity_logs_table.sql`
+4. Review the script
+5. Run the script
+
+### What It Does
+
+- **Creates the `activity_logs` table** with comprehensive tracking capabilities
+- Tracks all user actions including:
+  - Project actions (created, updated, deleted, archived)
+  - Task actions (created, updated, completed, deleted, status changed)
+  - Comment actions (added, updated, deleted)
+  - User actions (created, updated, deleted, logged in/out)
+  - Document actions (created, updated, deleted, viewed)
+  - Form actions (created, updated, deleted, submitted)
+  - Service actions (created, updated, deleted)
+  - Company actions (created, updated, deleted)
+  - Space/Manager assignment actions
+- **Creates indexes** for optimal query performance
+- **Migrates existing data** from projects, tasks, and comments (last 90 days)
+- Stores metadata as JSONB for flexible data storage
+
+### Table Structure
+
+- `id`: UUID primary key
+- `user_id`: Reference to the user who performed the action
+- `action_type`: Type of action (e.g., 'project_created', 'task_completed')
+- `entity_type`: Type of entity affected (e.g., 'project', 'task', 'user')
+- `entity_id`: ID of the affected entity
+- `description`: Human-readable description
+- `metadata`: JSONB field for additional data
+- `company_id`, `project_id`, `task_id`: References for filtering
+- `created_at`: Timestamp of the action
+
+### Notes
+
+- The table includes a CHECK constraint to ensure valid action types
+- Indexes are created for common query patterns (by user, date, action type, etc.)
+- The migration script backfills existing data from the last 90 days
+- After running this script, the application will automatically log all new activities
+- Activity logs are retained indefinitely (no automatic cleanup)
+- The activity feed can now show activities from any time period, not just 7 days
+

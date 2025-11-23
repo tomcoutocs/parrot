@@ -19,7 +19,8 @@ import {
   Moon,
   Sun,
   Monitor,
-  Check
+  Check,
+  Home
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -51,6 +52,8 @@ interface ModernSidebarProps {
   adminView?: string
   onAdminViewChange?: (view: string) => void
   onSpaceCreated?: () => void
+  onTabChange?: (tab: string) => void
+  activeTab?: string
 }
 
 interface NavItem {
@@ -67,7 +70,9 @@ export function ModernSidebar({
   onViewModeChange, 
   adminView, 
   onAdminViewChange,
-  onSpaceCreated
+  onSpaceCreated,
+  onTabChange,
+  activeTab
 }: ModernSidebarProps) {
   const { data: session } = useSession()
   const auth = useAuth()
@@ -113,12 +118,13 @@ export function ModernSidebar({
     { id: "projects", label: "All Projects", icon: FolderKanban },
     { id: "tasks", label: "All Tasks", icon: CheckSquare },
     { id: "calendar", label: "Calendar", icon: Calendar },
-    { id: "documents", label: "Documents", icon: FileText },
+    { id: "all-users", label: "All Users", icon: Users },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "team", label: "Team", icon: Users },
   ]
 
   const bottomNavigation: NavItem[] = [
+    { id: "dashboard", label: "Dashboard", icon: Home },
     { id: "settings", label: "Settings", icon: Settings },
   ]
 
@@ -378,6 +384,44 @@ export function ModernSidebar({
             
             {bottomNavigation.map((item) => {
               const Icon = item.icon
+              
+              // Special handling for dashboard button
+              if (item.id === "dashboard") {
+                const isActive = activeTab === "user-dashboard"
+                const dashboardButton = (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      onTabChange?.("user-dashboard")
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${
+                      isCollapsed ? "justify-center px-2" : ""
+                    } ${
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "hover:bg-muted/50 hover:text-foreground text-muted-foreground"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    {!isCollapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
+                  </button>
+                )
+
+                if (isCollapsed) {
+                  return (
+                    <Tooltip key={item.id}>
+                      <TooltipTrigger asChild>
+                        {dashboardButton}
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>{item.label}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                }
+
+                return dashboardButton
+              }
               
               // Special handling for settings button with dropdown
               if (item.id === "settings") {

@@ -364,6 +364,7 @@ export function ProjectsOverview({ activeSpace }: ProjectsOverviewProps) {
         <CreateProjectModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
+          activeSpace={activeSpace}
           onProjectCreated={() => {
             setShowCreateModal(false)
             // Reload projects

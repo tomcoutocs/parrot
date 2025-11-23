@@ -649,13 +649,22 @@ interface ListViewProps {
 function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onManageAssignments, onQuickEdit, onTaskClick }: ListViewProps) {
   const canCreateTask = true // Allow all users to create tasks
 
-  // Group tasks by status
+  // Group tasks by status - always initialize all columns
+  // Ensure tasks is always an array
+  const tasksArray = Array.isArray(tasks) ? tasks : []
   const tasksByStatus = columns.reduce((acc, column) => {
-    acc[column.id] = tasks
+    acc[column.id] = tasksArray
       .filter(task => task.status === column.id)
       .sort((a, b) => a.position - b.position)
     return acc
   }, {} as Record<string, TaskWithDetails[]>)
+  
+  // Ensure all columns have entries (even if empty)
+  columns.forEach(column => {
+    if (!tasksByStatus[column.id]) {
+      tasksByStatus[column.id] = []
+    }
+  })
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -683,9 +692,17 @@ function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onMana
     }
   }
 
+  // Ensure columns array exists and has items
+  if (!columns || columns.length === 0) {
+    return <div className="text-center py-8 text-gray-500">No sections available</div>
+  }
+
     return (
     <div className="space-y-6">
-      {columns.map(column => (
+      {columns.map(column => {
+        // Ensure we always have a tasks array for this column
+        const columnTasks = tasksByStatus[column.id] || []
+        return (
         <div key={column.id} className="bg-white rounded-lg border">
           {/* Section Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-4 sm:px-6 py-3 border-b bg-gray-50 gap-2">
@@ -695,7 +712,7 @@ function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onMana
                 {column.title}
               </div>
               <Badge variant="secondary" className="text-xs">
-                {tasksByStatus[column.id]?.length || 0}
+                {columnTasks.length}
               </Badge>
             </div>
             {canCreateTask && (
@@ -726,56 +743,75 @@ function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onMana
               <div
                 {...provided.droppableProps}
                 ref={provided.innerRef}
-                className={`${snapshot.isDraggingOver ? 'bg-blue-50' : ''}`}
+                className={`min-h-[100px] ${snapshot.isDraggingOver ? 'bg-blue-50' : ''}`}
               >
-                {tasksByStatus[column.id]?.map((task, index) => (
-                  <TaskRow 
-                    key={task.id} 
-                    task={task} 
-                    index={index}
-                    userRole={userRole}
-                    onEditTask={onEditTask}
-                    onDeleteTask={onDeleteTask}
-                    onManageAssignments={onManageAssignments}
-                    onQuickEdit={onQuickEdit}
-                    onTaskClick={onTaskClick}
-                  />
-                ))}
-                
-                {/* Add Task Row */}
-                {canCreateTask && (
-                  <div className="hidden sm:grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer transition-colors">
-                    <div className="col-span-6 flex items-center space-x-3">
+                {columnTasks.length === 0 ? (
+                  <div className="py-4 text-center text-gray-500">
+                    <div className="text-sm">No tasks in {column.title.toLowerCase()}</div>
+                    {canCreateTask && (
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => onAddTask(column.id as Task['status'])}
-                        className="h-8 px-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                        className="mt-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Add Task
                       </Button>
-                    </div>
-                    <div className="col-span-2"></div>
-                    <div className="col-span-2"></div>
-                    <div className="col-span-1"></div>
-                    <div className="col-span-1"></div>
+                    )}
                   </div>
-                )}
-                
-                {/* Mobile Add Task Button */}
-                {canCreateTask && (
-                  <div className="sm:hidden p-4 border-b">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onAddTask(column.id as Task['status'])}
-                      className="w-full h-10 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Task
-                    </Button>
-                  </div>
+                ) : (
+                  <>
+                    {columnTasks.map((task, index) => (
+                      <TaskRow 
+                        key={task.id} 
+                        task={task} 
+                        index={index}
+                        userRole={userRole}
+                        onEditTask={onEditTask}
+                        onDeleteTask={onDeleteTask}
+                        onManageAssignments={onManageAssignments}
+                        onQuickEdit={onQuickEdit}
+                        onTaskClick={onTaskClick}
+                      />
+                    ))}
+                    
+                    {/* Add Task Row */}
+                    {canCreateTask && (
+                      <div className="hidden sm:grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-gray-50 cursor-pointer transition-colors">
+                        <div className="col-span-6 flex items-center space-x-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onAddTask(column.id as Task['status'])}
+                            className="h-8 px-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Task
+                          </Button>
+                        </div>
+                        <div className="col-span-2"></div>
+                        <div className="col-span-2"></div>
+                        <div className="col-span-1"></div>
+                        <div className="col-span-1"></div>
+                      </div>
+                    )}
+                    
+                    {/* Mobile Add Task Button */}
+                    {canCreateTask && (
+                      <div className="sm:hidden p-4 border-b">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onAddTask(column.id as Task['status'])}
+                          className="w-full h-10 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Task
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
                 
                 {provided.placeholder}
@@ -783,7 +819,8 @@ function ListView({ tasks, userRole, onAddTask, onEditTask, onDeleteTask, onMana
             )}
           </Droppable>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
   }
@@ -1554,7 +1591,7 @@ export default function ProjectsTab({
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
         <ListView
-          tasks={projectTasks}
+          tasks={projectTasks || []}
           userRole={userRole}
           onAddTask={handleAddTask}
           onEditTask={handleEditTask}
@@ -1570,6 +1607,7 @@ export default function ProjectsTab({
       <CreateProjectModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
+        activeSpace={currentSpaceId}
         onProjectCreated={handleProjectCreated}
       />
 

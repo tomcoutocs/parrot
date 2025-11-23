@@ -408,6 +408,7 @@ export function ModernProjectsTab({ activeSpace }: ModernProjectsTabProps) {
       <CreateProjectModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
+        activeSpace={activeSpace}
         onProjectCreated={handleProjectCreated}
       />
 
