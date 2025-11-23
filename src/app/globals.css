@@ -233,6 +233,66 @@
   padding-left: 0.25rem;
 }
 
+/* Task list styling - remove bullets, show only checkboxes, maintain same indentation as bullet lists */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  list-style: none;
+  padding-left: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.ProseMirror ul[data-type="taskList"] li::marker {
+  display: none;
+  content: none;
+}
+
+.ProseMirror li[data-type="taskItem"] {
+  list-style: none;
+  padding-left: 0.25rem;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: row;
+}
+
+.ProseMirror li[data-type="taskItem"]::marker {
+  display: none;
+  content: none;
+}
+
+.ProseMirror li[data-type="taskItem"] > label {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: row;
+  width: 100%;
+  cursor: pointer;
+  gap: 0.5rem;
+}
+
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"] {
+  margin-right: 0;
+  margin-top: 0.25rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.ProseMirror li[data-type="taskItem"] > div,
+.ProseMirror li[data-type="taskItem"] > label > div {
+  flex: 1;
+  min-width: 0;
+  display: inline;
+}
+
+.ProseMirror li[data-type="taskItem"] p {
+  display: inline;
+  margin: 0;
+}
+
 /* Dark mode list styling - ensure bullets and numbers are visible */
 .dark .ProseMirror ul,
 .dark .ProseMirror ol {
@@ -257,6 +317,69 @@
 
 .dark .ProseMirror li {
   color: oklch(var(--foreground));
+}
+
+/* Dark mode task list styling - remove bullets, maintain same indentation as bullet lists */
+.dark .ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+  color: oklch(var(--foreground));
+}
+
+.dark .ProseMirror ul[data-type="taskList"] li {
+  list-style: none;
+  padding-left: 0.25rem;
+  margin-bottom: 0.25rem;
+  color: oklch(var(--foreground));
+}
+
+.dark .ProseMirror ul[data-type="taskList"] li::marker {
+  display: none;
+  content: none;
+}
+
+.dark .ProseMirror li[data-type="taskItem"] {
+  list-style: none;
+  padding-left: 0.25rem;
+  color: oklch(var(--foreground));
+  display: flex;
+  align-items: flex-start;
+  flex-direction: row;
+}
+
+.dark .ProseMirror li[data-type="taskItem"]::marker {
+  display: none;
+  content: none;
+}
+
+.dark .ProseMirror li[data-type="taskItem"] > label {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: row;
+  width: 100%;
+  cursor: pointer;
+  gap: 0.5rem;
+}
+
+.dark .ProseMirror li[data-type="taskItem"] input[type="checkbox"] {
+  margin-right: 0;
+  margin-top: 0.25rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.dark .ProseMirror li[data-type="taskItem"] > div,
+.dark .ProseMirror li[data-type="taskItem"] > label > div {
+  flex: 1;
+  min-width: 0;
+  display: inline;
+}
+
+.dark .ProseMirror li[data-type="taskItem"] p {
+  display: inline;
+  margin: 0;
 }
 
 .ProseMirror blockquote {
@@ -359,6 +482,112 @@
   background: #374151 !important;
   color: oklch(var(--foreground)) !important;
   border-color: #4b5563 !important;
+}
+
+/* Table controls - add row/column buttons and delete */
+.ProseMirror table {
+  position: relative;
+}
+
+.table-controls-wrapper {
+  position: relative;
+  display: inline-block;
+  margin: 1rem 0;
+}
+
+.table-bottom-controls {
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  z-index: 10;
+}
+
+.table-bottom-controls button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid oklch(var(--border));
+  background: oklch(var(--background));
+  color: oklch(var(--foreground));
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 1;
+  pointer-events: auto;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.table-bottom-controls button:hover {
+  background: oklch(var(--muted));
+  border-color: oklch(var(--primary));
+}
+
+.table-right-controls {
+  position: absolute;
+  right: -32px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 10;
+}
+
+.table-right-controls button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid oklch(var(--border));
+  background: oklch(var(--background));
+  color: oklch(var(--foreground));
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 1;
+  pointer-events: auto;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.table-right-controls button:hover {
+  background: oklch(var(--muted));
+  border-color: oklch(var(--primary));
+}
+
+.table-delete-button {
+  position: absolute;
+  top: -32px;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid oklch(var(--destructive));
+  background: oklch(var(--background));
+  color: oklch(var(--destructive));
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 1;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.table-delete-button:hover {
+  background: oklch(var(--destructive));
+  color: oklch(var(--destructive-foreground));
 }
 
 /* Custom scrollbar styles */

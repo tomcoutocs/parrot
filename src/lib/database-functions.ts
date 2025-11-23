@@ -68,7 +68,6 @@ async function setAppContext() {
       })
     } catch (error) {
       // Silent error handling - if RPC function doesn't exist, we'll fall back
-      console.warn('set_user_context RPC function not available, falling back to basic auth')
     }
   }
 }
@@ -103,7 +102,6 @@ export async function logActivity(data: {
       })
   } catch (error) {
     // Silent error handling - don't fail operations if logging fails
-    console.error('Error logging activity:', error)
   }
 }
 
@@ -389,7 +387,6 @@ export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'upd
 
 export async function createProject(projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>, userId: string): Promise<{ success: boolean; data?: Project; error?: string }> {
   if (!supabase) {
-    console.error('Supabase not configured - missing environment variables')
     return { 
       success: false, 
       error: 'Database not configured. Please check your Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY).' 
@@ -409,9 +406,6 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
       updated_at: new Date().toISOString()
     }
 
-    console.log('Inserting project data:', insertData)
-    console.log('Supabase client:', supabase)
-
     // Validate required fields
     if (!insertData.name || insertData.name.trim() === '') {
       return { success: false, error: 'Project name is required' }
@@ -423,35 +417,19 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
       return { success: false, error: 'Created by user ID is required' }
     }
 
-    console.log('Data validation passed')
-
     const { data, error } = await supabase
       .from('projects')
       .insert(insertData)
       .select()
       .single()
 
-    console.log('Supabase response - data:', data)
-    console.log('Supabase response - error:', error)
-    console.log('Supabase response - error JSON:', JSON.stringify(error, null, 2))
-
     if (error) {
-      console.error('Supabase error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: (error as any).code
-      })
-      console.error('Full error object:', JSON.stringify(error, null, 2))
       return { success: false, error: error.message || 'Failed to create project' }
     }
 
     if (!data) {
-      console.error('No data returned from Supabase')
       return { success: false, error: 'No data returned from database' }
     }
-
-    console.log('Project created successfully:', data)
     
     // Log activity to activity_logs
     await logActivity({
@@ -467,10 +445,6 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
     
     return { success: true, data }
   } catch (error) {
-    console.error('Unexpected error creating project:', error)
-    console.error('Error type:', typeof error)
-    console.error('Error constructor:', error?.constructor?.name)
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available')
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -657,7 +631,6 @@ export async function addProjectManager(projectId: string, userId: string, role:
 
 export async function removeProjectManager(projectId: string, userId: string, currentUserId?: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
@@ -671,7 +644,6 @@ export async function removeProjectManager(projectId: string, userId: string, cu
         .single()
       
       if (userError || !userData || userData.role !== 'admin') {
-        console.error('Access denied: User is not admin')
         return { success: false, error: 'Access denied: Only admin users can manage project users' }
       }
     }
@@ -683,26 +655,21 @@ export async function removeProjectManager(projectId: string, userId: string, cu
       .eq('user_id', userId)
 
     if (error) {
-      console.error('Error removing project manager:', error)
       return { success: false, error: error.message || 'Failed to remove project manager' }
     }
 
     return { success: true }
   } catch (error) {
-    console.error('Error removing project manager:', error)
     return { success: false, error: 'An unexpected error occurred' }
   }
 }
 
 export async function addProjectMember(projectId: string, userId: string, role: string = 'member', currentUserId?: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Adding project member:', { projectId, userId, role, currentUserId })
-    
     // Check if current user is admin (application-level security)
     if (currentUserId) {
       const { data: userData, error: userError } = await supabase
@@ -712,7 +679,6 @@ export async function addProjectMember(projectId: string, userId: string, role: 
         .single()
       
       if (userError || !userData || userData.role !== 'admin') {
-        console.error('Access denied: User is not admin')
         return { success: false, error: 'Access denied: Only admin users can manage project users' }
       }
     }
@@ -726,21 +692,17 @@ export async function addProjectMember(projectId: string, userId: string, role: 
       })
 
     if (error) {
-      console.error('Error adding project member:', error)
       return { success: false, error: error.message || 'Failed to add project member' }
     }
 
-    console.log('Project member added successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error adding project member:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
 export async function removeProjectMember(projectId: string, userId: string, currentUserId?: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
@@ -754,7 +716,6 @@ export async function removeProjectMember(projectId: string, userId: string, cur
         .single()
       
       if (userError || !userData || userData.role !== 'admin') {
-        console.error('Access denied: User is not admin')
         return { success: false, error: 'Access denied: Only admin users can manage project users' }
         }
     }
@@ -766,25 +727,21 @@ export async function removeProjectMember(projectId: string, userId: string, cur
       .eq('user_id', userId)
 
     if (error) {
-      console.error('Error removing project member:', error)
       return { success: false, error: error.message || 'Failed to remove project member' }
     }
 
     return { success: true }
   } catch (error) {
-    console.error('Error removing project member:', error)
     return { success: false, error: 'An unexpected error occurred' }
   }
 }
 
 export async function updateTask(taskId: string, taskData: Partial<Task>, userId?: string): Promise<{ success: boolean; data?: Task; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Updating task:', { taskId, taskData })
     
     // Get current task data to compare changes
     const { data: currentTask } = await supabase
@@ -808,7 +765,6 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
       .single()
 
     if (error) {
-      console.error('Error updating task:', error)
       return { success: false, error: error.message || 'Failed to update task' }
     }
 
@@ -835,7 +791,7 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
           'status',
           currentTask.status,
           taskData.status
-        ).catch(err => console.error('Failed to create status change notification:', err))
+        ).catch(() => {})
       }
 
       // Notify on priority change
@@ -848,7 +804,7 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
           'priority',
           currentTask.priority,
           taskData.priority
-        ).catch(err => console.error('Failed to create priority change notification:', err))
+        ).catch(() => {})
       }
 
       // Notify on due date change
@@ -861,7 +817,7 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
           'due_date',
           currentTask.due_date,
           taskData.due_date
-        ).catch(err => console.error('Failed to create due date change notification:', err))
+        ).catch(() => {})
       }
 
       // Notify on title change
@@ -874,41 +830,33 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
           'title',
           currentTask.title,
           taskData.title
-        ).catch(err => console.error('Failed to create title change notification:', err))
+        ).catch(() => {})
       }
     }
 
-    console.log('Task updated successfully:', data)
     return { success: true, data }
   } catch (error) {
-    console.error('Error updating task:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
 export async function deleteTask(taskId: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Deleting task:', taskId)
-    
     const { error } = await supabase
       .from('tasks')
       .delete()
       .eq('id', taskId)
 
     if (error) {
-      console.error('Error deleting task:', error)
       return { success: false, error: error.message || 'Failed to delete task' }
     }
 
-    console.log('Task deleted successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error deleting task:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -924,37 +872,29 @@ interface TaskAssignment {
 
 export async function getTaskAssignments(taskId: string): Promise<{ success: boolean; data?: TaskAssignment[]; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Fetching task assignments for task:', taskId)
-    
     const { data, error } = await supabase
       .rpc('get_task_assignments', { task_id_param: taskId })
 
     if (error) {
-      console.error('Error fetching task assignments:', error)
       return { success: false, error: error.message || 'Failed to fetch task assignments' }
     }
 
-    console.log('Task assignments fetched successfully:', data)
     return { success: true, data }
   } catch (error) {
-    console.error('Error fetching task assignments:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
 export async function assignUsersToTask(taskId: string, userIds: string[], assignedBy?: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Assigning users to task:', { taskId, userIds, assignedBy })
     
     // Get current user ID from localStorage if not provided
     let currentUserId = assignedBy
@@ -997,7 +937,6 @@ export async function assignUsersToTask(taskId: string, userIds: string[], assig
       })
 
     if (error) {
-      console.error('Error assigning users to task:', error)
       return { success: false, error: error.message || 'Failed to assign users to task' }
     }
 
@@ -1006,52 +945,31 @@ export async function assignUsersToTask(taskId: string, userIds: string[], assig
       const { createTaskAssignmentNotification } = await import('./notification-functions')
       const projectName = (task.projects as { name?: string })?.name
       
-      console.log('Creating notifications for assigned users:', {
-        userIds,
-        currentUserId,
-        taskTitle: task.title,
-        assignedByName
-      })
-      
       for (const userId of userIds) {
         // Create notification for all assigned users, including self-assignments
-        console.log(`Creating notification for user ${userId} (assigned by ${currentUserId})`)
-        const result = await createTaskAssignmentNotification(
+        await createTaskAssignmentNotification(
           taskId,
           task.title,
           userId,
           assignedByName,
           projectName,
           currentUserId // Pass the assigner's ID
-        )
-        
-        if (result.success) {
-          console.log(`Notification created successfully for user ${userId}`)
-        } else {
-          console.error(`Failed to create notification for user ${userId}:`, result.error)
-        }
+        ).catch(() => {})
       }
-    } else {
-      console.warn('Cannot create notifications: task data not found')
     }
 
-    console.log('Users assigned to task successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error assigning users to task:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
 export async function removeUsersFromTask(taskId: string, userIds: string[]): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Removing users from task:', { taskId, userIds })
-    
     const { error } = await supabase
       .rpc('remove_users_from_task', { 
         task_id_param: taskId, 
@@ -1059,14 +977,11 @@ export async function removeUsersFromTask(taskId: string, userIds: string[]): Pr
       })
 
     if (error) {
-      console.error('Error removing users from task:', error)
       return { success: false, error: error.message || 'Failed to remove users from task' }
     }
 
-    console.log('Users removed from task successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error removing users from task:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -1082,53 +997,39 @@ export async function removeUsersFromTask(taskId: string, userIds: string[]): Pr
 
 export async function markAllNotificationsAsRead(): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Marking all notifications as read')
-    
     const { error } = await supabase
       .rpc('mark_all_notifications_read')
 
     if (error) {
-      console.error('Error marking all notifications as read:', error)
       return { success: false, error: error.message || 'Failed to mark all notifications as read' }
     }
 
-    console.log('All notifications marked as read successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error marking all notifications as read:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
 export async function createTestNotification(userId?: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Creating test notification')
-    console.log('User ID parameter:', userId)
-    
     // Get the current user ID - either from parameter or from localStorage
     let currentUserId = userId
     if (!currentUserId) {
-      console.log('No user ID provided, checking localStorage...')
       const currentUser = localStorage.getItem('auth-user')
-      console.log('localStorage auth-user:', currentUser)
       if (!currentUser) {
         return { success: false, error: 'User not authenticated' }
       }
       const user = JSON.parse(currentUser)
       currentUserId = user.id
     }
-    
-    console.log('Creating test notification for user:', currentUserId)
 
     // Try direct insert first, then fallback to RPC
     const { error: insertError } = await supabase
@@ -1141,8 +1042,6 @@ export async function createTestNotification(userId?: string): Promise<{ success
       })
 
     if (insertError) {
-      console.log('Direct insert failed, trying RPC function:', insertError)
-      
       // Fallback to RPC function
       const { error: rpcError } = await supabase
         .rpc('create_notification', {
@@ -1153,15 +1052,12 @@ export async function createTestNotification(userId?: string): Promise<{ success
         })
 
       if (rpcError) {
-        console.error('Error creating test notification:', rpcError)
         return { success: false, error: rpcError.message || 'Failed to create test notification' }
       }
     }
 
-    console.log('Test notification created successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error creating test notification:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -1169,13 +1065,10 @@ export async function createTestNotification(userId?: string): Promise<{ success
 // Test function to simulate task assignment and trigger notification
 export async function testTaskAssignmentNotification(targetUserId: string, taskId: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Testing task assignment notification for user:', targetUserId, 'task:', taskId)
-    
     // Instead of inserting into task_assignments (which has RLS issues),
     // let's create a notification directly to simulate the trigger
     const { error } = await supabase
@@ -1190,14 +1083,11 @@ export async function testTaskAssignmentNotification(targetUserId: string, taskI
       })
 
     if (error) {
-      console.error('Error creating test notification:', error)
       return { success: false, error: error.message || 'Failed to create test notification' }
     }
 
-    console.log('Test notification created successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error testing task assignment notification:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -1205,13 +1095,10 @@ export async function testTaskAssignmentNotification(targetUserId: string, taskI
 // Function to test actual task assignment (when RLS is fixed)
 export async function testActualTaskAssignment(targetUserId: string, taskId: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Testing actual task assignment for user:', targetUserId, 'task:', taskId)
-    
     // Try to insert into task_assignments to test the actual trigger
     const { error } = await supabase
       .from('task_assignments')
@@ -1223,14 +1110,11 @@ export async function testActualTaskAssignment(targetUserId: string, taskId: str
       })
 
     if (error) {
-      console.error('Error creating actual task assignment:', error)
       return { success: false, error: error.message || 'Failed to create actual task assignment' }
     }
 
-    console.log('Actual task assignment created successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error testing actual task assignment:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -1248,13 +1132,10 @@ export async function createUser(userData: {
   primary_company_id?: string // For internal users
 }): Promise<{ success: boolean; data?: User; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Creating user:', userData)
-    console.log('Tab permissions to save:', userData.tab_permissions)
     await setAppContext()
     
     // Hash the password using a simple approach (in production, use bcrypt)
@@ -1292,15 +1173,11 @@ export async function createUser(userData: {
       .single()
 
     if (error) {
-      console.error('Error creating user:', error)
       return { success: false, error: error.message || 'Failed to create user' }
     }
 
     // If this is an internal user, admin, or manager and company_ids are provided, create company assignments
     if ((data.role === 'internal' || data.role === 'admin' || data.role === 'manager') && userData.company_ids && userData.company_ids.length > 0) {
-      console.log('Processing company assignments for new user:', data.id, 'role:', data.role)
-      console.log('Company IDs to assign:', userData.company_ids)
-      
       // Check if the table exists first
       const { error: tableCheckError } = await supabase
         .from('internal_user_companies')
@@ -1308,13 +1185,8 @@ export async function createUser(userData: {
         .limit(1)
       
       if (tableCheckError) {
-        console.error('Table check failed:', tableCheckError)
-        console.error('This suggests the internal_user_companies table does not exist')
-        console.error('User creation will continue, but company assignments will fail')
         return { success: false, error: 'Internal user companies table not found. Please run the database migration first.' }
       }
-      
-      console.log('Table exists, proceeding with company assignments')
       
       const companyAssignments = userData.company_ids.map((companyId, index) => ({
         user_id: data.id,
@@ -1328,22 +1200,9 @@ export async function createUser(userData: {
         .insert(companyAssignments)
 
       if (assignmentError) {
-        console.error('Error creating company assignments:', assignmentError)
-        console.error('Assignment error details:', {
-          message: assignmentError.message,
-          details: assignmentError.details,
-          hint: assignmentError.hint,
-          code: assignmentError.code
-        })
-        console.error('Full error object:', JSON.stringify(assignmentError, null, 2))
-        console.error('Error type:', typeof assignmentError)
-        console.error('Error keys:', Object.keys(assignmentError || {}))
-        // Don't fail the user creation, just log the error
+        // Don't fail the user creation, just continue silently
       }
     }
-
-    console.log('User created successfully:', data)
-    console.log('Created user tab permissions:', data.tab_permissions)
 
     // Log activity to activity_logs
     await logActivity({
@@ -1362,7 +1221,6 @@ export async function createUser(userData: {
 
     return { success: true, data }
   } catch (error) {
-    console.error('Error creating user:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
@@ -1379,13 +1237,10 @@ export async function updateUser(userId: string, userData: {
   primary_company_id?: string // For internal users
 }): Promise<{ success: boolean; data?: User; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Updating user:', userId, userData)
-    console.log('Tab permissions to save:', userData.tab_permissions)
     await setAppContext()
     
     // Prepare update data, excluding tab_permissions if column doesn't exist
@@ -1421,15 +1276,11 @@ export async function updateUser(userId: string, userData: {
       .single()
 
     if (error) {
-      console.error('Error updating user:', error)
       return { success: false, error: error.message || 'Failed to update user' }
     }
 
     // If this is an internal user, admin, or manager and company_ids are provided, update company assignments
     if ((data.role === 'internal' || data.role === 'admin' || data.role === 'manager') && userData.company_ids) {
-      console.log('Processing company assignments for user:', userId, 'role:', data.role)
-      console.log('Company IDs to assign:', userData.company_ids)
-      
       // Check if the table exists first
       const { error: tableCheckError } = await supabase
         .from('internal_user_companies')
@@ -1437,12 +1288,8 @@ export async function updateUser(userId: string, userData: {
         .limit(1)
       
       if (tableCheckError) {
-        console.error('Table check failed:', tableCheckError)
-        console.error('This suggests the internal_user_companies table does not exist')
         return { success: false, error: 'Internal user companies table not found. Please run the database migration first.' }
       }
-      
-      console.log('Table exists, proceeding with company assignments')
       
       // First, remove existing assignments
       const { error: deleteError } = await supabase
@@ -1451,7 +1298,7 @@ export async function updateUser(userId: string, userData: {
         .eq('user_id', userId)
 
       if (deleteError) {
-        console.error('Error deleting existing company assignments:', deleteError)
+        // Error deleting existing company assignments - continue anyway
       }
 
       // Then, create new assignments
@@ -1462,32 +1309,16 @@ export async function updateUser(userId: string, userData: {
           is_primary: companyId === userData.primary_company_id || (index === 0 && !userData.primary_company_id),
           assigned_by: userData.assigned_manager_id || null
         }))
-
-        console.log('Attempting to insert company assignments:', companyAssignments)
-        console.log('Target table: internal_user_companies')
         
         const { error: assignmentError } = await supabase
           .from('internal_user_companies')
           .insert(companyAssignments)
 
         if (assignmentError) {
-          console.error('Error creating company assignments:', assignmentError)
-          console.error('Assignment error details:', {
-            message: assignmentError.message,
-            details: assignmentError.details,
-            hint: assignmentError.hint,
-            code: assignmentError.code
-          })
-          console.error('Full error object:', JSON.stringify(assignmentError, null, 2))
-          console.error('Error type:', typeof assignmentError)
-          console.error('Error keys:', Object.keys(assignmentError || {}))
-          // Don't fail the user update, just log the error
+          // Don't fail the user update, just continue silently
         }
       }
     }
-
-    console.log('User updated successfully:', data)
-    console.log('Updated user tab permissions:', data.tab_permissions)
     
     // Log activity to activity_logs
     const currentUser = getCurrentUser()
@@ -1509,19 +1340,16 @@ export async function updateUser(userId: string, userData: {
     
     return { success: true, data }
   } catch (error) {
-    console.error('Error updating user:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
 export async function deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Deleting user:', userId)
     await setAppContext()
     
     // Get user info before deleting for activity log
@@ -1537,7 +1365,6 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
       .eq('id', userId)
 
     if (error) {
-      console.error('Error deleting user:', error)
       return { success: false, error: error.message || 'Failed to delete user' }
     }
 
@@ -1558,23 +1385,18 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
       })
     }
 
-    console.log('User deleted successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error deleting user:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
 export async function fetchUsers(): Promise<User[]> {
   if (!supabase) {
-    console.warn('Supabase not configured')
     return []
   }
 
   try {
-    console.log('Fetching users from Supabase...')
-    
     // Try to fetch with tab_permissions first
     const resultWithPermissions = await supabase
       .from('users')
@@ -1583,7 +1405,6 @@ export async function fetchUsers(): Promise<User[]> {
       .order('full_name', { ascending: true })
     
     if (resultWithPermissions.error) {
-      console.log('Error fetching with tab_permissions, trying without:', resultWithPermissions.error)
       // Fallback to fetch without tab_permissions if column doesn't exist
       const resultWithoutPermissions = await supabase
         .from('users')
@@ -1592,7 +1413,6 @@ export async function fetchUsers(): Promise<User[]> {
         .order('full_name', { ascending: true })
       
       if (resultWithoutPermissions.error) {
-        console.error('Error fetching users:', resultWithoutPermissions.error)
         return []
       }
 
@@ -1602,7 +1422,6 @@ export async function fetchUsers(): Promise<User[]> {
         tab_permissions: []
       }))
       
-      console.log('Successfully fetched users without tab_permissions')
       return users
     }
 
@@ -1611,8 +1430,6 @@ export async function fetchUsers(): Promise<User[]> {
       ...user,
       tab_permissions: user.tab_permissions || []
     }))
-    
-    console.log('Successfully fetched users with tab_permissions')
     console.log('Sample user tab permissions:', users.slice(0, 2).map(u => ({ email: u.email, tab_permissions: u.tab_permissions })))
     return users
   } catch (error) {
@@ -3824,13 +3641,11 @@ export async function createUserInvitation(invitationData: {
       .single()
 
     if (error) {
-      console.error('Error creating user invitation:', error)
       return { success: false, error: error.message || 'Failed to create invitation' }
     }
 
     return { success: true, data }
   } catch (error) {
-    console.error('Error creating user invitation:', error)
     return { success: false, error: 'Failed to create invitation' }
   }
 }

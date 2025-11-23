@@ -492,7 +492,6 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   }
 
   const handleTaskUpdate = async (taskId: string, updates: Partial<DesignTask>) => {
-    console.log("Updating task", taskId, updates)
     
     if (!session?.user?.id) return
     
@@ -868,11 +867,9 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
 
   const handleEditTask = (task: TaskWithDetails) => {
     // TODO: Open edit task modal
-    console.log("Edit task", task)
   }
 
   const handleBulkUpdate = (updates: Partial<Task>) => {
-    console.log("Bulk updating tasks", selectedTasks, updates)
     setSelectedTasks([])
     setIsSelectionMode(false)
     // TODO: Bulk update tasks in database

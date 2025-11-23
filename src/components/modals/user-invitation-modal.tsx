@@ -101,13 +101,6 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
         tab_permissions: defaultTabPermissions
       }))
 
-      console.log('🚀 Sending invitation request:', {
-        invitationCount: invitations.length,
-        selectedCompany: selectedCompany,
-        companyName: companies.find(c => c.id === selectedCompany)?.name || 'Company',
-        inviterName: session.user.name || 'Administrator'
-      })
-
       const response = await fetch('/api/invitations/bulk', {
         method: 'POST',
         headers: {
@@ -119,8 +112,6 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
           inviter_name: session.user.name || 'Administrator'
         })
       })
-
-      console.log('📡 API response status:', response.status)
 
       const data = await response.json()
 

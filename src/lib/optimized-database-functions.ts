@@ -27,7 +27,7 @@ async function setAppContext() {
         company_id: currentUser.companyId || null
       })
     } catch (error) {
-      console.warn('set_user_context RPC function not available, falling back to basic auth')
+      // RPC function not available, falling back to basic auth
     }
   }
 }
@@ -455,12 +455,10 @@ export async function deleteTask(taskId: string): Promise<{ success: boolean; er
     { taskId },
     async () => {
       if (!supabase) {
-        console.warn('Supabase not configured')
         return { success: false, error: 'Supabase not configured' }
       }
 
       try {
-        console.log('Deleting task:', taskId)
         
         // Get task info for cache invalidation
         const { data: task } = await supabase
@@ -475,7 +473,6 @@ export async function deleteTask(taskId: string): Promise<{ success: boolean; er
           .eq('id', taskId)
 
         if (error) {
-          console.error('Error deleting task:', error)
           return { success: false, error: error.message || 'Failed to delete task' }
         }
 
@@ -484,11 +481,8 @@ export async function deleteTask(taskId: string): Promise<{ success: boolean; er
           invalidateCache(`tasks:${task.project_id}`)
           invalidateCache(`projects:${task.project_id}`)
         }
-
-        console.log('Task deleted successfully')
         return { success: true }
       } catch (error) {
-        console.error('Error deleting task:', error)
         return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
       }
     },
@@ -529,7 +523,6 @@ export async function checkDatabaseSetup(): Promise<{
           .limit(1)
 
         if (usersError) {
-          console.error('Error checking users table:', usersError)
           return {
             usersTableExists: false,
             companiesTableExists: false,
@@ -546,7 +539,6 @@ export async function checkDatabaseSetup(): Promise<{
           .limit(1)
 
         if (companiesError) {
-          console.error('Error checking companies table:', companiesError)
           return {
             usersTableExists: true,
             companiesTableExists: false,
@@ -563,7 +555,6 @@ export async function checkDatabaseSetup(): Promise<{
           .limit(1)
 
         if (companyIdError) {
-          console.error('Error checking company_id column:', companyIdError)
           return {
             usersTableExists: true,
             companiesTableExists: true,
@@ -580,7 +571,6 @@ export async function checkDatabaseSetup(): Promise<{
           connectionWorking: true
         }
       } catch (error) {
-        console.error('Error checking database setup:', error)
         return {
           usersTableExists: false,
           companiesTableExists: false,
@@ -601,52 +591,38 @@ export async function testDatabaseConnection(): Promise<void> {
     {},
     async () => {
       if (!supabase) {
-        console.warn('Supabase not configured - running in demo mode')
         return
       }
 
       try {
-        console.log('Testing database connection...')
-        
-        // Test if tables exist
-        const { data: projectsTest, error: projectsError } = await supabase
+        // Test if tables exist (silent check)
+        await supabase
           .from('projects')
           .select('count')
           .limit(1)
         
-        console.log('Projects table test:', { data: projectsTest, error: projectsError })
-        
-        const { data: tasksTest, error: tasksError } = await supabase
+        await supabase
           .from('tasks')
           .select('count')
           .limit(1)
         
-        console.log('Tasks table test:', { data: tasksTest, error: tasksError })
-        
-        const { data: usersTest, error: usersError } = await supabase
+        await supabase
           .from('users')
           .select('count')
           .limit(1)
         
-        console.log('Users table test:', { data: usersTest, error: usersError })
-        
-        // Test multiple users tables
-        const { data: managersTest, error: managersError } = await supabase
+        await supabase
           .from('project_managers')
           .select('count')
           .limit(1)
         
-        console.log('Project managers table test:', { data: managersTest, error: managersError })
-        
-        const { data: membersTest, error: membersError } = await supabase
+        await supabase
           .from('project_members')
           .select('count')
           .limit(1)
         
-        console.log('Project members table test:', { data: membersTest, error: membersError })
-        
       } catch (error) {
-        console.error('Database connection test error:', error)
+        // Connection test failed silently
       }
     },
     'database-connection-test',

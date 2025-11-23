@@ -139,15 +139,6 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   const isAdmin = session?.user?.role === 'admin'
   const currentSpaceId = spaceParam || (!isAdmin && session?.user?.company_id ? session.user.company_id : null)
   
-  // Log for debugging
-  console.log('DocumentEditorPage render:', { 
-    documentId, 
-    isNewDocument, 
-    spaceParam, 
-    isAdmin, 
-    currentSpaceId,
-    companyId: session?.user?.company_id 
-  })
   
   // Modal states
   const [showLinkModal, setShowLinkModal] = useState(false)
@@ -213,6 +204,10 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
         heading: {
           levels: [1, 2, 3],
         },
+        bulletList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
       }),
       Placeholder.configure({
         placeholder: 'Type "/" for commands or just start typing...',
@@ -226,9 +221,16 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      TaskList,
+      TaskList.configure({
+        HTMLAttributes: {
+          class: 'task-list',
+        },
+      }),
       TaskItem.configure({
         nested: true,
+        HTMLAttributes: {
+          class: 'task-item',
+        },
       }),
       Underline,
       TextStyle,
@@ -255,6 +257,23 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
           setShowSlashMenu(false)
           setShowFloatingToolbar(false)
           return false
+        }
+        
+        // Handle Enter key in task items - ensure it creates a new task item like bullet lists
+        if (event.key === 'Enter' && !event.shiftKey) {
+          const { state } = view
+          const { selection } = state
+          const { $from } = selection
+          
+          // Check if we're in a task item
+          for (let depth = $from.depth; depth > 0; depth--) {
+            const node = $from.node(depth)
+            if (node.type.name === 'taskItem') {
+              // Let TipTap's default behavior handle Enter in task items
+              // It should create a new task item, just like bullet lists
+              return false
+            }
+          }
         }
         
         // Handle "/" command menu
@@ -585,17 +604,296 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
         setHasCalculatedPosition(false)
       }
     },
-    onCreate: ({ editor }) => {
-      console.log('Editor created:', editor)
-    },
-    onDestroy: () => {
-      console.log('Editor destroyed')
-    },
   })
-  
+
+  // Add table controls when table is selected
   useEffect(() => {
-    if (editor) {
-      console.log('Editor is ready:', editor.isEditable, editor.isEmpty)
+    if (!editor) return
+
+    const addTableControls = () => {
+      // Check if we're in a table using TipTap's isActive
+      if (!editor.isActive('table')) {
+        // Not in a table, clean up any existing wrappers
+        document.querySelectorAll('.table-controls-wrapper').forEach(el => {
+          const table = el.querySelector('table')
+          if (table && el.parentNode && el.parentNode.contains(el)) {
+            try {
+              el.parentNode.insertBefore(table, el)
+              el.remove()
+            } catch (error) {
+              // If insertBefore fails, just remove the wrapper
+              console.warn('Failed to unwrap table:', error)
+              el.remove()
+            }
+          } else {
+            el.remove()
+          }
+        })
+        return
+      }
+
+      // Get the table node from selection
+      const { selection } = editor.state
+      const { $anchor } = selection
+      
+      let tableNode = null
+      let tablePos = null
+
+      // Find the table node
+      for (let depth = $anchor.depth; depth > 0; depth--) {
+        const node = $anchor.node(depth)
+        if (node.type.name === 'table') {
+          tableNode = node
+          tablePos = $anchor.start(depth) - 1
+          break
+        }
+      }
+
+      if (!tableNode || tablePos === null) return
+
+      // Get the table DOM element
+      const view = (editor as any).view
+      const dom = view.nodeDOM(tablePos + 1)
+      if (!dom) return
+
+      const tableElement = dom instanceof HTMLElement && dom.tagName === 'TABLE' 
+        ? dom 
+        : (dom as HTMLElement).closest('table')
+      
+      if (!tableElement || !(tableElement instanceof HTMLTableElement)) return
+
+      // Check if controls already exist for this table
+      if (tableElement.parentElement?.classList.contains('table-controls-wrapper')) {
+        return
+      }
+
+      // Remove existing controls for other tables (not this one)
+      document.querySelectorAll('.table-controls-wrapper').forEach(el => {
+        const table = el.querySelector('table')
+        // Only unwrap if it's not the current table
+        if (table && table !== tableElement && el.parentNode && el.parentNode.contains(el)) {
+          try {
+            el.parentNode.insertBefore(table, el)
+            el.remove()
+          } catch (error) {
+            // If insertBefore fails, just remove the wrapper
+            console.warn('Failed to unwrap table:', error)
+            el.remove()
+          }
+        } else if (!table) {
+          // No table found, just remove wrapper
+          el.remove()
+        }
+      })
+
+      // Wrap table in controls wrapper
+      const wrapper = document.createElement('div')
+      wrapper.className = 'table-controls-wrapper'
+      
+      // Create bottom controls (add row)
+      const bottomControls = document.createElement('div')
+      bottomControls.className = 'table-bottom-controls'
+      const addRowAfterBtn = document.createElement('button')
+      addRowAfterBtn.innerHTML = '+'
+      addRowAfterBtn.title = 'Add row below'
+      addRowAfterBtn.style.fontSize = '14px'
+      addRowAfterBtn.style.fontWeight = 'bold'
+      addRowAfterBtn.style.pointerEvents = 'auto'
+      addRowAfterBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        
+        // Focus the editor view first
+        const view = (editor as any).view
+        if (view && view.dom) {
+          view.dom.focus()
+        }
+        
+        // Find the last cell and set selection to it, then run command
+        const lastRow = tableElement.rows[tableElement.rows.length - 1]
+        const lastCell = lastRow?.cells[lastRow.cells.length - 1]
+        
+        if (lastCell && view) {
+          try {
+            const cellPos = view.posAtDOM(lastCell, 0)
+            if (cellPos !== null && cellPos !== undefined && cellPos > 0) {
+              // Set selection and run command in one chain
+              editor.chain()
+                .setTextSelection(cellPos)
+                .addRowAfter()
+                .run()
+            } else {
+              // Fallback: just run command
+              editor.chain().focus().addRowAfter().run()
+            }
+          } catch (error) {
+            // Fallback: just run command
+            editor.chain().focus().addRowAfter().run()
+          }
+        } else {
+          // Fallback: just run command
+          editor.chain().focus().addRowAfter().run()
+        }
+      }, true)
+      bottomControls.appendChild(addRowAfterBtn)
+
+      // Create right controls (add column)
+      const rightControls = document.createElement('div')
+      rightControls.className = 'table-right-controls'
+      const addColAfterBtn = document.createElement('button')
+      addColAfterBtn.innerHTML = '+'
+      addColAfterBtn.title = 'Add column after'
+      addColAfterBtn.style.fontSize = '14px'
+      addColAfterBtn.style.fontWeight = 'bold'
+      addColAfterBtn.style.pointerEvents = 'auto'
+      addColAfterBtn.setAttribute('tabindex', '-1')
+      addColAfterBtn.setAttribute('type', 'button')
+      addColAfterBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        
+        // Store reference to tableElement and editor in closure
+        const currentTableElement = tableElement
+        const currentEditor = editor
+        
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          const view = (currentEditor as any).view
+          if (view && view.dom) {
+            view.dom.focus()
+          }
+          
+          // Find the last cell and set selection to it, then run command
+          const lastRow = currentTableElement.rows[currentTableElement.rows.length - 1]
+          const lastCell = lastRow?.cells[lastRow.cells.length - 1]
+          
+          if (lastCell && view) {
+            try {
+              const cellPos = view.posAtDOM(lastCell, 0)
+              if (cellPos !== null && cellPos !== undefined && cellPos > 0) {
+                // Set selection and run command in one chain
+                currentEditor.chain()
+                  .setTextSelection(cellPos)
+                  .addColumnAfter()
+                  .run()
+              } else {
+                // Fallback: just run command
+                currentEditor.chain().focus().addColumnAfter().run()
+              }
+            } catch (error) {
+              // Fallback: just run command
+              currentEditor.chain().focus().addColumnAfter().run()
+            }
+          } else {
+            // Fallback: just run command
+            currentEditor.chain().focus().addColumnAfter().run()
+          }
+        })
+      }, true)
+      rightControls.appendChild(addColAfterBtn)
+
+      // Create delete button
+      const deleteBtn = document.createElement('button')
+      deleteBtn.className = 'table-delete-button'
+      deleteBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>'
+      deleteBtn.title = 'Delete table'
+      deleteBtn.style.pointerEvents = 'auto'
+      deleteBtn.setAttribute('tabindex', '-1')
+      deleteBtn.setAttribute('type', 'button')
+      deleteBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        
+        // Store reference to tableElement and editor in closure
+        const currentTableElement = tableElement
+        const currentEditor = editor
+        
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          const view = (currentEditor as any).view
+          if (view && view.dom) {
+            view.dom.focus()
+          }
+          
+          // Find the first cell and set selection to it, then run command
+          const firstRow = currentTableElement.rows[0]
+          const firstCell = firstRow?.cells[0]
+          
+          if (firstCell && view) {
+            try {
+              const cellPos = view.posAtDOM(firstCell, 0)
+              if (cellPos !== null && cellPos !== undefined && cellPos > 0) {
+                // Set selection and run command in one chain
+                currentEditor.chain()
+                  .setTextSelection(cellPos)
+                  .deleteTable()
+                  .run()
+              } else {
+                // Fallback: just run command
+                currentEditor.chain().focus().deleteTable().run()
+              }
+            } catch (error) {
+              // Fallback: just run command
+              currentEditor.chain().focus().deleteTable().run()
+            }
+          } else {
+            // Fallback: just run command
+            currentEditor.chain().focus().deleteTable().run()
+          }
+        })
+      }, true)
+
+      // Insert wrapper
+      const parent = tableElement.parentNode
+      if (parent) {
+        parent.insertBefore(wrapper, tableElement)
+        wrapper.appendChild(tableElement)
+        wrapper.appendChild(bottomControls)
+        wrapper.appendChild(rightControls)
+        wrapper.appendChild(deleteBtn)
+      }
+    }
+
+    const handleSelectionUpdate = () => {
+      requestAnimationFrame(() => {
+        setTimeout(addTableControls, 50)
+      })
+    }
+
+    const handleUpdate = () => {
+      requestAnimationFrame(() => {
+        setTimeout(addTableControls, 50)
+      })
+    }
+
+    editor.on('selectionUpdate', handleSelectionUpdate)
+    editor.on('update', handleUpdate)
+
+    // Initial check after a short delay to ensure DOM is ready
+    setTimeout(addTableControls, 100)
+
+    return () => {
+      editor.off('selectionUpdate', handleSelectionUpdate)
+      editor.off('update', handleUpdate)
+      // Safely clean up all table wrappers
+      document.querySelectorAll('.table-controls-wrapper').forEach(el => {
+        const table = el.querySelector('table')
+        if (table && el.parentNode && el.parentNode.contains(el)) {
+          try {
+            el.parentNode.insertBefore(table, el)
+            el.remove()
+          } catch (error) {
+            // If insertBefore fails, just remove the wrapper
+            console.warn('Failed to unwrap table in cleanup:', error)
+            el.remove()
+          }
+        } else {
+          el.remove()
+        }
+      })
     }
   }, [editor])
 
@@ -729,8 +1027,6 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
 
   // Load existing document if editing
   useEffect(() => {
-    console.log('useEffect for loading document:', { isNewDocument, hasSession: !!session?.user?.id, hasEditor: !!editor })
-    
     if (!isNewDocument && session?.user?.id) {
       const loadDocument = async () => {
         setLoading(true)
@@ -786,7 +1082,6 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
       loadDocument()
     } else if (isNewDocument) {
       // For new documents, set loading to false immediately
-      console.log('Setting loading to false for new document')
       setLoading(false)
       if (session?.user) {
         setAuthor(session.user.name || session.user.email || 'Unknown')
@@ -1020,10 +1315,7 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     { icon: Redo, onClick: () => editor?.chain().focus().redo().run(), title: 'Redo (Ctrl+Y)' },
   ]
 
-  console.log('Render check:', { loading, hasEditor: !!editor, editor, isMounted })
-
   if (!isMounted) {
-    console.log('Not mounted yet, showing loading')
     return (
       <ModernDashboardLayout 
         activeTab="documents" 
@@ -1039,7 +1331,6 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   }
 
   if (loading) {
-    console.log('Rendering loading state')
     return (
       <ModernDashboardLayout 
         activeTab="documents" 
@@ -1073,8 +1364,6 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     )
   }
 
-  console.log('Rendering editor content')
-  
   const editorContent = (
     <>
       <div className="flex flex-col h-full bg-background">

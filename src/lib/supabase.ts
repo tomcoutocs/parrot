@@ -9,7 +9,6 @@ let supabaseClient = null
 
 try {
   if (!supabaseUrl.includes('placeholder') && supabaseAnonKey !== 'placeholder-key') {
-    console.log('Initializing Supabase client with URL:', supabaseUrl)
     supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
@@ -25,12 +24,8 @@ try {
         }
       }
     })
-    console.log('Supabase client initialized successfully')
-  } else {
-    console.warn('Supabase not configured - using placeholder values')
   }
 } catch (error) {
-  console.error('Failed to initialize Supabase client:', error)
   supabaseClient = null
 }
 

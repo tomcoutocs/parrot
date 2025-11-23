@@ -18,8 +18,7 @@ async function setAppContext() {
         company_id: currentUser.companyId || null
       })
     } catch (error) {
-      console.warn('set_user_context RPC function not available, falling back to basic auth')
-      // Don't throw error, just continue without setting context
+      // RPC function not available, falling back to basic auth
     }
   }
 }
@@ -78,7 +77,6 @@ export async function fetchProjectsOptimized(companyId?: string): Promise<Projec
     
     return transformedData
   } catch (error) {
-    console.error('Error fetching projects:', error)
     return []
   }
 }
@@ -154,7 +152,6 @@ export async function fetchTasksOptimized(projectId?: string): Promise<TaskWithD
     
     return transformedData
   } catch (error) {
-    console.error('Error fetching tasks:', error)
     return []
   }
 }
@@ -172,7 +169,6 @@ export async function fetchUsersOptimized(): Promise<User[]> {
     if (error) return []
     return data || []
   } catch (error) {
-    console.error('Error fetching users:', error)
     return []
   }
 }
@@ -190,7 +186,6 @@ export async function fetchCompaniesOptimized(): Promise<Company[]> {
     if (error) return []
     return data || []
   } catch (error) {
-    console.error('Error fetching companies:', error)
     return []
   }
 }
@@ -208,7 +203,6 @@ export async function fetchServicesOptimized(): Promise<Service[]> {
     if (error) return []
     return data || []
   } catch (error) {
-    console.error('Error fetching services:', error)
     return []
   }
 }
@@ -226,7 +220,6 @@ export async function fetchFormsOptimized(): Promise<Form[]> {
     if (error) return []
     return data || []
   } catch (error) {
-    console.error('Error fetching forms:', error)
     return []
   }
 }
@@ -254,32 +247,28 @@ export async function loadDashboardData(userRole: string, companyId?: string) {
 // Simplified subscription management (disabled for now)
 export function subscribeToTasksOptimized(projectId: string, callback: (tasks: TaskWithDetails[]) => void) {
   // Temporarily disabled to fix performance issues
-  console.warn('Real-time subscriptions temporarily disabled for performance')
   return {
     unsubscribe: () => {
-      console.warn('Subscription cleanup not needed - subscriptions disabled')
+      // Subscription cleanup not needed
     }
   }
 }
 
 export function subscribeToProjectsOptimized(callback: (projects: ProjectWithDetails[]) => void) {
   // Temporarily disabled to fix performance issues
-  console.warn('Real-time subscriptions temporarily disabled for performance')
   return {
     unsubscribe: () => {
-      console.warn('Subscription cleanup not needed - subscriptions disabled')
+      // Subscription cleanup not needed
     }
   }
 }
 
 export function cleanupSubscriptions() {
   // Temporarily disabled
-  console.warn('Subscription cleanup temporarily disabled')
 }
 
 export function invalidateProjectCache() {
   // Temporarily disabled
-  console.warn('Cache invalidation temporarily disabled')
 }
 
 // Fetch company events for calendar
@@ -304,13 +293,11 @@ export async function fetchCompanyEvents(companyId: string): Promise<Array<{
       .order('start_date', { ascending: true })
 
     if (error) {
-      console.error('Error fetching company events:', error)
       return []
     }
 
     return data || []
   } catch (error) {
-    console.error('Error fetching company events:', error)
     return []
   }
 }
@@ -330,11 +317,9 @@ export async function updateTaskPosition(taskId: string, position: number, statu
       .eq('id', taskId)
 
     if (error) {
-      console.error('Error updating task position:', error)
       throw error
     }
   } catch (error) {
-    console.error('Error updating task position:', error)
     throw error
   }
 }
@@ -350,13 +335,11 @@ export async function testDatabaseConnection() {
       .limit(1)
     
     if (error) {
-      console.error('Database connection test failed:', error)
       return false
     }
     
     return true
   } catch (error) {
-    console.error('Database connection test failed:', error)
     return false
   }
 }
@@ -373,13 +356,11 @@ export async function fetchDashboardWidgets(): Promise<DashboardWidget[]> {
       .order('name', { ascending: true })
 
     if (error) {
-      console.error('Error fetching dashboard widgets:', error)
       return []
     }
 
     return data || []
   } catch (error) {
-    console.error('Error fetching dashboard widgets:', error)
     return []
   }
 }
@@ -400,13 +381,11 @@ export async function fetchSpaceDashboardConfig(companyId: string): Promise<Spac
       .order('position', { ascending: true })
 
     if (error) {
-      console.error('Error fetching space dashboard config:', error)
       return []
     }
 
     return data || []
   } catch (error) {
-    console.error('Error fetching space dashboard config:', error)
     return []
   }
 }
@@ -455,7 +434,6 @@ export async function saveSpaceDashboardConfig(
 
     return { success: true }
   } catch (error) {
-    console.error('Error saving space dashboard config:', error)
     return { success: false, error: 'Failed to save dashboard configuration' }
   }
 }
@@ -477,13 +455,11 @@ export async function fetchDashboardNotes(companyId: string): Promise<DashboardN
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching dashboard notes:', error)
       return []
     }
 
     return data || []
   } catch (error) {
-    console.error('Error fetching dashboard notes:', error)
     return []
   }
 }
@@ -520,7 +496,6 @@ export async function createDashboardNote(
 
     return { success: true, data }
   } catch (error) {
-    console.error('Error creating dashboard note:', error)
     return { success: false, error: 'Failed to create note' }
   }
 }
@@ -551,7 +526,6 @@ export async function updateDashboardNote(
 
     return { success: true }
   } catch (error) {
-    console.error('Error updating dashboard note:', error)
     return { success: false, error: 'Failed to update note' }
   }
 }
@@ -574,7 +548,6 @@ export async function deleteDashboardNote(noteId: string): Promise<{ success: bo
 
     return { success: true }
   } catch (error) {
-    console.error('Error deleting dashboard note:', error)
     return { success: false, error: 'Failed to delete note' }
   }
 }
@@ -595,13 +568,11 @@ export async function fetchDashboardLinks(companyId: string): Promise<DashboardL
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching dashboard links:', error)
       return []
     }
 
     return data || []
   } catch (error) {
-    console.error('Error fetching dashboard links:', error)
     return []
   }
 }
@@ -640,7 +611,6 @@ export async function createDashboardLink(
 
     return { success: true, data }
   } catch (error) {
-    console.error('Error creating dashboard link:', error)
     return { success: false, error: 'Failed to create link' }
   }
 }
@@ -666,7 +636,6 @@ export async function updateDashboardLink(
 
     return { success: true }
   } catch (error) {
-    console.error('Error updating dashboard link:', error)
     return { success: false, error: 'Failed to update link' }
   }
 }
@@ -689,7 +658,6 @@ export async function deleteDashboardLink(linkId: string): Promise<{ success: bo
 
     return { success: true }
   } catch (error) {
-    console.error('Error deleting dashboard link:', error)
     return { success: false, error: 'Failed to delete link' }
   }
 }

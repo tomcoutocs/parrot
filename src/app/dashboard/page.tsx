@@ -49,8 +49,6 @@ function DashboardContent() {
     const companyParam = searchParams.get('company')
     const spaceParam = searchParams.get('space')
     
-    console.log('Dashboard URL params - tab:', tabParam, 'company:', companyParam, 'space:', spaceParam)
-    
     // For non-admin users, ensure they can't access admin tabs via URL
     if (session && session.user.role !== 'admin') {
       const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']

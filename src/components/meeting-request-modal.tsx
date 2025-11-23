@@ -46,14 +46,12 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       if (!uuidRegex.test(requesterId)) {
-        console.error('Invalid UUID format in requesterId:', requesterId)
         setError('Invalid user session. Please log in again.')
         return
       }
 
       // First, test the database connection
       const connectionTest = await testDatabaseConnection()
-      console.log('Database connection test:', connectionTest)
       
       if (!connectionTest.connected) {
         setError('Database connection failed. Please check your connection.')
@@ -65,28 +63,8 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
         return
       }
 
-      console.log('Submitting meeting request with data:', {
-        requesterId,
-        date: format(selectedDate, 'yyyy-MM-dd'),
-        time: selectedTime,
-        title: meetingTitle.trim(),
-        description: meetingDescription.trim() || undefined
-      })
-
-      // === AUTH DEBUG ===
-      console.log('Session from props:', session)
-      console.log('User ID from props session:', session?.user?.id)
-      console.log('User role from props session:', session?.user?.role)
-      console.log('Requester ID being used:', requesterId)
-      console.log('==================')
-
       // Format date in user's local timezone to prevent date shifting
       const formattedDate = formatDateLocal(selectedDate)
-      
-      console.log('Date handling:', {
-        originalSelectedDate: selectedDate,
-        formattedDate: formattedDate
-      })
 
       const { error: submitError } = await createMeetingRequest(
         requesterId,
@@ -97,8 +75,6 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
       )
 
       if (submitError) {
-        console.error('Meeting request submission error:', submitError)
-        
         // Better error message handling
         let errorMessage = 'Failed to submit meeting request'
         
@@ -123,7 +99,6 @@ export const MeetingRequestModal: React.FC<MeetingRequestModalProps> = ({
         setSuccess(false)
       }, 2000)
     } catch (err) {
-      console.error('Unexpected error in handleSubmit:', err)
       let errorMessage = 'An unexpected error occurred. Please try again.'
       
       if (err && typeof err === 'object' && 'message' in err) {
