@@ -69,68 +69,50 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     const loadData = async () => {
       setLoading(true)
       try {
-        console.log('ModernUsersTab: Loading users for activeSpace:', activeSpace)
-        
-        const companiesData = await fetchCompaniesOptimized()
+        // Load companies and users in parallel
+        const [companiesData, allUsers] = await Promise.all([
+          fetchCompaniesOptimized(),
+          activeSpace ? Promise.resolve([]) : fetchUsersOptimized() // Only fetch all users if no activeSpace
+        ])
         
         // If we have an activeSpace, fetch users for that specific company
         let filteredUsers: User[] = []
         if (activeSpace) {
-          console.log('ModernUsersTab: Fetching users for space:', activeSpace)
+          // Fetch company users and internal user assignments in parallel
+          const [companyUsersResult, internalAssignmentsResult] = await Promise.all([
+            fetchCompanyUsers(activeSpace).catch(() => []),
+            supabase ? supabase
+              .from('internal_user_companies')
+              .select('user_id')
+              .eq('company_id', activeSpace)
+              .catch(() => ({ data: null, error: null })) : Promise.resolve({ data: null, error: null })
+          ])
           
-          // Use fetchCompanyUsers which properly queries users for a company
           // Filter to only active users
-          const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
-          console.log('ModernUsersTab: Company users from fetchCompanyUsers:', companyUsers.length)
-          console.log('ModernUsersTab: Company users:', companyUsers.map(u => ({ 
-            email: u.email, 
-            company_id: u.company_id,
-            role: u.role,
-            is_active: u.is_active
-          })))
+          const companyUsers = (Array.isArray(companyUsersResult) ? companyUsersResult : []).filter(user => user.is_active !== false)
           
-          // Also fetch all users to get internal users assigned via internal_user_companies
-          const allUsers = await fetchUsersOptimized()
-          
-          // Get internal users assigned to this space via internal_user_companies
-          let internalUserIds: string[] = []
-          if (supabase) {
-            try {
-              const { data: internalAssignments, error } = await supabase
-                .from('internal_user_companies')
-                .select('user_id')
-                .eq('company_id', activeSpace)
-              
-              console.log('ModernUsersTab: Internal assignments query result:', { 
-                error, 
-                count: internalAssignments?.length || 0 
-              })
-              
-              if (!error && internalAssignments) {
-                internalUserIds = internalAssignments.map(assignment => assignment.user_id)
-                console.log('ModernUsersTab: Internal user IDs:', internalUserIds)
-              } else if (error) {
-                console.error("ModernUsersTab: Error fetching internal user assignments:", error)
-              }
-            } catch (err) {
-              console.error("ModernUsersTab: Exception fetching internal user assignments:", err)
-            }
+          // Get internal user IDs
+          const internalUserIds: string[] = []
+          if (internalAssignmentsResult && !internalAssignmentsResult.error && internalAssignmentsResult.data) {
+            internalUserIds.push(...internalAssignmentsResult.data.map((assignment: { user_id: string }) => assignment.user_id))
           }
           
-          // Get internal users by their IDs from all users
-          const internalUsers = allUsers.filter(user => internalUserIds.includes(user.id))
-          console.log('ModernUsersTab: Internal users found:', internalUsers.length)
-          
-          // Combine company users and internal users, removing duplicates
-          const allSpaceUsers = [...companyUsers, ...internalUsers]
-          filteredUsers = allSpaceUsers.filter((user, index, self) => 
-            index === self.findIndex(u => u.id === user.id)
-          )
-          
-          console.log('ModernUsersTab: Total filtered users:', filteredUsers.length)
+          // Only fetch all users if we need to get internal users
+          if (internalUserIds.length > 0) {
+            const allUsersData = await fetchUsersOptimized()
+            const internalUsers = allUsersData.filter(user => internalUserIds.includes(user.id))
+            
+            // Combine company users and internal users, removing duplicates
+            const allSpaceUsers = [...companyUsers, ...internalUsers]
+            filteredUsers = allSpaceUsers.filter((user, index, self) => 
+              index === self.findIndex(u => u.id === user.id)
+            )
+          } else {
+            filteredUsers = companyUsers
+          }
         } else {
           // No activeSpace - show all users
-          filteredUsers = await fetchUsersOptimized()
+          filteredUsers = allUsers
         }
         
         setUsers(filteredUsers)

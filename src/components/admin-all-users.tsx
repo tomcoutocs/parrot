@@ -72,23 +72,33 @@ export function AdminAllUsers() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
+      setActivitiesLoading(true)
       try {
-        await loadUsersData()
+        // Load users, companies, and activities in parallel
+        const [users, companiesData, recentActivities] = await Promise.all([
+          fetchUsersOptimized(),
+          fetchCompaniesOptimized(),
+          fetchRecentActivities(50, 90)
+        ])
+        
+        setCompanies(companiesData)
+        setAllUsers(users)
+        setFilteredUsers(users)
+        setActivities(recentActivities)
       } catch (error) {
-        console.error("Error loading users:", error)
+        console.error("Error loading data:", error)
       } finally {
         setLoading(false)
+        setActivitiesLoading(false)
       }
     }
 
     loadData()
-  }, [])
-
-  useEffect(() => {
+    
+    // Refresh activities every 30 seconds
     const loadActivities = async () => {
       setActivitiesLoading(true)
       try {
-        // Fetch more activities for comprehensive feed (90 days back)
         const recentActivities = await fetchRecentActivities(50, 90)
         setActivities(recentActivities)
       } catch (error) {
@@ -97,9 +107,7 @@ export function AdminAllUsers() {
         setActivitiesLoading(false)
       }
     }
-
-    loadActivities()
-    // Refresh activities every 30 seconds
+    
     const interval = setInterval(loadActivities, 30000)
     return () => clearInterval(interval)
   }, [])

@@ -229,11 +229,16 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
 
       setLoading(true)
       try {
-        // Fetch projects for this space
-        const projectsData = await fetchProjectsOptimized(activeSpace || undefined)
-        
-        // Fetch users for this space - only show users, managers, and admins
-        const usersData = await fetchUsersOptimized()
+        // Fetch projects and users in parallel
+        const [projectsData, usersData, internalAssignmentsResult] = await Promise.all([
+          fetchProjectsOptimized(activeSpace || undefined),
+          fetchUsersOptimized(),
+          supabase ? supabase
+            .from('internal_user_companies')
+            .select('user_id')
+            .eq('company_id', activeSpace)
+            .catch(() => ({ data: null, error: null })) : Promise.resolve({ data: null, error: null })
+        ])
         
         // Get direct company users (users, managers, admins)
         const directSpaceUsers = usersData.filter(user => 
@@ -242,21 +247,10 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           (user.role === 'user' || user.role === 'manager' || user.role === 'admin')
         )
         
-        // Get internal users assigned to this space via internal_user_companies
-        let internalUserIds: string[] = []
-        if (supabase) {
-          try {
-            const { data: internalAssignments } = await supabase
-              .from('internal_user_companies')
-              .select('user_id')
-              .eq('company_id', activeSpace)
-            
-            if (internalAssignments) {
-              internalUserIds = internalAssignments.map(ia => ia.user_id)
-            }
-          } catch (error) {
-            console.error('Error fetching internal user assignments:', error)
-          }
+        // Get internal user IDs
+        const internalUserIds: string[] = []
+        if (internalAssignmentsResult && !internalAssignmentsResult.error && internalAssignmentsResult.data) {
+          internalUserIds.push(...internalAssignmentsResult.data.map((ia: { user_id: string }) => ia.user_id))
         }
         
         // Get internal users who are assigned to this space
@@ -282,8 +276,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         // Store projects data for edit modal
         setProjectsData(projectsData)
         
-        // Fetch tasks for projects in this space
-        // Get all project IDs first, then fetch tasks for those projects
+        // Fetch tasks for projects in this space in parallel
         const projectIds = projectsData.map(p => p.id)
         const allTasksData = projectIds.length > 0 
           ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())

@@ -40,12 +40,9 @@ export function AdminAllTasks() {
     const loadData = async () => {
       setLoading(true)
       try {
-        // Fetch all tasks (no project filter = all tasks)
-        const tasksData = await fetchTasksOptimized()
-        
-        // Fetch all projects and companies to enrich task data
-        // fetchProjectsOptimized() already excludes archived projects
-        const [allProjectsData, companiesData] = await Promise.all([
+        // Fetch all data in parallel for better performance
+        const [tasksData, allProjectsData, companiesData] = await Promise.all([
+          fetchTasksOptimized(),
           fetchProjectsOptimized(),
           fetchCompaniesOptimized()
         ])

@@ -64,7 +64,6 @@ import {
   updateTaskPosition, 
   subscribeToTasksOptimized, 
   subscribeToProjectsOptimized,
-  testDatabaseConnection,
   deleteTask,
   deleteProjectOptimized,
   invalidateProjectCache
@@ -953,9 +952,6 @@ export default function ProjectsTab({
     const loadData = async () => {
       setLoading(true)
       try {
-        // Test database connection first
-        await testDatabaseConnection()
-        
         // Get user's company ID for filtering (use currentSpaceId if available, otherwise user's company)
         const companyId = currentSpaceId || (session?.user?.role === 'admin' ? undefined : session?.user?.company_id)
         
