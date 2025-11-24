@@ -1195,12 +1195,18 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           if (!activeSpace) return
           fetchProjectsOptimized(activeSpace || undefined)
             .then(projectsData => {
+              // Update projectsData state to keep it in sync
+              setProjectsData(projectsData)
+              
               const projectIds = projectsData.map(p => p.id)
-              return projectIds.length > 0 
-                ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
-                : Promise.resolve([])
+              return Promise.all([
+                Promise.resolve(projectsData),
+                projectIds.length > 0 
+                  ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+                  : Promise.resolve([])
+              ])
             })
-            .then(allTasksData => {
+            .then(([projectsData, allTasksData]) => {
               const refreshedTasksMap = new Map<string, TaskWithDetails>()
               allTasksData.forEach(task => {
                 refreshedTasksMap.set(task.id, task)
@@ -1234,12 +1240,18 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           if (!activeSpace) return
           fetchProjectsOptimized(activeSpace || undefined)
             .then(projectsData => {
+              // Update projectsData state to keep it in sync
+              setProjectsData(projectsData)
+              
               const projectIds = projectsData.map(p => p.id)
-              return projectIds.length > 0 
-                ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
-                : Promise.resolve([])
+              return Promise.all([
+                Promise.resolve(projectsData),
+                projectIds.length > 0 
+                  ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+                  : Promise.resolve([])
+              ])
             })
-            .then(allTasksData => {
+            .then(([projectsData, allTasksData]) => {
               const newTasksMap = new Map<string, TaskWithDetails>()
               allTasksData.forEach(task => {
                 newTasksMap.set(task.id, task)

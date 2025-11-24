@@ -44,22 +44,32 @@ export function AdminAllTasks() {
         const tasksData = await fetchTasksOptimized()
         
         // Fetch all projects and companies to enrich task data
-        const [projectsData, companiesData] = await Promise.all([
+        // fetchProjectsOptimized() already excludes archived projects
+        const [allProjectsData, companiesData] = await Promise.all([
           fetchProjectsOptimized(),
           fetchCompaniesOptimized()
         ])
 
         // Enrich projects with company data
-        const enrichedProjects = projectsData.map(project => {
+        const enrichedProjects = allProjectsData.map(project => {
           const company = companiesData.find(c => c.id === project.company_id)
           return { ...project, company }
         })
 
-        // Enrich tasks with project and company data
-        const enrichedTasks = tasksData.map(task => {
-          const project = enrichedProjects.find(p => p.id === task.project_id)
-          return { ...task, project }
-        })
+        // Create a set of active project IDs for quick lookup
+        const activeProjectIds = new Set(enrichedProjects.map(p => p.id))
+
+        // Enrich tasks with project and company data, and filter out tasks from archived projects
+        const enrichedTasks = tasksData
+          .map(task => {
+            const project = enrichedProjects.find(p => p.id === task.project_id)
+            return { ...task, project }
+          })
+          .filter(task => {
+            // Filter out tasks from archived projects
+            // If project is not in enrichedProjects (which excludes archived), the project is archived
+            return activeProjectIds.has(task.project_id) && task.project !== undefined
+          })
 
         setTasks(enrichedTasks)
         setProjects(enrichedProjects)

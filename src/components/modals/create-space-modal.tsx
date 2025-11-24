@@ -9,10 +9,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { createCompany, updateCompanyServices } from "@/lib/database-functions"
+import { createCompany, updateCompanyServices, assignCompanyToInternalUser, updateUser } from "@/lib/database-functions"
 import { fetchServicesOptimized } from "@/lib/simplified-database-functions"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
-import { Service } from "@/lib/supabase"
+import { Service, User } from "@/lib/supabase"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -34,10 +34,10 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
   const [accountManager, setAccountManager] = useState<string>("")
   const [startDate, setStartDate] = useState<Date>()
   const [selectedServices, setSelectedServices] = useState<string[]>([])
-  const [contactName, setContactName] = useState("")
-  const [contactEmail, setContactEmail] = useState("")
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [managers, setManagers] = useState<Array<{ id: string; name: string }>>([])
+  const [allUsers, setAllUsers] = useState<User[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
@@ -51,8 +51,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
       setAccountManager("")
       setStartDate(undefined)
       setSelectedServices([])
-      setContactName("")
-      setContactEmail("")
+      setSelectedUserIds([])
     }
   }, [isOpen])
 
@@ -64,8 +63,9 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
       ])
       
       setServices(servicesData)
+      setAllUsers(usersData)
       
-      // Filter to managers and admins
+      // Filter to managers and admins for account manager dropdown
       const managerUsers = usersData
         .filter(user => user.role === "manager" || user.role === "admin")
         .map(user => ({
@@ -117,6 +117,36 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         const servicesResult = await updateCompanyServices(companyId, selectedServices)
         if (!servicesResult.success) {
           console.error("Failed to update services:", servicesResult.error)
+          // Don't fail the whole operation, just log the error
+        }
+      }
+
+      // Assign selected users to the company
+      if (selectedUserIds.length > 0) {
+        try {
+          for (const userId of selectedUserIds) {
+            const user = allUsers.find(u => u.id === userId)
+            if (!user) continue
+
+            if (user.role === 'internal') {
+              // For internal users, add to internal_user_companies table
+              await assignCompanyToInternalUser(userId, companyId, false)
+            } else {
+              // For regular users/managers, update company_id using updateUser
+              // We need to preserve all existing user data
+              await updateUser(userId, {
+                email: user.email,
+                full_name: user.full_name || '',
+                role: user.role as 'admin' | 'manager' | 'user' | 'internal',
+                is_active: user.is_active !== false,
+                company_id: companyId,
+                assigned_manager_id: user.assigned_manager_id || undefined,
+                tab_permissions: user.tab_permissions || []
+              })
+            }
+          }
+        } catch (userAssignmentError) {
+          console.error('Error assigning users to company:', userAssignmentError)
           // Don't fail the whole operation, just log the error
         }
       }
@@ -268,35 +298,114 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
             </div>
           </div>
 
-          {/* Primary Contact */}
+          {/* Add Existing Users */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold">Primary Contact (Optional)</h3>
+            <h3 className="text-sm font-semibold">Add Existing Users (Optional)</h3>
+            <p className="text-sm text-muted-foreground">
+              Select existing users to add to this space. You can add more users later in the Users section.
+            </p>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="contactName">Contact Name</Label>
-                <Input
-                  id="contactName"
-                  placeholder="Full name"
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="contactEmail">Contact Email</Label>
-                <Input
-                  id="contactEmail"
-                  type="email"
-                  placeholder="email@company.com"
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                />
+            {/* Managers */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">Managers</Label>
+              <div className="space-y-2 max-h-32 overflow-y-auto border border-border/60 rounded-md p-2">
+                {allUsers.filter(user => user.role === 'manager').length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2">No managers available</p>
+                ) : (
+                  allUsers
+                    .filter(user => user.role === 'manager')
+                    .map(user => (
+                      <div key={user.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`user-${user.id}`}
+                          checked={selectedUserIds.includes(user.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedUserIds([...selectedUserIds, user.id])
+                            } else {
+                              setSelectedUserIds(selectedUserIds.filter(id => id !== user.id))
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`user-${user.id}`}
+                          className="text-sm font-normal cursor-pointer flex-1"
+                        >
+                          {user.full_name || user.email || "Unknown"}
+                        </Label>
+                      </div>
+                    ))
+                )}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              You can add more users later in the Users section
-            </p>
+
+            {/* Internal Users */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">Internal Users</Label>
+              <div className="space-y-2 max-h-32 overflow-y-auto border border-border/60 rounded-md p-2">
+                {allUsers.filter(user => user.role === 'internal').length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2">No internal users available</p>
+                ) : (
+                  allUsers
+                    .filter(user => user.role === 'internal')
+                    .map(user => (
+                      <div key={user.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`user-${user.id}`}
+                          checked={selectedUserIds.includes(user.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedUserIds([...selectedUserIds, user.id])
+                            } else {
+                              setSelectedUserIds(selectedUserIds.filter(id => id !== user.id))
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`user-${user.id}`}
+                          className="text-sm font-normal cursor-pointer flex-1"
+                        >
+                          {user.full_name || user.email || "Unknown"}
+                        </Label>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+
+            {/* Regular Users */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">Users</Label>
+              <div className="space-y-2 max-h-32 overflow-y-auto border border-border/60 rounded-md p-2">
+                {allUsers.filter(user => user.role === 'user').length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-2">No users available</p>
+                ) : (
+                  allUsers
+                    .filter(user => user.role === 'user')
+                    .map(user => (
+                      <div key={user.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`user-${user.id}`}
+                          checked={selectedUserIds.includes(user.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedUserIds([...selectedUserIds, user.id])
+                            } else {
+                              setSelectedUserIds(selectedUserIds.filter(id => id !== user.id))
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`user-${user.id}`}
+                          className="text-sm font-normal cursor-pointer flex-1"
+                        >
+                          {user.full_name || user.email || "Unknown"}
+                        </Label>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Action Buttons */}

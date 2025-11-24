@@ -590,31 +590,89 @@
   color: oklch(var(--destructive-foreground));
 }
 
-/* Custom scrollbar styles */
-.scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: oklch(var(--muted-foreground) / 0.3);
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.scrollbar-thin:hover::-webkit-scrollbar-thumb {
-  background-color: oklch(var(--muted-foreground) / 0.5);
-}
-
-/* Firefox scrollbar */
-.scrollbar-thin {
+/* Global scrollbar styles - hidden until hover/scroll */
+/* Apply to all elements, but only show scrollbar when needed */
+html {
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+html:hover,
+html:focus-within,
+html.scrolling {
   scrollbar-color: oklch(var(--muted-foreground) / 0.3) transparent;
 }
 
-.scrollbar-thin:hover {
-  scrollbar-color: oklch(var(--muted-foreground) / 0.5) transparent;
+html::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent !important;
+}
+
+html::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+html::-webkit-scrollbar-thumb {
+  background-color: transparent !important;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+html:hover::-webkit-scrollbar-thumb,
+html:focus-within::-webkit-scrollbar-thumb,
+html.scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(var(--muted-foreground) / 0.3) !important;
+}
+
+.dark html:hover::-webkit-scrollbar-thumb,
+.dark html:focus-within::-webkit-scrollbar-thumb,
+.dark html.scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(var(--muted-foreground) / 0.4) !important;
+}
+
+.dark html:hover,
+.dark html:focus-within,
+.dark html.scrolling {
+  scrollbar-color: oklch(var(--muted-foreground) / 0.4) transparent;
+}
+
+/* Specific classes for backward compatibility */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.scrollbar-thin:hover,
+.scrollbar-thin:focus-within,
+.scrollbar-thin.scrolling {
+  scrollbar-color: oklch(var(--muted-foreground) / 0.3) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  background: transparent !important;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: transparent !important;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+.scrollbar-thin:hover::-webkit-scrollbar-thumb,
+.scrollbar-thin:focus-within::-webkit-scrollbar-thumb,
+.scrollbar-thin.scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(var(--muted-foreground) / 0.3) !important;
+}
+
+.dark .scrollbar-thin:hover::-webkit-scrollbar-thumb,
+.dark .scrollbar-thin:focus-within::-webkit-scrollbar-thumb,
+.dark .scrollbar-thin.scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(var(--muted-foreground) / 0.4) !important;
 }

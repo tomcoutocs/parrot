@@ -860,92 +860,173 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Calendar Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <CalendarIcon className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-lg">
-            {view === 'month' && `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
-            {view === 'week' && (() => {
-              const { weekStart, weekEnd } = getWeekRange()
-              const startMonth = monthNames[weekStart.getMonth()].substring(0, 3)
-              const endMonth = monthNames[weekEnd.getMonth()].substring(0, 3)
-              if (weekStart.getMonth() === weekEnd.getMonth()) {
-                return `${startMonth} ${weekStart.getDate()} - ${weekEnd.getDate()}, ${weekStart.getFullYear()}`
-              }
-              return `${startMonth} ${weekStart.getDate()} - ${endMonth} ${weekEnd.getDate()}, ${weekStart.getFullYear()}`
-            })()}
-            {view === 'day' && `${monthNames[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`}
-          </h2>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* View Switcher */}
-          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
-            <button
-              onClick={() => setView('month')}
-              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                view === 'month' 
-                  ? 'bg-background text-foreground shadow-sm' 
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              title="Month View"
-            >
-              <Grid3x3 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setView('week')}
-              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                view === 'week' 
-                  ? 'bg-background text-foreground shadow-sm' 
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              title="Week View"
-            >
-              <CalendarDays className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setView('day')}
-              className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                view === 'day' 
-                  ? 'bg-background text-foreground shadow-sm' 
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              title="Day View"
-            >
-              <Calendar className="w-3.5 h-3.5" />
-            </button>
+      {/* Upcoming Events and Event Types */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* Upcoming Events */}
+          <div className="border border-border/80 rounded-lg p-4">
+            <h3 className="text-sm font-medium mb-4">Upcoming Events</h3>
+            {upcomingEvents.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-4">
+                No upcoming events
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingEvents.map(event => (
+                  <div key={event.id} className="group">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="w-1 h-full rounded-full mt-1"
+                        style={{ backgroundColor: event.color }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium truncate flex-1">{event.title}</p>
+                          {session?.user?.role === 'admin' && !activeSpace && event.companyName && (
+                            <span className="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground flex-shrink-0">
+                              {event.companyName}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {event.startDate.toLocaleDateString("en-US", { 
+                            month: "short", 
+                            day: "numeric" 
+                          })}
+                          {event.startDate.getTime() !== event.endDate.getTime() && (
+                            <> - {event.endDate.toLocaleDateString("en-US", { 
+                              month: "short", 
+                              day: "numeric"
+                            })}</>
+                          )}
+                        </p>
+                        <div className="mt-1">
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: `${event.color}15`,
+                              color: event.color
+                            }}
+                          >
+                            {event.type.charAt(0).toUpperCase() + event.type.slice(1)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <button
-            onClick={() => setIsCreateEventOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground bg-muted hover:bg-muted/80 rounded-md transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Event
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goToToday}
-              className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Today
-            </button>
-            <button
-              onClick={view === 'month' ? previousMonth : view === 'week' ? previousWeek : previousDay}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={view === 'month' ? nextMonth : view === 'week' ? nextWeek : nextDay}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
 
-      <div className="space-y-6">
+          {/* Event Types */}
+          <div className="border border-border/80 rounded-lg p-4">
+            <h3 className="text-sm font-medium mb-3">Event Types</h3>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
+                <span className="text-xs text-muted-foreground">Launch</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#ef4444" }} />
+                <span className="text-xs text-muted-foreground">Sale</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
+                <span className="text-xs text-muted-foreground">Event</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
+                <span className="text-xs text-muted-foreground">Deadline</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Calendar Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CalendarIcon className="w-5 h-5 text-muted-foreground" />
+            <h2 className="text-lg">
+              {view === 'month' && `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
+              {view === 'week' && (() => {
+                const { weekStart, weekEnd } = getWeekRange()
+                const startMonth = monthNames[weekStart.getMonth()].substring(0, 3)
+                const endMonth = monthNames[weekEnd.getMonth()].substring(0, 3)
+                if (weekStart.getMonth() === weekEnd.getMonth()) {
+                  return `${startMonth} ${weekStart.getDate()} - ${weekEnd.getDate()}, ${weekStart.getFullYear()}`
+                }
+                return `${startMonth} ${weekStart.getDate()} - ${endMonth} ${weekEnd.getDate()}, ${weekStart.getFullYear()}`
+              })()}
+              {view === 'day' && `${monthNames[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`}
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* View Switcher */}
+            <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
+              <button
+                onClick={() => setView('month')}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  view === 'month' 
+                    ? 'bg-background text-foreground shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Month View"
+              >
+                <Grid3x3 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setView('week')}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  view === 'week' 
+                    ? 'bg-background text-foreground shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Week View"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setView('day')}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  view === 'day' 
+                    ? 'bg-background text-foreground shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Day View"
+              >
+                <Calendar className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <button
+              onClick={() => setIsCreateEventOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground bg-muted hover:bg-muted/80 rounded-md transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Event
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goToToday}
+                className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Today
+              </button>
+              <button
+                onClick={view === 'month' ? previousMonth : view === 'week' ? previousWeek : previousDay}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={view === 'month' ? nextMonth : view === 'week' ? nextWeek : nextDay}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Calendar View */}
         <div>
           {view === 'month' && (
@@ -1348,89 +1429,6 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
             </div>
           )}
         </div>
-
-        {/* Upcoming Events and Event Types */}
-        <div className="grid grid-cols-2 gap-6">
-          {/* Upcoming Events */}
-          <div className="border border-border/80 rounded-lg p-4">
-            <h3 className="text-sm font-medium mb-4">Upcoming Events</h3>
-            {upcomingEvents.length === 0 ? (
-              <div className="text-xs text-muted-foreground py-4">
-                No upcoming events
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {upcomingEvents.map(event => (
-                  <div key={event.id} className="group">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className="w-1 h-full rounded-full mt-1"
-                        style={{ backgroundColor: event.color }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium truncate flex-1">{event.title}</p>
-                          {session?.user?.role === 'admin' && !activeSpace && event.companyName && (
-                            <span className="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground flex-shrink-0">
-                              {event.companyName}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {event.startDate.toLocaleDateString("en-US", { 
-                            month: "short", 
-                            day: "numeric" 
-                          })}
-                          {event.startDate.getTime() !== event.endDate.getTime() && (
-                            <> - {event.endDate.toLocaleDateString("en-US", { 
-                              month: "short", 
-                              day: "numeric"
-                            })}</>
-                          )}
-                        </p>
-                        <div className="mt-1">
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={{
-                              backgroundColor: `${event.color}15`,
-                              color: event.color
-                            }}
-                          >
-                            {event.type.charAt(0).toUpperCase() + event.type.slice(1)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Event Types */}
-          <div className="border border-border/80 rounded-lg p-4">
-            <h3 className="text-sm font-medium mb-3">Event Types</h3>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#8b5cf6" }} />
-                <span className="text-xs text-muted-foreground">Launch</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#ef4444" }} />
-                <span className="text-xs text-muted-foreground">Sale</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
-                <span className="text-xs text-muted-foreground">Event</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
-                <span className="text-xs text-muted-foreground">Deadline</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Event Creation Dialog */}
       <Dialog open={isCreateEventOpen} onOpenChange={setIsCreateEventOpen}>

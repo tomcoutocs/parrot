@@ -423,7 +423,7 @@ export function AdminAllUsers() {
                 <div className="text-muted-foreground text-sm">No recent activity</div>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+              <div className="space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin">
                 {activities.map((activity) => {
                   const initials = activity.user_name
                     .split(' ')

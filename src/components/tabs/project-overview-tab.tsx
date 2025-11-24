@@ -105,23 +105,28 @@ export default function ProjectOverviewTab() {
         allTasks = []
       }
       
-      // Combine tasks with company and project data
-      const tasksWithCompany = allTasks.map(task => {
-        const project = allProjects.find(p => p.id === task.project_id)
-        const company = project ? allCompanies.find(c => c.id === project.company_id) : undefined
-        return {
-          ...task,
-          company: company ? {
-            id: company.id,
-            name: company.name,
-            industry: company.industry
-          } : undefined,
-          project: project ? {
-            id: project.id,
-            title: project.name
-          } : undefined
-        }
-      })
+      // Combine tasks with company and project data, and filter out tasks from archived projects
+      const tasksWithCompany = allTasks
+        .map(task => {
+          const project = allProjects.find(p => p.id === task.project_id)
+          const company = project ? allCompanies.find(c => c.id === project.company_id) : undefined
+          return {
+            ...task,
+            company: company ? {
+              id: company.id,
+              name: company.name,
+              industry: company.industry
+            } : undefined,
+            project: project ? {
+              id: project.id,
+              title: project.name
+            } : undefined
+          }
+        })
+        .filter(task => {
+          // Filter out tasks from archived projects (if project is not in allProjects, it's archived)
+          return task.project !== undefined
+        })
 
              setTasks(tasksWithCompany)
        setCompanies(allCompanies)
