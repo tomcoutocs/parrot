@@ -233,11 +233,17 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         const [projectsData, usersData, internalAssignmentsResult] = await Promise.all([
           fetchProjectsOptimized(activeSpace || undefined),
           fetchUsersOptimized(),
-          supabase ? supabase
-            .from('internal_user_companies')
-            .select('user_id')
-            .eq('company_id', activeSpace)
-            .catch(() => ({ data: null, error: null })) : Promise.resolve({ data: null, error: null })
+          supabase ? (async () => {
+            try {
+              const result = await supabase
+                .from('internal_user_companies')
+                .select('user_id')
+                .eq('company_id', activeSpace)
+              return result
+            } catch {
+              return { data: null, error: null }
+            }
+          })() : Promise.resolve({ data: null, error: null })
         ])
         
         // Get direct company users (users, managers, admins)

@@ -81,11 +81,17 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
           // Fetch company users and internal user assignments in parallel
           const [companyUsersResult, internalAssignmentsResult] = await Promise.all([
             fetchCompanyUsers(activeSpace).catch(() => []),
-            supabase ? supabase
-              .from('internal_user_companies')
-              .select('user_id')
-              .eq('company_id', activeSpace)
-              .catch(() => ({ data: null, error: null })) : Promise.resolve({ data: null, error: null })
+            supabase ? (async () => {
+              try {
+                const result = await supabase
+                  .from('internal_user_companies')
+                  .select('user_id')
+                  .eq('company_id', activeSpace)
+                return result
+              } catch {
+                return { data: null, error: null }
+              }
+            })() : Promise.resolve({ data: null, error: null })
           ])
           
           // Filter to only active users
