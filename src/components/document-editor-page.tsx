@@ -82,9 +82,10 @@ interface DocumentEditorPageProps {
   documentId: string
   inline?: boolean
   spaceId?: string | null
+  isInternal?: boolean
 }
 
-export default function DocumentEditorPage({ documentId, inline = false, spaceId: propSpaceId }: DocumentEditorPageProps) {
+export default function DocumentEditorPage({ documentId, inline = false, spaceId: propSpaceId, isInternal = false }: DocumentEditorPageProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
@@ -1184,7 +1185,8 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
         companyId,
         session.user.id,
         '/',
-        isNewDocument ? undefined : documentId
+        isNewDocument ? undefined : documentId,
+        isInternal
       )
 
       if (result.success && result.document) {

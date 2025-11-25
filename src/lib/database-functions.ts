@@ -2717,6 +2717,7 @@ export interface Document {
   company_id: string
   uploaded_by: string
   folder_path: string
+  is_internal?: boolean
   created_at: string
   updated_at: string
 }
@@ -2732,6 +2733,7 @@ export interface DocumentFolder {
   updated_at: string
   is_system_folder?: boolean
   is_readonly?: boolean
+  is_internal?: boolean
 }
 
 // Create a new document record
@@ -2742,16 +2744,16 @@ export async function createDocumentRecord(
   fileType: string,
   companyId: string,
   folderPath: string = '/',
-  userId: string
+  userId: string,
+  isInternal: boolean = false
 ): Promise<{ success: boolean; document?: Document; error?: string }> {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
     }
 
-    const { data, error } = await supabase
-      .from('documents')
-      .insert({
+      // Build insert data - conditionally include is_internal if column exists
+      const insertData: any = {
         name,
         file_path: filePath,
         file_size: fileSize,
@@ -2759,13 +2761,44 @@ export async function createDocumentRecord(
         company_id: companyId,
         uploaded_by: userId,
         folder_path: folderPath
-      })
-      .select()
-      .single()
+      }
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
+      // Try to include is_internal, but handle gracefully if column doesn't exist
+      insertData.is_internal = isInternal
+
+      const { data, error } = await supabase
+        .from('documents')
+        .insert(insertData)
+        .select()
+        .single()
+
+      if (error) {
+        // If error is about missing is_internal column, retry without it
+        if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+          console.warn('is_internal column not found in documents table, creating document without it')
+          const { data: retryData, error: retryError } = await supabase
+            .from('documents')
+            .insert({
+              name,
+              file_path: filePath,
+              file_size: fileSize,
+              file_type: fileType,
+              company_id: companyId,
+              uploaded_by: userId,
+              folder_path: folderPath
+            })
+            .select()
+            .single()
+
+          if (retryError) {
+            return { success: false, error: retryError.message }
+          }
+
+          return { success: true, document: retryData }
+        }
+
+        return { success: false, error: error.message }
+      }
 
     return { success: true, document: data }
   } catch (error) {
@@ -2946,7 +2979,8 @@ export async function createFolder(
   name: string,
   companyId: string,
   userId: string,
-  parentFolderId?: string
+  parentFolderId?: string,
+  isInternal: boolean = false
 ): Promise<{ success: boolean; folder?: DocumentFolder; error?: string }> {
   try {
     if (!supabase) {
@@ -2960,25 +2994,50 @@ export async function createFolder(
 
     // Build path
     let path = `/${name}`
+    let finalIsInternal = isInternal
     if (parentFolderId) {
       // Get parent folder path and check if it's a system folder
       const { data: parentFolder, error: parentError } = await supabase
         .from('document_folders')
-        .select('path, is_system_folder, is_readonly')
+        .select('path, is_system_folder, is_readonly, is_internal')
         .eq('id', parentFolderId)
         .single()
       
       if (parentError) {
-        return { success: false, error: `Parent folder error: ${parentError.message}` }
-      }
-      
-      if (parentFolder) {
+        // If error is about missing is_internal column, retry without it
+        if (parentError.message?.includes('is_internal') || (parentError as any).code === 'PGRST204') {
+          const { data: retryParentFolder, error: retryParentError } = await supabase
+            .from('document_folders')
+            .select('path, is_system_folder, is_readonly')
+            .eq('id', parentFolderId)
+            .single()
+          
+          if (retryParentError) {
+            return { success: false, error: `Parent folder error: ${retryParentError.message}` }
+          }
+          
+          if (retryParentFolder) {
+            if (retryParentFolder.is_system_folder && retryParentFolder.is_readonly) {
+              return { success: false, error: 'Cannot create folders inside readonly system folders' }
+            }
+            path = `${retryParentFolder.path}/${name}`
+            // is_internal column doesn't exist, so we can't inherit it
+            finalIsInternal = false
+          }
+        } else {
+          return { success: false, error: `Parent folder error: ${parentError.message}` }
+        }
+      } else if (parentFolder) {
         // Check if parent is a readonly system folder
         if (parentFolder.is_system_folder && parentFolder.is_readonly) {
           return { success: false, error: 'Cannot create folders inside readonly system folders' }
         }
         
         path = `${parentFolder.path}/${name}`
+        // Inherit internal status from parent if parent is internal (if column exists)
+        if (parentFolder.is_internal === true) {
+          finalIsInternal = true
+        }
       }
     }
 
@@ -3010,19 +3069,53 @@ export async function createFolder(
       }
     }
 
+    // Build insert data - conditionally include is_internal if column exists
+    const insertData: any = {
+      name,
+      company_id: companyId,
+      parent_folder_id: parentFolderId,
+      path,
+      created_by: userId
+    }
+
+    // Only include is_internal if the column exists (will be added via migration)
+    // For now, we'll try to include it and handle the error gracefully
+    try {
+      insertData.is_internal = finalIsInternal
+    } catch {
+      // Column doesn't exist yet, skip it
+    }
+
     const { data, error } = await supabase
       .from('document_folders')
-      .insert({
-        name,
-        company_id: companyId,
-        parent_folder_id: parentFolderId,
-        path,
-        created_by: userId
-      })
+      .insert(insertData)
       .select()
       .single()
 
     if (error) {
+      // If error is about missing is_internal column, retry without it
+      if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+        console.warn('is_internal column not found, creating folder without it')
+        const { data: retryData, error: retryError } = await supabase
+          .from('document_folders')
+          .insert({
+            name,
+            company_id: companyId,
+            parent_folder_id: parentFolderId,
+            path,
+            created_by: userId
+          })
+          .select()
+          .single()
+
+        if (retryError) {
+          console.error('Error creating folder in database:', retryError)
+          return { success: false, error: `Database error: ${retryError.message || 'Unknown error'}` }
+        }
+
+        return { success: true, folder: retryData }
+      }
+
       console.error('Error creating folder in database:', error)
       console.error('Error details:', {
         code: (error as any).code,
@@ -3158,6 +3251,137 @@ export async function deleteFolder(
     return { success: true }
   } catch (error) {
     return { success: false, error: 'Failed to delete folder' }
+  }
+}
+
+// Update folder name
+export async function updateFolder(
+  folderId: string,
+  newName: string
+): Promise<{ success: boolean; folder?: DocumentFolder; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Validate folder name
+    if (!newName.trim()) {
+      return { success: false, error: 'Folder name cannot be empty' }
+    }
+
+    if (newName.length > 255) {
+      return { success: false, error: 'Folder name is too long (maximum 255 characters)' }
+    }
+
+    if (/[<>:"/\\|?*]/.test(newName)) {
+      return { success: false, error: 'Folder name contains invalid characters' }
+    }
+
+    // Get current folder info
+    const { data: folder, error: fetchError } = await supabase
+      .from('document_folders')
+      .select('path, company_id, is_system_folder, is_readonly, parent_folder_id')
+      .eq('id', folderId)
+      .single()
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
+    // Prevent editing readonly system folders
+    if (folder.is_system_folder && folder.is_readonly) {
+      return { success: false, error: 'Cannot edit readonly system folders' }
+    }
+
+    // Build new path
+    let newPath = `/${newName.trim()}`
+    if (folder.parent_folder_id) {
+      // Get parent folder path
+      const { data: parentFolder, error: parentError } = await supabase
+        .from('document_folders')
+        .select('path')
+        .eq('id', folder.parent_folder_id)
+        .single()
+
+      if (parentError) {
+        return { success: false, error: `Parent folder error: ${parentError.message}` }
+      }
+
+      if (parentFolder) {
+        newPath = `${parentFolder.path}/${newName.trim()}`
+      }
+    }
+
+    // Update folder name and path
+    const { data: updatedFolder, error: updateError } = await supabase
+      .from('document_folders')
+      .update({
+        name: newName.trim(),
+        path: newPath,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', folderId)
+      .select()
+      .single()
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    // Update all subfolders' paths
+    const { data: subfolders } = await supabase
+      .from('document_folders')
+      .select('id, path')
+      .like('path', `${folder.path}%`)
+      .neq('id', folderId)
+
+    if (subfolders && subfolders.length > 0) {
+      for (const subfolder of subfolders) {
+        const newSubfolderPath = subfolder.path.replace(folder.path, newPath)
+        await supabase
+          .from('document_folders')
+          .update({ path: newSubfolderPath })
+          .eq('id', subfolder.id)
+      }
+    }
+
+    // Update all documents' folder_path
+    await supabase
+      .from('documents')
+      .update({ folder_path: newPath })
+      .eq('folder_path', folder.path)
+
+    // Update documents in subfolders
+    if (subfolders && subfolders.length > 0) {
+      for (const subfolder of subfolders) {
+        const newSubfolderPath = subfolder.path.replace(folder.path, newPath)
+        await supabase
+          .from('documents')
+          .update({ folder_path: newSubfolderPath })
+          .eq('folder_path', subfolder.path)
+      }
+    }
+
+    // Update rich documents' folder_path
+    await supabase
+      .from('rich_documents')
+      .update({ folder_path: newPath })
+      .eq('folder_path', folder.path)
+
+    // Update rich documents in subfolders
+    if (subfolders && subfolders.length > 0) {
+      for (const subfolder of subfolders) {
+        const newSubfolderPath = subfolder.path.replace(folder.path, newPath)
+        await supabase
+          .from('rich_documents')
+          .update({ folder_path: newSubfolderPath })
+          .eq('folder_path', subfolder.path)
+      }
+    }
+
+    return { success: true, folder: updatedFolder }
+  } catch (error) {
+    return { success: false, error: 'Failed to update folder' }
   }
 }
 
@@ -4053,6 +4277,7 @@ export interface RichDocument {
   company_id: string
   created_by: string
   folder_path: string
+  is_internal?: boolean
   created_at: string
   updated_at: string
 }
@@ -4064,7 +4289,8 @@ export async function saveRichDocument(
   companyId: string,
   userId: string,
   folderPath: string = '/',
-  documentId?: string
+  documentId?: string,
+  isInternal: boolean = false
 ): Promise<{ success: boolean; document?: RichDocument; error?: string }> {
   try {
     if (!supabase) {
@@ -4124,21 +4350,52 @@ export async function saveRichDocument(
         return { success: false, error: 'Access denied to this company' }
       }
 
-      // Create new document
+      // Create new document - conditionally include is_internal
+      const insertData: any = {
+        title,
+        content,
+        company_id: companyId,
+        created_by: userId,
+        folder_path: folderPath
+      }
+
+      // Try to include is_internal, but handle gracefully if column doesn't exist
+      insertData.is_internal = isInternal
+
       const { data, error } = await supabase
         .from('rich_documents')
-        .insert({
-          title,
-          content,
-          company_id: companyId,
-          created_by: userId,
-          folder_path: folderPath
-        })
+        .insert(insertData)
         .select()
         .single()
 
       if (error) {
-        return { success: false, error: error.message }
+        // If error is about missing is_internal column, retry without it
+        if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+          console.warn('is_internal column not found in rich_documents table, creating document without it')
+          const { data: retryData, error: retryError } = await supabase
+            .from('rich_documents')
+            .insert({
+              title,
+              content,
+              company_id: companyId,
+              created_by: userId,
+              folder_path: folderPath
+            })
+            .select()
+            .single()
+
+          if (retryError) {
+            return { success: false, error: retryError.message }
+          }
+
+          return { success: true, document: retryData }
+        }
+
+        return { success: false, error: error.message || 'Failed to create document' }
+      }
+
+      if (!data) {
+        return { success: false, error: 'Failed to create document' }
       }
 
       return { success: true, document: data }
