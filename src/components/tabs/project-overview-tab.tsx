@@ -22,6 +22,7 @@ import {
   Eye,
   Download
 } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-states'
 import {
   Table,
   TableBody,
@@ -267,7 +268,10 @@ export default function ProjectOverviewTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading project...</p>
+        </div>
       </div>
     )
   }

@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { TrendingUp, TrendingDown, Download, Calendar, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -272,76 +272,41 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
           </div>
         </Card>
 
-        {/* Channel Spend Comparison */}
+        {/* Conversion Metrics */}
         <Card className="p-4 border-border/60">
-          <h3 className="mb-3 text-sm font-medium">Spend by Channel</h3>
-          <div className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={performanceData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9ca3af', fontSize: 12 }}
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9ca3af', fontSize: 12 }}
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    fontSize: '12px'
-                  }}
-                  formatter={(value: number) => `$${value.toLocaleString()}`}
-                />
-                <Bar dataKey="metaSpend" fill="#8b5cf6" name="Meta Ads" />
-                <Bar dataKey="googleSpend" fill="#3b82f6" name="Google Ads" />
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="mb-3 text-sm font-medium">Conversion Metrics</h3>
+          
+          {/* Table Header */}
+          <div className="grid grid-cols-6 gap-4 px-3 py-2 text-xs text-muted-foreground border-b border-border/40 mb-0.5">
+            <div className="col-span-2">Channel</div>
+            <div className="text-center">Conversions</div>
+            <div className="text-center">Conv. Rate</div>
+            <div className="text-center">CPA</div>
+            <div className="text-center">Trend</div>
+          </div>
+
+          {/* Table Rows */}
+          <div className="space-y-0">
+            {channelData.map((channel) => (
+              <div 
+                key={channel.channel}
+                className="grid grid-cols-6 gap-4 px-3 py-2.5 hover:bg-muted/30 transition-colors items-center rounded-md"
+              >
+                <div className="col-span-2 text-sm">{channel.channel}</div>
+                <div className="text-sm text-center">{channel.conversions}</div>
+                <div className="text-sm text-center">3.2%</div>
+                <div className="text-sm text-center">${channel.cpa.toFixed(2)}</div>
+                <div className={`text-xs flex items-center justify-center gap-0.5 ${
+                  channel.isPositive ? "text-green-600" : "text-red-600"
+                }`}>
+                  {channel.isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {channel.change}
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
       </div>
-
-      {/* Conversion Metrics */}
-      <Card className="p-4 border-border/60">
-        <h3 className="mb-3 text-sm font-medium">Conversion Metrics</h3>
-        
-        {/* Table Header */}
-        <div className="grid grid-cols-6 gap-4 px-3 py-2 text-xs text-muted-foreground border-b border-border/40 mb-0.5">
-          <div className="col-span-2">Channel</div>
-          <div>Conversions</div>
-          <div>Conv. Rate</div>
-          <div>CPA</div>
-          <div>Trend</div>
-        </div>
-
-        {/* Table Rows */}
-        <div className="space-y-0">
-          {channelData.map((channel) => (
-            <div 
-              key={channel.channel}
-              className="grid grid-cols-6 gap-4 px-3 py-2.5 hover:bg-muted/30 transition-colors items-center rounded-md"
-            >
-              <div className="col-span-2 text-sm">{channel.channel}</div>
-              <div className="text-sm">{channel.conversions}</div>
-              <div className="text-sm">3.2%</div>
-              <div className="text-sm">${channel.cpa.toFixed(2)}</div>
-              <div className={`text-xs flex items-center gap-0.5 ${
-                channel.isPositive ? "text-green-600" : "text-red-600"
-              }`}>
-                {channel.isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {channel.change}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   )
 }

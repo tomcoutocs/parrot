@@ -5,7 +5,7 @@ import { useSession } from '@/components/providers/session-provider'
 import { useSearchParams } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import EmptyState from '@/components/ui/empty-state'
-import { LoadingTaskGrid, DataLoadingState, InlineLoading } from '@/components/ui/loading-states'
+import { LoadingTaskGrid, DataLoadingState, InlineLoading, LoadingSpinner } from '@/components/ui/loading-states'
 import TaskDetailSidebar from '@/components/task-detail-sidebar'
 import { EnhancedTooltip, HelpIcon, tooltipContent } from '@/components/ui/enhanced-tooltips'
 import { 
@@ -1381,19 +1381,23 @@ export default function ProjectsTab({
   }, [])
 
   if (!session) {
-    return <div>Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading projects...</p>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Projects</h2>
-          <div className="flex gap-2">
-            <InlineLoading text="Loading projects..." />
-          </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading projects...</p>
         </div>
-        <LoadingTaskGrid count={6} />
       </div>
     )
   }

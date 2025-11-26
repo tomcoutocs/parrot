@@ -44,6 +44,7 @@ import { useRouter } from "next/navigation"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { Loader2, AlertTriangle } from "lucide-react"
 import DocumentPreviewModal from "@/components/modals/document-preview-modal"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
 // Dynamically import DocumentEditorPage to avoid SSR issues
 const DocumentEditorPage = dynamic(
@@ -671,7 +672,10 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading documents...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading documents...</p>
+        </div>
       </div>
     )
   }

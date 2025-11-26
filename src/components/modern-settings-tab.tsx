@@ -22,6 +22,7 @@ import { toastSuccess, toastError } from "@/lib/toast"
 import { useSession } from "@/components/providers/session-provider"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
 interface ModernSettingsTabProps {
   activeSpace: string | null
@@ -290,7 +291,10 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading settings...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading settings...</p>
+        </div>
       </div>
     )
   }

@@ -10,6 +10,7 @@ import { fetchTasksOptimized, fetchProjectsOptimized, fetchCompaniesOptimized } 
 import { TaskWithDetails, ProjectWithDetails, Company } from "@/lib/supabase"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
 interface TaskWithProject extends TaskWithDetails {
   project?: ProjectWithDetails & { company?: Company }
@@ -191,7 +192,10 @@ export function AdminAllTasks() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading tasks...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading tasks...</p>
+        </div>
       </div>
     )
   }

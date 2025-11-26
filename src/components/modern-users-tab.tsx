@@ -24,6 +24,7 @@ import { supabase } from "@/lib/supabase"
 import { updateUser, deleteUser, assignCompanyToInternalUser } from "@/lib/database-functions"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { useSession } from "@/components/providers/session-provider"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
 interface ModernUsersTabProps {
   activeSpace?: string | null
@@ -551,7 +552,10 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading users...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading users...</p>
+        </div>
       </div>
     )
   }

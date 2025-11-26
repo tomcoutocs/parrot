@@ -14,6 +14,7 @@ import { fetchCompaniesOptimized, fetchProjectsOptimized, fetchTasksOptimized } 
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
 import { Company, ProjectWithDetails, TaskWithDetails, User } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
 interface AdminDashboardProps {
   spaces: Array<{ id: string; name: string; active: boolean }>
@@ -43,7 +44,7 @@ const serviceColors: Record<string, string> = {
   "CRM": "#6366f1",
 }
 
-export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey }: AdminDashboardProps) {
+export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0 }: AdminDashboardProps) {
   const [allSpaces, setAllSpaces] = useState<Array<{ id: string; name: string; active: boolean }>>([])
   const [loading, setLoading] = useState(true)
 
@@ -178,7 +179,18 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey }: 
   useEffect(() => {
     const calculateTaskMetrics = async () => {
       try {
-        const tasks = await fetchTasksOptimized()
+        // Fetch both tasks and projects to filter out tasks from archived projects
+        const [tasksData, projectsData] = await Promise.all([
+          fetchTasksOptimized(),
+          fetchProjectsOptimized()
+        ])
+
+        // Create a set of active project IDs (fetchProjectsOptimized already excludes archived)
+        const activeProjectIds = new Set(projectsData.map(p => p.id))
+
+        // Filter tasks to only include those from active (non-archived) projects
+        const tasks = tasksData.filter(task => activeProjectIds.has(task.project_id))
+
         const now = new Date()
         now.setHours(0, 0, 0, 0)
         
@@ -223,12 +235,15 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey }: 
     }
 
     calculateTaskMetrics()
-  }, [])
+  }, [refreshKey ?? 0])
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading dashboard...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading dashboard...</p>
+        </div>
       </div>
     )
   }
