@@ -1,9 +1,16 @@
 "use client"
 
+import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { TrendingUp, TrendingDown, Download, Calendar, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface PerformanceDataPoint {
   date: string
@@ -95,7 +102,17 @@ interface ModernReportsTabProps {
   activeSpace: string | null
 }
 
+type DateRange = "1" | "7" | "30"
+
+const dateRangeLabels: Record<DateRange, string> = {
+  "1": "Last 24 hours",
+  "7": "Last 7 days",
+  "30": "Last 30 days",
+}
+
 export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
+  const [dateRange, setDateRange] = useState<DateRange>("30")
+  
   const performanceData = performanceDataBySpace[activeSpace || "default"] || performanceDataBySpace["default"]
   const channelData = channelDataBySpace[activeSpace || "default"] || channelDataBySpace["default"]
   
@@ -139,15 +156,30 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
         <div>
           <h2 className="text-sm font-medium">Performance Reports</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Last 30 days
+            {dateRangeLabels[dateRange]}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="gap-2">
             <Calendar className="w-3.5 h-3.5" />
-            Last 30 days
+                {dateRangeLabels[dateRange]}
             <ChevronDown className="w-3.5 h-3.5" />
           </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setDateRange("1")}>
+                Last 24 hours
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDateRange("7")}>
+                Last 7 days
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDateRange("30")}>
+                Last 30 days
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" className="gap-2">
             <Download className="w-3.5 h-3.5" />
             Export

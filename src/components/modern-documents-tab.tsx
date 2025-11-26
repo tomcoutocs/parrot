@@ -32,6 +32,7 @@ import {
   deleteFolder,
   updateFolder,
   updateDocumentVisibility,
+  moveDocumentToFolder,
   type Document,
   type DocumentFolder,
   type RichDocument
@@ -96,6 +97,9 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
   const [currentSection, setCurrentSection] = useState<'internal' | 'external'>('external')
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null)
   const [pendingIsSpreadsheet, setPendingIsSpreadsheet] = useState(false)
+  const [draggedDocumentId, setDraggedDocumentId] = useState<string | null>(null)
+  const [draggedDocumentType, setDraggedDocumentType] = useState<'document' | 'rich' | null>(null)
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
   const documentInputRef = useRef<HTMLInputElement>(null)
   const spreadsheetInputRef = useRef<HTMLInputElement>(null)
 
@@ -303,7 +307,7 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
     }
   }
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement> | null, isSpreadsheetInput: boolean = false, isInternal: boolean = false, filesOverride?: FileList | null, skipWarning: boolean = false) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement> | null, isSpreadsheetInput: boolean = false, isInternal: boolean = false, filesOverride?: FileList | null, skipWarning: boolean = false, targetFolderPath?: string) => {
     const files = filesOverride || (event?.target?.files || null)
     if (!files || files.length === 0 || !activeSpace || !supabase || !session?.user?.id) return
 
@@ -335,7 +339,8 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
         }
 
         const fileName = `${Date.now()}-${file.name}`
-        const folderPath = currentFolder === '/' ? '' : currentFolder.replace(/^\//, '')
+        const uploadFolderPath = targetFolderPath || currentFolder
+        const folderPath = uploadFolderPath === '/' ? '' : uploadFolderPath.replace(/^\//, '')
         const filePath = `${activeSpace}/${folderPath}/${fileName}`.replace(/\/+/g, '/').replace(/\/$/, '')
 
         // Upload to Supabase Storage
@@ -354,7 +359,7 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
           file.size,
           file.type,
           activeSpace,
-          currentFolder,
+          uploadFolderPath,
           session.user.id,
           isInternal
         )
@@ -365,12 +370,17 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
       }
 
       toastSuccess('Files uploaded successfully')
-      // Reload data
-      const folderPath = currentPath.length > 1 ? `/${currentPath.slice(1).join('/')}` : '/'
+      // Update breadcrumbs if files were uploaded to a folder (only if not from drag & drop)
+      if (!targetFolderPath && currentFolder !== '/') {
+        const folderPathParts = currentFolder.split('/').filter(Boolean)
+        setCurrentPath(['Documents', ...folderPathParts])
+      }
+      // Reload data - use targetFolderPath if provided, otherwise use currentPath
+      const reloadFolderPath = targetFolderPath || (currentPath.length > 1 ? `/${currentPath.slice(1).join('/')}` : '/')
       const [docsResult, foldersResult, richDocsResult] = await Promise.all([
-        getCompanyDocuments(activeSpace, folderPath),
-        getCompanyFolders(activeSpace, folderPath),
-        getCompanyRichDocuments(activeSpace, folderPath)
+        getCompanyDocuments(activeSpace, reloadFolderPath),
+        getCompanyFolders(activeSpace, reloadFolderPath),
+        getCompanyRichDocuments(activeSpace, reloadFolderPath)
       ])
       if (docsResult.success) setDocuments(docsResult.documents || [])
       if (foldersResult.success) setFolders(foldersResult.folders || [])
@@ -632,6 +642,91 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
       })
     } finally {
       setUpdatingFolder(false)
+    }
+  }
+
+  const handleDocumentDragStart = (e: React.DragEvent, documentId: string, documentType: 'document' | 'rich') => {
+    setDraggedDocumentId(documentId)
+    setDraggedDocumentType(documentType)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', '') // Required for Firefox
+  }
+
+  const handleDocumentDragEnd = () => {
+    setDraggedDocumentId(null)
+    setDraggedDocumentType(null)
+    setDragOverFolderId(null)
+  }
+
+  const handleFolderDragOver = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Only allow drop if we're dragging a document (not files from file system)
+    if (draggedDocumentId && draggedDocumentType) {
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverFolderId(folderId)
+    } else if (e.dataTransfer.types.includes('Files')) {
+      // Allow file drops
+      e.dataTransfer.dropEffect = 'copy'
+      setDragOverFolderId(folderId)
+    }
+  }
+
+  const handleFolderDragLeave = () => {
+    setDragOverFolderId(null)
+  }
+
+  const handleDocumentDrop = async (e: React.DragEvent, targetFolder: DocumentFolder) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverFolderId(null)
+
+    if (!activeSpace) return
+
+    // Check if we're dropping files from the file system
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      // Handle file upload to folder
+      const files = e.dataTransfer.files
+      
+      // Upload files to the target folder
+      await handleFileUpload(null, false, currentSection === 'internal', files, true, targetFolder.path)
+      return
+    }
+
+    // Handle document move
+    if (!draggedDocumentId || !draggedDocumentType) return
+
+    try {
+      const result = await moveDocumentToFolder(
+        draggedDocumentId,
+        draggedDocumentType,
+        targetFolder.path
+      )
+
+      if (result.success) {
+        toastSuccess('Document moved successfully')
+        // Reload data
+        const folderPath = currentPath.length > 1 ? `/${currentPath.slice(1).join('/')}` : '/'
+        const [docsResult, foldersResult, richDocsResult] = await Promise.all([
+          getCompanyDocuments(activeSpace, folderPath),
+          getCompanyFolders(activeSpace, folderPath),
+          getCompanyRichDocuments(activeSpace, folderPath)
+        ])
+        if (docsResult.success) setDocuments(docsResult.documents || [])
+        if (foldersResult.success) setFolders(foldersResult.folders || [])
+        if (richDocsResult.success) setRichDocuments(richDocsResult.documents || [])
+      } else {
+        toastError(result.error || 'Failed to move document')
+      }
+    } catch (error) {
+      console.error('Error moving document:', error)
+      toastError('Failed to move document', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    } finally {
+      setDraggedDocumentId(null)
+      setDraggedDocumentType(null)
     }
   }
 
@@ -1049,11 +1144,17 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
     if (item.type === 'folder') {
       const folder = item as DocumentFolder & { type: 'folder' }
       const isReadonly = folder.is_system_folder && folder.is_readonly
+      const isDragOver = dragOverFolderId === folder.id
       
       return (
         <div
           key={folder.id}
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group"
+          className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group ${
+            isDragOver ? 'bg-muted border-2 border-dashed border-foreground/50' : ''
+          }`}
+          onDragOver={(e) => handleFolderDragOver(e, folder.id)}
+          onDragLeave={handleFolderDragLeave}
+          onDrop={(e) => handleDocumentDrop(e, folder)}
         >
           <button
             onClick={() => handleFolderClick(folder)}
@@ -1120,10 +1221,17 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
     const updateDate = doc.updated_at || doc.created_at
     const authorId = item.type === 'rich' ? (doc as RichDocument).created_by : (doc as Document).uploaded_by
 
+    const isDragging = draggedDocumentId === doc.id
+
     return (
       <div
         key={doc.id}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group"
+        className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group ${
+          isDragging ? 'opacity-50' : ''
+        }`}
+        draggable
+        onDragStart={(e) => handleDocumentDragStart(e, doc.id, item.type === 'rich' ? 'rich' : 'document')}
+        onDragEnd={handleDocumentDragEnd}
       >
         <button
           onClick={() => {

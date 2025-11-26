@@ -3512,6 +3512,34 @@ export async function updateFolder(
   }
 }
 
+// Move a document to a folder
+export async function moveDocumentToFolder(
+  documentId: string,
+  documentType: 'document' | 'rich',
+  targetFolderPath: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const tableName = documentType === 'document' ? 'documents' : 'rich_documents'
+    
+    const { error } = await supabase
+      .from(tableName)
+      .update({ folder_path: targetFolderPath })
+      .eq('id', documentId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to move document' }
+  }
+}
+
 // Get document by ID
 export async function getDocumentById(
   documentId: string
