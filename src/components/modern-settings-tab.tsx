@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign, Trash2, AlertTriangle } from "lucide-react"
+import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign, Trash2, AlertTriangle, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,6 +16,7 @@ import { updateCompany, updateCompanyServices, getCompanyServices, deleteCompany
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { fetchServicesOptimized } from "@/lib/simplified-database-functions"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
+import { invalidateCompanyCache } from "@/lib/optimized-database-functions"
 import { Service, Company } from "@/lib/supabase"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { useSession } from "@/components/providers/session-provider"
@@ -52,6 +53,10 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
     managerId: "",
     retainer: "",
     revenue: "",
+    meta_api_key: "",
+    google_api_key: "",
+    shopify_api_key: "",
+    klaviyo_api_key: "",
   })
 
   useEffect(() => {
@@ -73,6 +78,10 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         managerId: "",
         retainer: "",
         revenue: "",
+        meta_api_key: "",
+        google_api_key: "",
+        shopify_api_key: "",
+        klaviyo_api_key: "",
       })
     }
   }, [activeSpace])
@@ -116,6 +125,10 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
             managerId: prev.managerId || "",
             retainer: spaceCompany.retainer?.toString() || "",
             revenue: spaceCompany.revenue?.toString() || "",
+            meta_api_key: spaceCompany.meta_api_key || "",
+            google_api_key: spaceCompany.google_api_key || "",
+            shopify_api_key: spaceCompany.shopify_api_key || "",
+            klaviyo_api_key: spaceCompany.klaviyo_api_key || "",
           }
         })
       }
@@ -161,6 +174,10 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         is_partner: formData.is_partner,
         retainer: formData.retainer ? parseFloat(formData.retainer) : undefined,
         revenue: formData.revenue ? parseFloat(formData.revenue) : undefined,
+        meta_api_key: formData.meta_api_key !== undefined ? formData.meta_api_key : undefined,
+        google_api_key: formData.google_api_key !== undefined ? formData.google_api_key : undefined,
+        shopify_api_key: formData.shopify_api_key !== undefined ? formData.shopify_api_key : undefined,
+        klaviyo_api_key: formData.klaviyo_api_key !== undefined ? formData.klaviyo_api_key : undefined,
       })
 
       if (!updateResult.success) {
@@ -174,6 +191,9 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
       }
 
       toastSuccess("Space settings updated successfully")
+      
+      // Invalidate company cache to ensure fresh data
+      invalidateCompanyCache()
       
       // Notify parent component to refresh services in header
       onServicesUpdated?.()
@@ -539,17 +559,123 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
               API Keys
             </CardTitle>
             <CardDescription>
-              Manage API keys for programmatic access to this space
+              Manage API keys for third-party integrations
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-muted rounded-lg bg-muted/20">
-              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted mb-4">
-                <Lock className="w-6 h-6 text-muted-foreground" />
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="meta_api_key">Meta API Key</Label>
+                {formData.meta_api_key && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, meta_api_key: "" })}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    title="Clear API key"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
-              <h3 className="text-sm font-medium mb-2">Coming Soon</h3>
-              <p className="text-xs text-muted-foreground text-center max-w-md">
-                API key management will be available soon. You&apos;ll be able to create, manage, and revoke API keys for programmatic access to this space.
+              <Input
+                id="meta_api_key"
+                type="password"
+                value={formData.meta_api_key}
+                onChange={(e) => setFormData({ ...formData, meta_api_key: e.target.value })}
+                placeholder="Enter Meta API key"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                API key for Meta (Facebook/Instagram) integrations
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="google_api_key">Google API Key</Label>
+                {formData.google_api_key && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, google_api_key: "" })}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    title="Clear API key"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <Input
+                id="google_api_key"
+                type="password"
+                value={formData.google_api_key}
+                onChange={(e) => setFormData({ ...formData, google_api_key: e.target.value })}
+                placeholder="Enter Google API key"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                API key for Google services integrations
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="shopify_api_key">Shopify API Key</Label>
+                {formData.shopify_api_key && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, shopify_api_key: "" })}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    title="Clear API key"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <Input
+                id="shopify_api_key"
+                type="password"
+                value={formData.shopify_api_key}
+                onChange={(e) => setFormData({ ...formData, shopify_api_key: e.target.value })}
+                placeholder="Enter Shopify API key"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                API key for Shopify store integrations
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="klaviyo_api_key">Klaviyo API Key</Label>
+                {formData.klaviyo_api_key && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, klaviyo_api_key: "" })}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    title="Clear API key"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <Input
+                id="klaviyo_api_key"
+                type="password"
+                value={formData.klaviyo_api_key}
+                onChange={(e) => setFormData({ ...formData, klaviyo_api_key: e.target.value })}
+                placeholder="Enter Klaviyo API key"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                API key for Klaviyo email marketing integrations
               </p>
             </div>
           </CardContent>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react"
 import dynamic from "next/dynamic"
-import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft, ChevronRight, Eye, Trash2, MoreVertical } from "lucide-react"
+import { FileText, Folder, Star, Plus, Search, Grid3x3, Upload, FileEdit, ArrowLeft, ChevronRight, Eye, Trash2, MoreVertical, ArrowRightLeft } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { 
@@ -31,6 +31,7 @@ import {
   deleteRichDocument,
   deleteFolder,
   updateFolder,
+  updateDocumentVisibility,
   type Document,
   type DocumentFolder,
   type RichDocument
@@ -386,6 +387,7 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
   }
 
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
+  const [editingDocumentIsInternal, setEditingDocumentIsInternal] = useState(false)
 
   const handleCreateDocument = (isInternal: boolean = false) => {
     // Use activeSpace if available, otherwise fall back to user's company_id
@@ -410,12 +412,14 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
     setEditingDocumentId('new')
   }
 
-  const handleEditDocument = (documentId: string) => {
+  const handleEditDocument = (documentId: string, isInternal: boolean = false) => {
     setEditingDocumentId(documentId)
+    setEditingDocumentIsInternal(isInternal)
   }
 
   const handleCloseEditor = () => {
     setEditingDocumentId(null)
+    setEditingDocumentIsInternal(false)
     // Reload documents list
     if (activeSpace) {
       const loadData = async () => {
@@ -533,6 +537,41 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
     }
   }
 
+  const handleMoveDocument = async (documentId: string, documentType: 'document' | 'rich', currentIsInternal: boolean) => {
+    if (!activeSpace || !session?.user?.id) return
+
+    // Toggle between internal and external
+    // If currently internal (true), move to external (false)
+    // If currently external (false or null/undefined), move to internal (true)
+    const newIsInternal = !currentIsInternal
+    
+    try {
+      const result = await updateDocumentVisibility(documentId, newIsInternal, documentType)
+      
+      if (result.success) {
+        const targetSection = newIsInternal ? 'internal' : 'external'
+        toastSuccess(`Document moved to ${targetSection} section`)
+        // Reload documents to reflect the change
+        const folderPath = currentPath.length > 1 ? `/${currentPath.slice(1).join('/')}` : '/'
+        const [docsResult, foldersResult, richDocsResult] = await Promise.all([
+          getCompanyDocuments(activeSpace, folderPath),
+          getCompanyFolders(activeSpace, folderPath),
+          getCompanyRichDocuments(activeSpace, folderPath)
+        ])
+        if (docsResult.success) setDocuments(docsResult.documents || [])
+        if (foldersResult.success) setFolders(foldersResult.folders || [])
+        if (richDocsResult.success) setRichDocuments(richDocsResult.documents || [])
+      } else {
+        toastError(result.error || 'Failed to move document')
+      }
+    } catch (error) {
+      console.error('Error moving document:', error)
+      toastError('Failed to move document', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    }
+  }
+
   const handleEditFolder = (folder: DocumentFolder) => {
     setEditingFolder(folder)
     setEditingFolderName(folder.name)
@@ -621,7 +660,7 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
               documentId={editingDocumentId} 
               inline={true} 
               spaceId={spaceId}
-              isInternal={isInternalSection}
+              isInternal={editingDocumentIsInternal}
             />
           </Suspense>
         </div>
@@ -1085,7 +1124,8 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
         <button
           onClick={() => {
             if (item.type === 'rich') {
-              handleEditDocument(doc.id)
+              const richDoc = doc as RichDocument
+              handleEditDocument(doc.id, richDoc.is_internal === true)
             } else {
               // Open preview modal for regular documents
               setPreviewDocument(doc as Document)
@@ -1126,7 +1166,8 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
             {item.type === 'rich' ? (
               <DropdownMenuItem onClick={(e) => {
                 e.stopPropagation()
-                handleEditDocument(doc.id)
+                const richDoc = doc as RichDocument
+                handleEditDocument(doc.id, richDoc.is_internal === true)
               }}>
                 <FileEdit className="h-4 w-4 mr-2" />
                 Edit
@@ -1140,6 +1181,27 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
                 <Eye className="h-4 w-4 mr-2" />
                 Preview
               </DropdownMenuItem>
+            )}
+            {canAccessInternal && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation()
+                  // Check if document is currently internal (handle null/undefined as false/external)
+                  const isInternal = item.type === 'rich' 
+                    ? (doc as RichDocument).is_internal === true
+                    : (doc as Document).is_internal === true
+                  handleMoveDocument(doc.id, item.type === 'rich' ? 'rich' : 'document', isInternal)
+                }}>
+                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                  {(() => {
+                    const isInternal = item.type === 'rich' 
+                      ? (doc as RichDocument).is_internal === true
+                      : (doc as Document).is_internal === true
+                    return isInternal ? 'Move to External' : 'Move to Internal'
+                  })()}
+                </DropdownMenuItem>
+              </>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem 

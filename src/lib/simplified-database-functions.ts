@@ -145,6 +145,8 @@ export async function fetchTasksOptimized(projectId?: string): Promise<TaskWithD
 
     const transformedData = data?.map(task => ({
       ...task,
+      // Map 'medium' priority to 'normal' for display consistency
+      priority: task.priority === 'medium' ? 'normal' : task.priority,
       comment_count: task.task_comments?.length || 0,
       // Use the first assigned user from task_assignments if available, otherwise fall back to assigned_user
       assigned_user: task.task_assignments?.[0]?.user || task.assigned_user
@@ -184,7 +186,18 @@ export async function fetchCompaniesOptimized(): Promise<Company[]> {
       .order('name', { ascending: true })
 
     if (error) return []
-    return data || []
+    
+    // Decrypt API keys after fetching
+    const { decrypt } = await import('./encryption')
+    const decryptedData = await Promise.all((data || []).map(async (company) => ({
+      ...company,
+      meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
+      google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
+      shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
+      klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+    })))
+    
+    return decryptedData
   } catch (error) {
     return []
   }

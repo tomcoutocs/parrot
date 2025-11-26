@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation } from './supabase'
 import { getCurrentUser } from './auth'
+import { encrypt, decrypt } from './encryption'
 
 // Historical Metrics Types
 export interface SystemMetrics {
@@ -201,6 +202,8 @@ export async function fetchTasks(projectId?: string): Promise<TaskWithDetails[]>
     // Transform data to match our interface
     const transformedData = data?.map(task => ({
       ...task,
+      // Map 'medium' priority to 'normal' for display consistency
+      priority: task.priority === 'medium' ? 'normal' : task.priority,
       comment_count: task.task_comments?.length || 0
     })) || []
     
@@ -326,22 +329,35 @@ export async function updateTaskPosition(taskId: string, newPosition: number, ne
 
 export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'updated_at'>, userId: string): Promise<Task | null> {
   if (!supabase) {
+    console.error('Supabase client not initialized')
     return null
   }
 
   try {
+    await setAppContext()
+    
+    // Map 'normal' priority to 'medium' for database compatibility
+    // The database enum likely still uses 'medium', but we display it as 'Normal'
+    const dbPriority = taskData.priority === 'normal' ? 'medium' : taskData.priority
+    
+    const insertData: any = {
+      ...taskData,
+      priority: dbPriority,
+      created_by: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
     const { data, error } = await supabase
       .from('tasks')
-      .insert({
-        ...taskData,
-        created_by: userId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(insertData)
       .select()
       .single()
 
     if (error) {
+      console.error('Error creating task:', error)
+      console.error('Task data:', insertData)
+      console.error('Priority mapping:', { original: taskData.priority, db: dbPriority })
       return null
     }
 
@@ -754,12 +770,20 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
       return { success: false, error: 'Task not found' }
     }
     
+    // Map 'normal' priority to 'medium' for database compatibility
+    const updateData: any = {
+      ...taskData,
+      updated_at: new Date().toISOString()
+    }
+    
+    // Convert 'normal' to 'medium' if priority is being updated
+    if (updateData.priority === 'normal') {
+      updateData.priority = 'medium'
+    }
+    
     const { data, error } = await supabase
       .from('tasks')
-      .update({
-        ...taskData,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', taskId)
       .select()
       .single()
@@ -795,15 +819,18 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
       }
 
       // Notify on priority change
-      if (taskData.priority && taskData.priority !== currentTask.priority) {
+      // Compare using the database values (both should be 'medium' for normal)
+      const currentPriority = currentTask.priority === 'medium' ? 'normal' : currentTask.priority
+      const newPriority = updateData.priority === 'medium' ? 'normal' : updateData.priority
+      if (taskData.priority && currentPriority !== newPriority) {
         await createTaskUpdateNotification(
           taskId,
           data.title,
           userId,
           updatedByName,
           'priority',
-          currentTask.priority,
-          taskData.priority
+          currentPriority,
+          newPriority
         ).catch(() => {})
       }
 
@@ -1614,7 +1641,16 @@ export async function fetchCompanies(): Promise<Company[]> {
       return []
     }
 
-    return data || []
+    // Decrypt API keys after fetching
+    const decryptedData = await Promise.all((data || []).map(async (company) => ({
+      ...company,
+      meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
+      google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
+      shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
+      klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+    })))
+
+    return decryptedData
   } catch (error) {
     return []
   }
@@ -1672,8 +1708,8 @@ export async function fetchCompaniesWithServices(): Promise<Company[]> {
       return []
     }
 
-    // Transform the data to flatten the services structure
-    const transformedData = (data || []).map(company => {
+    // Transform the data to flatten the services structure and decrypt API keys
+    const transformedData = await Promise.all((data || []).map(async (company) => {
       const services = company.company_services
         ?.map((cs: { service_id: string; service: Service }) => cs.service)
         .filter(Boolean) || []
@@ -1682,9 +1718,13 @@ export async function fetchCompaniesWithServices(): Promise<Company[]> {
       
       return {
         ...company,
-        services
+        services,
+        meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
+        google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
+        shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
+        klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
       }
-    })
+    }))
 
     return transformedData
   } catch (error) {
@@ -1755,6 +1795,10 @@ export async function updateCompany(companyId: string, companyData: {
   retainer?: number
   revenue?: number
   manager_id?: string | null
+  meta_api_key?: string
+  google_api_key?: string
+  shopify_api_key?: string
+  klaviyo_api_key?: string
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1779,6 +1823,21 @@ export async function updateCompany(companyId: string, companyData: {
       updated_at: new Date().toISOString()
     }
 
+    // Add API keys if provided (encrypt before storing)
+    if (companyData.meta_api_key !== undefined) {
+      // Only encrypt if a value is provided (empty string means clear the key)
+      updateData.meta_api_key = companyData.meta_api_key ? await encrypt(companyData.meta_api_key) : null
+    }
+    if (companyData.google_api_key !== undefined) {
+      updateData.google_api_key = companyData.google_api_key ? await encrypt(companyData.google_api_key) : null
+    }
+    if (companyData.shopify_api_key !== undefined) {
+      updateData.shopify_api_key = companyData.shopify_api_key ? await encrypt(companyData.shopify_api_key) : null
+    }
+    if (companyData.klaviyo_api_key !== undefined) {
+      updateData.klaviyo_api_key = companyData.klaviyo_api_key ? await encrypt(companyData.klaviyo_api_key) : null
+    }
+
     // Only include manager_id if it's provided (can be null to remove manager)
     if (companyData.manager_id !== undefined) {
       updateData.manager_id = companyData.manager_id
@@ -1792,6 +1851,37 @@ export async function updateCompany(companyId: string, companyData: {
       .single()
 
     if (error) {
+      // Gracefully handle missing API key columns
+      if (error.message?.includes('meta_api_key') || 
+          error.message?.includes('google_api_key') || 
+          error.message?.includes('shopify_api_key') || 
+          error.message?.includes('klaviyo_api_key') ||
+          (error as any).code === 'PGRST204') {
+        console.warn('API key columns not found in companies table, retrying without API keys')
+        
+        // Retry without API keys
+        const updateDataWithoutApiKeys = { ...updateData }
+        delete updateDataWithoutApiKeys.meta_api_key
+        delete updateDataWithoutApiKeys.google_api_key
+        delete updateDataWithoutApiKeys.shopify_api_key
+        delete updateDataWithoutApiKeys.klaviyo_api_key
+        
+        const { data: retryData, error: retryError } = await supabase
+          .from('companies')
+          .update(updateDataWithoutApiKeys)
+          .eq('id', companyId)
+          .select()
+          .single()
+        
+        if (retryError) {
+          console.error('Error updating company:', retryError)
+          return { success: false, error: retryError.message || 'Failed to update company' }
+        }
+        
+        console.log('Company updated successfully (without API keys):', retryData)
+        return { success: true, data: retryData }
+      }
+      
       console.error('Error updating company:', error)
       return { success: false, error: error.message || 'Failed to update company' }
     }
@@ -2803,6 +2893,43 @@ export async function createDocumentRecord(
     return { success: true, document: data }
   } catch (error) {
     return { success: false, error: 'Failed to create document record' }
+  }
+}
+
+// Update document visibility (internal/external)
+export async function updateDocumentVisibility(
+  documentId: string,
+  isInternal: boolean,
+  documentType: 'document' | 'rich'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    await setAppContext()
+
+    const tableName = documentType === 'rich' ? 'rich_documents' : 'documents'
+    
+    const { error } = await supabase
+      .from(tableName)
+      .update({
+        is_internal: isInternal,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', documentId)
+
+    if (error) {
+      // If error is about missing is_internal column, return helpful error
+      if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+        return { success: false, error: 'is_internal column not found. Please run the database migration.' }
+      }
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to update document visibility' }
   }
 }
 
@@ -4320,14 +4447,21 @@ export async function saveRichDocument(
         return { success: false, error: 'You can only edit documents you created' }
       }
 
-      // Update existing document
+      // Update existing document - include is_internal if updating
+      const updateData: any = {
+        title,
+        content,
+        updated_at: new Date().toISOString()
+      }
+      
+      // Include is_internal if it was passed (for updates that change visibility)
+      if (isInternal !== undefined) {
+        updateData.is_internal = isInternal
+      }
+
       const { data, error } = await supabase
         .from('rich_documents')
-        .update({
-          title,
-          content,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', documentId)
         .select()
         .single()

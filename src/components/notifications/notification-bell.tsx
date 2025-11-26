@@ -119,7 +119,8 @@ export function NotificationBell({ className }: NotificationBellProps) {
     if (userId) {
       loadNotifications()
     }
-  }, [userId, loadNotifications])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, filterType])
 
   // Subscribe to real-time notification updates
   useEffect(() => {
@@ -209,7 +210,8 @@ export function NotificationBell({ className }: NotificationBellProps) {
         supabase.removeChannel(channel)
       }
     }
-  }, [userId, loadNotifications])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   const handleMarkAsRead = async (notificationId: string) => {
     const result = await markNotificationAsRead(notificationId)

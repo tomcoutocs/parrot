@@ -122,7 +122,7 @@ function transformTaskToDesignTask(task: TaskWithDetails): DesignTask & { origin
   }
   
   const priority = task.priority 
-    ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1)
+    ? ((task.priority as string) === 'medium' ? 'Normal' : task.priority.charAt(0).toUpperCase() + task.priority.slice(1))
     : "Normal"
 
   return {
@@ -523,13 +523,14 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
       }
 
       // Handle priority - map TaskRow labels to database values
+      // Database still uses 'medium', but we display it as 'normal'
       if ('priority' in updates && updates.priority) {
-        const priorityMap: Record<string, Task['priority']> = {
+        const priorityMap: Record<string, string> = {
           'urgent': 'urgent',
           'high': 'high',
-          'normal': 'medium',  // TaskRow uses "Normal" but DB expects "medium"
+          'normal': 'medium', // Map 'normal' to 'medium' for database compatibility
           'low': 'low',
-          'medium': 'medium'
+          'medium': 'medium' // Keep 'medium' as is for backwards compatibility
         }
         const normalizedPriority = updates.priority.toLowerCase()
         dbUpdates.priority = priorityMap[normalizedPriority] || 'medium'
@@ -1546,11 +1547,12 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                           
                                           // Map priority to database format
                                           const priorityMap: Record<string, string> = {
+                                            "Low": "low",
+                                            "Normal": "normal",
                                             "High": "high",
-                                            "Normal": "medium",
-                                            "Low": "low"
+                                            "Urgent": "urgent"
                                           }
-                                          const dbPriority = task.priority ? priorityMap[task.priority] || "medium" : "medium"
+                                          const dbPriority = task.priority ? priorityMap[task.priority] || "normal" : "normal"
 
                                           // Use assignee ID directly (already in correct format)
                                           const assigneeUserId = task.assignee
@@ -1605,6 +1607,12 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                           }
                                         } catch (error) {
                                           console.error("Error creating task:", error)
+                                          // Show error to user
+                                          if (error instanceof Error) {
+                                            alert(`Failed to create task: ${error.message}`)
+                                          } else {
+                                            alert('Failed to create task. Please check the console for details.')
+                                          }
                                         }
                                         
                                         setShowingInlineCreate(null)

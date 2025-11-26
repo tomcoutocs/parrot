@@ -50,6 +50,10 @@ export interface Company {
   is_partner: boolean
   retainer?: number
   revenue?: number
+  meta_api_key?: string
+  google_api_key?: string
+  shopify_api_key?: string
+  klaviyo_api_key?: string
   created_at: string
   updated_at: string
   services?: Service[]
@@ -137,7 +141,7 @@ export interface Task {
   title: string
   description?: string
   status: 'todo' | 'in_progress' | 'review' | 'done'
-  priority: 'low' | 'medium' | 'high' | 'urgent'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
   assigned_to?: string
   created_by: string
   due_date?: string

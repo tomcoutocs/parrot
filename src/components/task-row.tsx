@@ -84,7 +84,9 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
 
   const dueDateStatus = getDueDateStatus(task.dueDate)
-  const currentPriority = priorityLevels.find(p => p.label.toLowerCase() === task.priority.toLowerCase()) || priorityLevels[2]
+  // Convert 'medium' to 'normal' for display matching
+  const displayPriority = task.priority === 'medium' ? 'normal' : task.priority
+  const currentPriority = priorityLevels.find(p => p.id.toLowerCase() === displayPriority?.toLowerCase()) || priorityLevels[2]
   const currentStatus = statusLevels.find(s => s.id === (task.status?.toLowerCase() || (task.completed ? "done" : "todo"))) || statusLevels[0]
 
   const handleNameSave = () => {
@@ -349,7 +351,7 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
             <button className="flex items-center gap-2 hover:bg-muted/50 px-2 py-1 rounded transition-colors">
               <div className={`w-1.5 h-1.5 rounded-full ${currentPriority.dotColor}`} />
               <span className={`text-xs ${currentPriority.color}`}>
-                {task.priority}
+                {task.priority === 'medium' ? 'normal' : task.priority}
               </span>
             </button>
           </DropdownMenuTrigger>

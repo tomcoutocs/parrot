@@ -27,7 +27,7 @@ export function EditTaskModal({ task, isOpen, onClose, onTaskUpdated, users }: E
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<TaskWithDetails['status']>('todo')
-  const [priority, setPriority] = useState<TaskWithDetails['priority']>('medium')
+  const [priority, setPriority] = useState<TaskWithDetails['priority']>('normal')
   const [assignedTo, setAssignedTo] = useState<string>('')
   const [dueDate, setDueDate] = useState<string>('')
   const [estimatedHours, setEstimatedHours] = useState<string>('')
@@ -81,7 +81,7 @@ export function EditTaskModal({ task, isOpen, onClose, onTaskUpdated, users }: E
         setTitle('')
         setDescription('')
         setStatus('todo')
-        setPriority('medium')
+        setPriority('normal')
         setAssignedTo('none')
         setDueDate('')
         setEstimatedHours('')
@@ -173,7 +173,7 @@ export function EditTaskModal({ task, isOpen, onClose, onTaskUpdated, users }: E
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
                   <SelectItem value="high">High</SelectItem>
                   <SelectItem value="urgent">Urgent</SelectItem>
                 </SelectContent>

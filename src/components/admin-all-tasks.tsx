@@ -306,10 +306,11 @@ export function AdminAllTasks() {
               const priorityMap: Record<string, string> = {
                 "urgent": "Urgent",
                 "high": "High",
-                "medium": "Normal",
+                "normal": "Normal",
+                "medium": "Normal", // Backwards compatibility
                 "low": "Low"
               }
-              const priorityLabel = priorityMap[task.priority || "medium"] || "Normal"
+              const priorityLabel = priorityMap[task.priority || "normal"] || "Normal"
               
               // Map status to match TaskRow format
               const statusMap: Record<string, string> = {
@@ -333,10 +334,11 @@ export function AdminAllTasks() {
               const priorityColors: Record<string, { dot: string; text: string }> = {
                 "urgent": { dot: "bg-red-500", text: "text-red-600" },
                 "high": { dot: "bg-orange-500", text: "text-orange-600" },
-                "medium": { dot: "bg-gray-400", text: "text-muted-foreground" },
+                "normal": { dot: "bg-gray-400", text: "text-muted-foreground" },
+                "medium": { dot: "bg-gray-400", text: "text-muted-foreground" }, // Backwards compatibility
                 "low": { dot: "bg-blue-500", text: "text-blue-600" }
               }
-              const currentPriority = priorityColors[task.priority || "medium"] || priorityColors["medium"]
+              const currentPriority = priorityColors[task.priority || "normal"] || priorityColors["normal"]
               
               return (
                 <div

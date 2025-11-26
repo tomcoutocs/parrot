@@ -185,8 +185,10 @@ export default function ProjectOverviewTab() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
+      case 'urgent': return 'bg-red-100 text-red-800'
+      case 'high': return 'bg-orange-100 text-orange-800'
+      case 'normal': return 'bg-yellow-100 text-yellow-800'
+      case 'medium': return 'bg-yellow-100 text-yellow-800' // Backwards compatibility
       case 'low': return 'bg-green-100 text-green-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -491,8 +493,8 @@ export default function ProjectOverviewTab() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getPriorityColor(task.priority || 'medium')}>
-                        {task.priority || 'medium'}
+                      <Badge className={getPriorityColor(task.priority || 'normal')}>
+                        {(task.priority as string) === 'medium' ? 'normal' : (task.priority || 'normal')}
                       </Badge>
                     </TableCell>
                     <TableCell>
