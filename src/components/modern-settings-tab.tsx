@@ -344,7 +344,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Basic Information */}
-        <Card>
+        <Card className="self-start">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Building2 className="w-4 h-4" />
@@ -390,7 +390,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         </Card>
 
         {/* Contact Information */}
-        <Card>
+        <Card className="self-start">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Globe className="w-4 h-4" />
@@ -437,7 +437,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         </Card>
 
         {/* Services */}
-        <Card>
+        <Card className="self-start">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Briefcase className="w-4 h-4" />
@@ -474,7 +474,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         </Card>
 
         {/* Financial Information */}
-        <Card>
+        <Card className="self-start">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <DollarSign className="w-4 h-4" />
@@ -518,7 +518,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         </Card>
 
         {/* Status & Options */}
-        <Card>
+        <Card className="self-start">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CheckCircle2 className="w-4 h-4" />

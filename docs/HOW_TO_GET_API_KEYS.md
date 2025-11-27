@@ -1,62 +1,17 @@
-# API Credentials Guide
+# How to Get API Keys - Step-by-Step Guide
 
-This comprehensive guide shows you how to obtain all the required API credentials for integrating with Google Ads API, Meta Ads API, Shopify API, and Klaviyo API.
-
-## Quick Reference
-
-| API | Required Credentials | Estimated Setup Time | Approval Required |
-|-----|---------------------|---------------------|-------------------|
-| **Google Ads** | Developer Token, Client ID, Client Secret, Refresh Token, Customer ID | 2-3 hours + 1-3 days approval | Yes (Developer Token) |
-| **Meta Ads** | App ID, App Secret, Access Token, Ad Account ID, System User Token (optional) | 1-2 hours + 1-7 days review | Yes (Permissions) |
-| **Shopify** | Store Domain, API Key, API Secret Key, Access Token, Scopes | 15-30 minutes | No (Private App) |
-| **Klaviyo** | Public API Key, Private API Key | 5-10 minutes | No |
+This guide provides detailed, step-by-step instructions for obtaining API credentials for Google Ads, Meta Ads, Shopify, and Klaviyo.
 
 ## Table of Contents
 
 1. [Google Ads API](#google-ads-api)
-2. [Meta Ads API](#meta-ads-api-facebookinstagram-ads)
+2. [Meta Ads API](#meta-ads-api)
 3. [Shopify API](#shopify-api)
 4. [Klaviyo API](#klaviyo-api)
 
-> 📖 **Looking for step-by-step instructions?** See [HOW_TO_GET_API_KEYS.md](./HOW_TO_GET_API_KEYS.md) for detailed guides on obtaining each API credential.
-
 ---
 
-## Prerequisites
-
-Before starting, ensure you have:
-- Admin access to the accounts/services you want to integrate
-- A valid email address for account verification
-- Basic understanding of API authentication concepts
-- Access to your application's callback URLs for OAuth flows
-
 ## Google Ads API
-
-The Google Ads API uses OAuth 2.0 authentication and requires the following credentials:
-
-### Required Variables:
-1. **`GOOGLE_ADS_DEVELOPER_TOKEN`** (string)
-   - Unique token that identifies your application to Google Ads API
-   - Obtained from Google Ads account after API access approval
-   - Format: Usually a long alphanumeric string
-
-2. **`GOOGLE_ADS_CLIENT_ID`** (string)
-   - OAuth 2.0 Client ID from Google Cloud Console
-   - Format: `xxxxx.apps.googleusercontent.com`
-
-3. **`GOOGLE_ADS_CLIENT_SECRET`** (string)
-   - OAuth 2.0 Client Secret from Google Cloud Console
-   - Format: `GOCSPX-xxxxxxxxxxxxx`
-
-4. **`GOOGLE_ADS_REFRESH_TOKEN`** (string)
-   - Used to obtain new access tokens without user interaction
-   - Generated through OAuth 2.0 authorization flow
-   - Format: Long alphanumeric string
-
-5. **`GOOGLE_ADS_CUSTOMER_ID`** (string, optional per account)
-   - The Google Ads customer ID (account ID) you want to access
-   - Format: `123-456-7890` (with dashes) or `1234567890` (without dashes)
-   - Note: This may be stored per company/client if managing multiple accounts
 
 ### Step-by-Step Guide to Obtain Google Ads API Credentials:
 
@@ -132,35 +87,7 @@ The Google Ads API uses OAuth 2.0 authentication and requires the following cred
 
 ---
 
-## Meta Ads API (Facebook/Instagram Ads)
-
-The Meta Ads API uses OAuth 2.0 authentication and requires the following credentials:
-
-### Required Variables:
-1. **`META_ADS_APP_ID`** (string)
-   - Application ID from Meta for Developers portal
-   - Format: Numeric string (e.g., `123456789012345`)
-
-2. **`META_ADS_APP_SECRET`** (string)
-   - Application Secret from Meta for Developers portal
-   - Format: Alphanumeric string (e.g., `abc123def456ghi789`)
-
-3. **`META_ADS_ACCESS_TOKEN`** (string)
-   - Access token that grants API access
-   - Can be short-lived (1-2 hours) or long-lived (60 days)
-   - Format: Long alphanumeric string
-   - Note: Long-lived tokens can be refreshed programmatically
-
-4. **`META_ADS_AD_ACCOUNT_ID`** (string, optional per account)
-   - The Meta Ad Account ID (act_ prefix)
-   - Format: `act_123456789` or just `123456789`
-   - Note: This may be stored per company/client if managing multiple accounts
-
-### Optional Variables:
-5. **`META_ADS_SYSTEM_USER_TOKEN`** (string, recommended for production)
-   - System User Access Token for server-to-server calls
-   - More stable than user tokens
-   - Format: Long alphanumeric string
+## Meta Ads API
 
 ### Step-by-Step Guide to Obtain Meta Ads API Credentials:
 
@@ -253,37 +180,6 @@ The Meta Ads API uses OAuth 2.0 authentication and requires the following creden
 ---
 
 ## Shopify API
-
-The Shopify API uses API key authentication (for Private Apps) or OAuth 2.0 (for Public Apps).
-
-### Required Variables (Private App Method - Recommended):
-1. **`SHOPIFY_STORE_DOMAIN`** (string)
-   - Your Shopify store domain
-   - Format: `your-store.myshopify.com` or `your-store.com`
-   - Note: Include protocol if needed: `https://your-store.myshopify.com`
-
-2. **`SHOPIFY_API_KEY`** (string)
-   - Admin API Key from Private App
-   - Format: Alphanumeric string (e.g., `abc123def456ghi789`)
-
-3. **`SHOPIFY_API_SECRET_KEY`** (string)
-   - Admin API Secret Key from Private App
-   - Format: Alphanumeric string (e.g., `secret123abc456def789`)
-
-4. **`SHOPIFY_ACCESS_TOKEN`** (string)
-   - Admin API Access Token
-   - Generated when creating Private App
-   - Format: `shpat_xxxxxxxxxxxxxxxxxxxxx` (for Private Apps)
-   - Format: `shpca_xxxxxxxxxxxxxxxxxxxxx` (for OAuth apps)
-
-### Required Variables (OAuth 2.0 Method - For Public Apps):
-1. **`SHOPIFY_STORE_DOMAIN`** (string) - Same as above
-2. **`SHOPIFY_API_KEY`** (string) - Same as above
-3. **`SHOPIFY_API_SECRET_KEY`** (string) - Same as above
-4. **`SHOPIFY_ACCESS_TOKEN`** (string) - Obtained through OAuth flow
-5. **`SHOPIFY_SCOPES`** (string, optional)
-   - Required scopes/permissions
-   - Format: Comma-separated (e.g., `read_products,write_products,read_orders`)
 
 ### Step-by-Step Guide to Obtain Shopify API Credentials (Private App Method):
 
@@ -380,95 +276,7 @@ The Shopify API uses API key authentication (for Private Apps) or OAuth 2.0 (for
 
 ---
 
-## Database Schema Recommendations
-
-Based on the current implementation, you may want to expand the `companies` table to store these additional credentials:
-
-```sql
--- Current columns (from migrations/add_api_keys_to_companies.sql):
-ALTER TABLE companies
-ADD COLUMN IF NOT EXISTS meta_api_key TEXT,
-ADD COLUMN IF NOT EXISTS google_api_key TEXT,
-ADD COLUMN IF NOT EXISTS shopify_api_key TEXT;
-
--- Recommended additional columns:
-ALTER TABLE companies
--- Google Ads API
-ADD COLUMN IF NOT EXISTS google_ads_developer_token TEXT,
-ADD COLUMN IF NOT EXISTS google_ads_client_id TEXT,
-ADD COLUMN IF NOT EXISTS google_ads_client_secret TEXT,
-ADD COLUMN IF NOT EXISTS google_ads_refresh_token TEXT,
-ADD COLUMN IF NOT EXISTS google_ads_customer_id TEXT,
-
--- Meta Ads API
-ADD COLUMN IF NOT EXISTS meta_ads_app_id TEXT,
-ADD COLUMN IF NOT EXISTS meta_ads_app_secret TEXT,
-ADD COLUMN IF NOT EXISTS meta_ads_access_token TEXT,
-ADD COLUMN IF NOT EXISTS meta_ads_ad_account_id TEXT,
-
--- Shopify API
-ADD COLUMN IF NOT EXISTS shopify_store_domain TEXT,
-ADD COLUMN IF NOT EXISTS shopify_api_secret_key TEXT,
-ADD COLUMN IF NOT EXISTS shopify_access_token TEXT,
-
--- Klaviyo API
-ADD COLUMN IF NOT EXISTS klaviyo_public_api_key TEXT,
-ADD COLUMN IF NOT EXISTS klaviyo_private_api_key TEXT;
-```
-
----
-
-## Security Best Practices
-
-1. **Encryption**: All API credentials should be encrypted at rest (already implemented in your codebase using `encrypt()` function)
-
-2. **Environment Variables**: For development, store credentials in `.env.local`:
-   ```env
-   # Google Ads API
-   GOOGLE_ADS_DEVELOPER_TOKEN=your_token
-   GOOGLE_ADS_CLIENT_ID=your_client_id
-   GOOGLE_ADS_CLIENT_SECRET=your_client_secret
-   GOOGLE_ADS_REFRESH_TOKEN=your_refresh_token
-   
-   # Meta Ads API
-   META_ADS_APP_ID=your_app_id
-   META_ADS_APP_SECRET=your_app_secret
-   META_ADS_ACCESS_TOKEN=your_access_token
-   
-   # Shopify API
-   SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
-   SHOPIFY_API_KEY=your_api_key
-   SHOPIFY_API_SECRET_KEY=your_secret_key
-   SHOPIFY_ACCESS_TOKEN=your_access_token
-   
-   # Klaviyo API
-   KLAVIYO_PUBLIC_API_KEY=ABC123
-   KLAVIYO_PRIVATE_API_KEY=your_private_api_key
-   ```
-
-3. **Token Refresh**: Implement automatic token refresh for:
-   - Google Ads API (refresh tokens)
-   - Meta Ads API (long-lived tokens expire after 60 days)
-
-4. **Access Control**: Use Row Level Security (RLS) to ensure companies can only access their own credentials
-
----
-
 ## Klaviyo API
-
-The Klaviyo API uses API key authentication and requires the following credentials:
-
-### Required Variables:
-1. **`KLAVIYO_PUBLIC_API_KEY`** (string)
-   - Public API Key (Site ID) - 6-character identifier
-   - Used for client-side API calls
-   - Format: 6-character alphanumeric string (e.g., `ABC123`)
-
-2. **`KLAVIYO_PRIVATE_API_KEY`** (string)
-   - Private API Key for server-side calls
-   - Grants read/write access to Klaviyo data
-   - Format: Long alphanumeric string
-   - Note: This should be encrypted before storage
 
 ### Step-by-Step Guide to Obtain Klaviyo API Credentials:
 
@@ -519,11 +327,11 @@ The Klaviyo API uses API key authentication and requires the following credentia
 
 ---
 
-## Notes
+## Quick Tips
 
-- **Google Ads API**: Requires approval from Google before production use
-- **Meta Ads API**: Requires app review for certain permissions
-- **Shopify API**: Private apps are easier but OAuth apps are more flexible for multi-store scenarios
-- **Klaviyo API**: Public key is safe for client-side use, but private key must be kept secure
-- All tokens should be treated as sensitive data and never exposed in client-side code
+- ⚠️ **Always save credentials immediately** - many secrets are only shown once
+- 📝 **Keep a secure backup** of all credentials in a password manager
+- 🔒 **Never commit credentials** to version control
+- ✅ **Test credentials** after obtaining them to ensure they work
+- 🔄 **Set reminders** for token expiration dates (especially Meta Ads tokens)
 

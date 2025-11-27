@@ -1,40 +1,31 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { TrendingUp, TrendingDown } from "lucide-react"
+import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
+import { fetchCompanyReportsData } from "@/lib/api-integrations"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
-interface MetricsDataPoint {
+interface PerformanceDataPoint {
   date: string
-  spent: number
+  metaSpend: number
+  googleSpend: number
   revenue: number
-  mer: number
-  roas: number
+  metaRev: number
+  googleRev: number
 }
 
-const mockDataBySpace: Record<string, MetricsDataPoint[]> = {
-  "1": [
-    { date: "Nov 1", spent: 4200, revenue: 12600, mer: 3.0, roas: 3.0 },
-    { date: "Nov 2", spent: 3800, revenue: 13300, mer: 3.5, roas: 3.5 },
-    { date: "Nov 3", spent: 4500, revenue: 15750, mer: 3.5, roas: 3.5 },
-    { date: "Nov 4", spent: 4100, revenue: 14350, mer: 3.5, roas: 3.5 },
-    { date: "Nov 5", spent: 5200, revenue: 18200, mer: 3.5, roas: 3.5 },
-    { date: "Nov 6", spent: 4800, revenue: 16800, mer: 3.5, roas: 3.5 },
-    { date: "Nov 7", spent: 5100, revenue: 20400, mer: 4.0, roas: 4.0 },
-  ],
-  "default": [
-    { date: "Nov 1", spent: 4200, revenue: 12600, mer: 3.0, roas: 3.0 },
-    { date: "Nov 2", spent: 3800, revenue: 13300, mer: 3.5, roas: 3.5 },
-    { date: "Nov 3", spent: 4500, revenue: 15750, mer: 3.5, roas: 3.5 },
-    { date: "Nov 4", spent: 4100, revenue: 14350, mer: 3.5, roas: 3.5 },
-    { date: "Nov 5", spent: 5200, revenue: 18200, mer: 3.5, roas: 3.5 },
-    { date: "Nov 6", spent: 4800, revenue: 16800, mer: 3.5, roas: 3.5 },
-    { date: "Nov 7", spent: 5100, revenue: 20400, mer: 4.0, roas: 4.0 },
-  ],
+type DateRange = "1" | "7" | "30"
+
+const dateRangeLabels: Record<DateRange, string> = {
+  "1": "Last 24 hours",
+  "7": "Last 7 days",
+  "30": "Last 30 days",
 }
 
-type MetricType = "revenue" | "spent" | "mer" | "roas"
+type MetricType = "revenue" | "spent" | "roas" | "cpa"
 
 interface MetricsCardProps {
   activeSpace: string
@@ -42,58 +33,136 @@ interface MetricsCardProps {
 
 export function MetricsCard({ activeSpace }: MetricsCardProps) {
   const [activeMetric, setActiveMetric] = useState<MetricType>("revenue")
-  const [timeRange, setTimeRange] = useState("7d")
+  const [dateRange, setDateRange] = useState<DateRange>("30")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [performanceData, setPerformanceData] = useState<PerformanceDataPoint[]>([])
+  const [summaryMetrics, setSummaryMetrics] = useState<{
+    totalRevenue: number
+    totalSpend: number
+    blendedROAS: number
+    avgCPA: number
+  }>({
+    totalRevenue: 0,
+    totalSpend: 0,
+    blendedROAS: 0,
+    avgCPA: 0,
+  })
 
-  const mockData = mockDataBySpace[activeSpace] || mockDataBySpace["default"]
-  const totalSpent = mockData.reduce((sum, d) => sum + d.spent, 0)
-  const totalRevenue = mockData.reduce((sum, d) => sum + d.revenue, 0)
-  const avgMER = totalRevenue / totalSpent
-  const avgROAS = avgMER
+  // Load company data and fetch reports
+  useEffect(() => {
+    const loadReportsData = async () => {
+      if (!activeSpace) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        // Fetch company data with decrypted credentials
+        const companies = await fetchCompaniesOptimized()
+        const spaceCompany = companies.find(c => c.id === activeSpace)
+
+        if (!spaceCompany) {
+          setError("Company not found")
+          setLoading(false)
+          return
+        }
+
+        // Check if any API credentials are configured
+        const hasGoogleAds = !!(
+          spaceCompany.google_ads_developer_token &&
+          spaceCompany.google_ads_client_id &&
+          spaceCompany.google_ads_refresh_token &&
+          spaceCompany.google_ads_customer_id
+        )
+        const hasMetaAds = !!(
+          spaceCompany.meta_ads_app_id &&
+          spaceCompany.meta_ads_access_token &&
+          spaceCompany.meta_ads_ad_account_id
+        )
+        const hasShopify = !!(
+          spaceCompany.shopify_store_domain &&
+          spaceCompany.shopify_access_token
+        )
+
+        if (!hasGoogleAds && !hasMetaAds && !hasShopify) {
+          setError("No API credentials configured")
+          setLoading(false)
+          return
+        }
+
+        // Fetch real data from APIs
+        const reportsData = await fetchCompanyReportsData(spaceCompany, dateRange)
+        
+        setPerformanceData(reportsData.performanceData)
+        setSummaryMetrics(reportsData.summaryMetrics)
+      } catch (err) {
+        console.error("Error loading reports data:", err)
+        setError(err instanceof Error ? err.message : "Failed to load reports data")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadReportsData()
+  }, [activeSpace, dateRange])
 
   const metrics = [
     { 
-      id: "spent" as MetricType, 
-      label: "Ad Spend", 
-      value: `$${(totalSpent / 1000).toFixed(1)}k`, 
-      change: "+12%",
-      isPositive: false,
-      color: "#ef4444"
-    },
-    { 
       id: "revenue" as MetricType, 
-      label: "Revenue", 
-      value: `$${(totalRevenue / 1000).toFixed(1)}k`, 
-      change: "+24%",
+      label: "Total Revenue", 
+      value: `$${(summaryMetrics.totalRevenue / 1000).toFixed(1)}k`, 
+      change: "+0%",
       isPositive: true,
       color: "#8b5cf6"
     },
     { 
-      id: "mer" as MetricType, 
-      label: "MER", 
-      value: avgMER.toFixed(2), 
-      change: "+8%",
-      isPositive: true,
-      color: "#10b981"
+      id: "spent" as MetricType, 
+      label: "Total Ad Spend", 
+      value: `$${(summaryMetrics.totalSpend / 1000).toFixed(1)}k`, 
+      change: "+0%",
+      isPositive: false,
+      color: "#ef4444"
     },
     { 
       id: "roas" as MetricType, 
       label: "Blended ROAS", 
-      value: avgROAS.toFixed(2), 
-      change: "+8%",
+      value: summaryMetrics.blendedROAS.toFixed(2), 
+      change: "+0%",
       isPositive: true,
       color: "#3b82f6"
     },
+    { 
+      id: "cpa" as MetricType, 
+      label: "Avg CPA", 
+      value: `$${summaryMetrics.avgCPA.toFixed(2)}`, 
+      change: "+0%",
+      isPositive: true,
+      color: "#10b981"
+    },
   ]
+
+  // Transform performanceData for chart
+  const chartData = performanceData.map(d => ({
+    date: d.date,
+    revenue: d.revenue,
+    spent: d.metaSpend + d.googleSpend,
+    roas: (d.metaSpend + d.googleSpend) > 0 ? d.revenue / (d.metaSpend + d.googleSpend) : 0,
+  }))
 
   const getChartData = () => {
     if (activeMetric === "revenue") {
       return { dataKey: "revenue", color: "#8b5cf6", formatter: (value: number) => `$${value.toLocaleString()}` }
     } else if (activeMetric === "spent") {
       return { dataKey: "spent", color: "#ef4444", formatter: (value: number) => `$${value.toLocaleString()}` }
-    } else if (activeMetric === "mer") {
-      return { dataKey: "mer", color: "#10b981", formatter: (value: number) => value.toFixed(2) }
-    } else {
+    } else if (activeMetric === "roas") {
       return { dataKey: "roas", color: "#3b82f6", formatter: (value: number) => value.toFixed(2) }
+    } else {
+      // CPA - show revenue as placeholder since we don't have conversions in chart data
+      return { dataKey: "revenue", color: "#10b981", formatter: (value: number) => `$${value.toLocaleString()}` }
     }
   }
 
@@ -105,13 +174,13 @@ export function MetricsCard({ activeSpace }: MetricsCardProps) {
         <h3>Performance Metrics</h3>
         <div className="flex items-center gap-2">
           <select 
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value as DateRange)}
             className="text-sm px-3 py-1.5 border border-border rounded-md bg-background"
           >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
           </select>
         </div>
       </div>
@@ -143,9 +212,22 @@ export function MetricsCard({ activeSpace }: MetricsCardProps) {
       </div>
 
       {/* Chart */}
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={mockData}>
+      {loading ? (
+        <div className="h-48 flex items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      ) : error ? (
+        <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+          {error}
+        </div>
+      ) : chartData.length === 0 ? (
+        <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+          No data available
+        </div>
+      ) : (
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis 
               dataKey="date" 
@@ -176,9 +258,10 @@ export function MetricsCard({ activeSpace }: MetricsCardProps) {
               dot={false}
               activeDot={{ r: 4 }}
             />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </Card>
   )
 }
