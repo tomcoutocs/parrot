@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Filter, Plus, FolderKanban } from "lucide-react"
+import { Search, Plus, FolderKanban, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Card } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { fetchProjectsOptimized, fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { ProjectWithDetails, Company } from "@/lib/supabase"
 import { format } from "date-fns"
@@ -23,6 +25,8 @@ export function AdminAllProjects() {
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [filterCompany, setFilterCompany] = useState<string>("all")
+  const [filterStatus, setFilterStatus] = useState<string>("all")
 
   const handleProjectClick = (project: ProjectWithCompany) => {
     // Navigate to projects tab with the selected project and space
@@ -65,13 +69,25 @@ export function AdminAllProjects() {
     const matchesSearch = 
       project.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.company?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
+    
+    const matchesCompany = filterCompany === "all" || project.company_id === filterCompany
+    const matchesStatus = filterStatus === "all" || project.status === filterStatus
+    
+    return matchesSearch && matchesCompany && matchesStatus
   })
 
   const activeProjects = filteredProjects.filter(p => {
     // Consider a project active if it's not archived
     return p.status !== "archived"
   })
+
+  const activeFilterCount = (filterCompany !== "all" ? 1 : 0) + (filterStatus !== "all" ? 1 : 0)
+  const hasActiveFilters = activeFilterCount > 0
+
+  const clearFilters = () => {
+    setFilterCompany("all")
+    setFilterStatus("all")
+  }
 
   const getStatusColor = (status: string) => {
     const statusLower = status?.toLowerCase() || ""
@@ -155,20 +171,79 @@ export function AdminAllProjects() {
 
       {/* Filters */}
       <Card className="p-4 border-border/60">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search projects..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex-1 relative min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search projects..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={filterCompany} onValueChange={setFilterCompany}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Companies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Companies</SelectItem>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="planning">Planning</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="done">Done</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-9 text-xs"
+              >
+                Clear filters
+              </Button>
+            )}
           </div>
-          <Button variant="outline" className="flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            Filter
-          </Button>
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-2">
+              {filterCompany !== "all" && (
+                <Badge variant="secondary" className="text-xs">
+                  {companies.find(c => c.id === filterCompany)?.name || "Company"}
+                  <button
+                    onClick={() => setFilterCompany("all")}
+                    className="ml-1.5 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filterStatus !== "all" && (
+                <Badge variant="secondary" className="text-xs">
+                  {getStatusLabel(filterStatus)}
+                  <button
+                    onClick={() => setFilterStatus("all")}
+                    className="ml-1.5 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 

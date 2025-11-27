@@ -701,7 +701,8 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
       const result = await moveDocumentToFolder(
         draggedDocumentId,
         draggedDocumentType,
-        targetFolder.path
+        targetFolder.path,
+        session?.user?.id
       )
 
       if (result.success) {

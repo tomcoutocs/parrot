@@ -117,8 +117,8 @@ export function ModernSidebar({
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "projects", label: "All Projects", icon: FolderKanban },
     { id: "tasks", label: "All Tasks", icon: CheckSquare },
-    { id: "calendar", label: "Calendar", icon: Calendar },
     { id: "all-users", label: "All Users", icon: Users },
+    { id: "calendar", label: "Calendar", icon: Calendar },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "team", label: "Team", icon: Users },
   ]

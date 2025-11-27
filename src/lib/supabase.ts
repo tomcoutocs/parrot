@@ -50,10 +50,31 @@ export interface Company {
   is_partner: boolean
   retainer?: number
   revenue?: number
+  // Legacy API keys (kept for backward compatibility)
   meta_api_key?: string
   google_api_key?: string
   shopify_api_key?: string
   klaviyo_api_key?: string
+  // Google Ads API credentials
+  google_ads_developer_token?: string
+  google_ads_client_id?: string
+  google_ads_client_secret?: string
+  google_ads_refresh_token?: string
+  google_ads_customer_id?: string
+  // Meta Ads API credentials
+  meta_ads_app_id?: string
+  meta_ads_app_secret?: string
+  meta_ads_access_token?: string
+  meta_ads_ad_account_id?: string
+  meta_ads_system_user_token?: string
+  // Shopify API credentials
+  shopify_store_domain?: string
+  shopify_api_secret_key?: string
+  shopify_access_token?: string
+  shopify_scopes?: string
+  // Klaviyo API credentials
+  klaviyo_public_api_key?: string
+  klaviyo_private_api_key?: string
   created_at: string
   updated_at: string
   services?: Service[]

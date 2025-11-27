@@ -1641,13 +1641,27 @@ export async function fetchCompanies(): Promise<Company[]> {
       return []
     }
 
-    // Decrypt API keys after fetching
+    // Decrypt API keys and credentials after fetching
     const decryptedData = await Promise.all((data || []).map(async (company) => ({
       ...company,
+      // Legacy API keys
       meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
       google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
       shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
       klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+      // Google Ads API credentials (decrypt sensitive fields)
+      google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
+      google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
+      google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+      // Meta Ads API credentials (decrypt sensitive fields)
+      meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
+      meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
+      meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+      // Shopify API credentials (decrypt sensitive fields)
+      shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
+      shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+      // Klaviyo API credentials (decrypt sensitive fields)
+      klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
     })))
 
     return decryptedData
@@ -1719,10 +1733,24 @@ export async function fetchCompaniesWithServices(): Promise<Company[]> {
       return {
         ...company,
         services,
+        // Legacy API keys
         meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
         google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
         shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
         klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+        // Google Ads API credentials (decrypt sensitive fields)
+        google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
+        google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
+        google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+        // Meta Ads API credentials (decrypt sensitive fields)
+        meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
+        meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
+        meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+        // Shopify API credentials (decrypt sensitive fields)
+        shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
+        shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+        // Klaviyo API credentials (decrypt sensitive fields)
+        klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
       }
     }))
 
@@ -1784,21 +1812,42 @@ export async function createCompany(companyData: {
 }
 
 export async function updateCompany(companyId: string, companyData: {
-  name: string
+  name?: string
   description?: string
   industry?: string
   website?: string
   phone?: string
   address?: string
-  is_active: boolean
-  is_partner: boolean
+  is_active?: boolean
+  is_partner?: boolean
   retainer?: number
   revenue?: number
   manager_id?: string | null
+  // Legacy API keys
   meta_api_key?: string
   google_api_key?: string
   shopify_api_key?: string
   klaviyo_api_key?: string
+  // Google Ads API credentials
+  google_ads_developer_token?: string
+  google_ads_client_id?: string
+  google_ads_client_secret?: string
+  google_ads_refresh_token?: string
+  google_ads_customer_id?: string
+  // Meta Ads API credentials
+  meta_ads_app_id?: string
+  meta_ads_app_secret?: string
+  meta_ads_access_token?: string
+  meta_ads_ad_account_id?: string
+  meta_ads_system_user_token?: string
+  // Shopify API credentials
+  shopify_store_domain?: string
+  shopify_api_secret_key?: string
+  shopify_access_token?: string
+  shopify_scopes?: string
+  // Klaviyo API credentials
+  klaviyo_public_api_key?: string
+  klaviyo_private_api_key?: string
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1810,22 +1859,23 @@ export async function updateCompany(companyId: string, companyData: {
     await setAppContext()
     
     const updateData: any = {
-      name: companyData.name,
-      description: companyData.description,
-      industry: companyData.industry,
-      website: companyData.website,
-      phone: companyData.phone,
-      address: companyData.address,
-      is_partner: companyData.is_partner,
-      is_active: companyData.is_active,
-      retainer: companyData.retainer,
-      revenue: companyData.revenue,
       updated_at: new Date().toISOString()
     }
 
-    // Add API keys if provided (encrypt before storing)
+    // Only include fields that are provided
+    if (companyData.name !== undefined) updateData.name = companyData.name
+    if (companyData.description !== undefined) updateData.description = companyData.description
+    if (companyData.industry !== undefined) updateData.industry = companyData.industry
+    if (companyData.website !== undefined) updateData.website = companyData.website
+    if (companyData.phone !== undefined) updateData.phone = companyData.phone
+    if (companyData.address !== undefined) updateData.address = companyData.address
+    if (companyData.is_partner !== undefined) updateData.is_partner = companyData.is_partner
+    if (companyData.is_active !== undefined) updateData.is_active = companyData.is_active
+    if (companyData.retainer !== undefined) updateData.retainer = companyData.retainer
+    if (companyData.revenue !== undefined) updateData.revenue = companyData.revenue
+
+    // Add legacy API keys if provided (encrypt before storing)
     if (companyData.meta_api_key !== undefined) {
-      // Only encrypt if a value is provided (empty string means clear the key)
       updateData.meta_api_key = companyData.meta_api_key ? await encrypt(companyData.meta_api_key) : null
     }
     if (companyData.google_api_key !== undefined) {
@@ -1836,6 +1886,65 @@ export async function updateCompany(companyId: string, companyData: {
     }
     if (companyData.klaviyo_api_key !== undefined) {
       updateData.klaviyo_api_key = companyData.klaviyo_api_key ? await encrypt(companyData.klaviyo_api_key) : null
+    }
+
+    // Add Google Ads API credentials (encrypt sensitive fields)
+    if (companyData.google_ads_developer_token !== undefined) {
+      updateData.google_ads_developer_token = companyData.google_ads_developer_token ? await encrypt(companyData.google_ads_developer_token) : null
+    }
+    if (companyData.google_ads_client_id !== undefined) {
+      updateData.google_ads_client_id = companyData.google_ads_client_id || null
+    }
+    if (companyData.google_ads_client_secret !== undefined) {
+      updateData.google_ads_client_secret = companyData.google_ads_client_secret ? await encrypt(companyData.google_ads_client_secret) : null
+    }
+    if (companyData.google_ads_refresh_token !== undefined) {
+      updateData.google_ads_refresh_token = companyData.google_ads_refresh_token ? await encrypt(companyData.google_ads_refresh_token) : null
+    }
+    if (companyData.google_ads_customer_id !== undefined) {
+      updateData.google_ads_customer_id = companyData.google_ads_customer_id || null
+    }
+
+    // Add Meta Ads API credentials (encrypt sensitive fields)
+    if (companyData.meta_ads_app_id !== undefined) {
+      updateData.meta_ads_app_id = companyData.meta_ads_app_id || null
+    }
+    if (companyData.meta_ads_app_secret !== undefined) {
+      updateData.meta_ads_app_secret = companyData.meta_ads_app_secret ? await encrypt(companyData.meta_ads_app_secret) : null
+    }
+    if (companyData.meta_ads_access_token !== undefined) {
+      updateData.meta_ads_access_token = companyData.meta_ads_access_token ? await encrypt(companyData.meta_ads_access_token) : null
+    }
+    if (companyData.meta_ads_ad_account_id !== undefined) {
+      updateData.meta_ads_ad_account_id = companyData.meta_ads_ad_account_id || null
+    }
+    if (companyData.meta_ads_system_user_token !== undefined) {
+      updateData.meta_ads_system_user_token = companyData.meta_ads_system_user_token ? await encrypt(companyData.meta_ads_system_user_token) : null
+    }
+
+    // Add Shopify API credentials (encrypt sensitive fields)
+    if (companyData.shopify_store_domain !== undefined) {
+      updateData.shopify_store_domain = companyData.shopify_store_domain || null
+    }
+    if (companyData.shopify_api_key !== undefined) {
+      updateData.shopify_api_key = companyData.shopify_api_key ? await encrypt(companyData.shopify_api_key) : null
+    }
+    if (companyData.shopify_api_secret_key !== undefined) {
+      updateData.shopify_api_secret_key = companyData.shopify_api_secret_key ? await encrypt(companyData.shopify_api_secret_key) : null
+    }
+    if (companyData.shopify_access_token !== undefined) {
+      updateData.shopify_access_token = companyData.shopify_access_token ? await encrypt(companyData.shopify_access_token) : null
+    }
+    if (companyData.shopify_scopes !== undefined) {
+      updateData.shopify_scopes = companyData.shopify_scopes || null
+    }
+
+    // Add Klaviyo API credentials (encrypt sensitive fields)
+    if (companyData.klaviyo_public_api_key !== undefined) {
+      updateData.klaviyo_public_api_key = companyData.klaviyo_public_api_key || null
+    }
+    if (companyData.klaviyo_private_api_key !== undefined) {
+      updateData.klaviyo_private_api_key = companyData.klaviyo_private_api_key ? await encrypt(companyData.klaviyo_private_api_key) : null
     }
 
     // Only include manager_id if it's provided (can be null to remove manager)
@@ -2890,6 +2999,25 @@ export async function createDocumentRecord(
         return { success: false, error: error.message }
       }
 
+    // Log activity for file upload
+    if (data) {
+      await logActivity({
+        user_id: userId,
+        action_type: 'file_uploaded',
+        entity_type: 'document',
+        entity_id: data.id,
+        description: `Uploaded file "${name}"`,
+        metadata: { 
+          file_name: name, 
+          file_size: fileSize, 
+          file_type: fileType,
+          folder_path: folderPath,
+          is_internal: isInternal
+        },
+        company_id: companyId,
+      })
+    }
+
     return { success: true, document: data }
   } catch (error) {
     return { success: false, error: 'Failed to create document record' }
@@ -3254,6 +3382,25 @@ export async function createFolder(
     }
 
     console.log('Folder created successfully:', data)
+    
+    // Log activity for folder creation
+    if (data) {
+      await logActivity({
+        user_id: userId,
+        action_type: 'folder_created',
+        entity_type: 'folder',
+        entity_id: data.id,
+        description: `Created folder "${name}"`,
+        metadata: { 
+          folder_name: name, 
+          folder_path: path,
+          parent_folder_id: parentFolderId || null,
+          is_internal: finalIsInternal
+        },
+        company_id: companyId,
+      })
+    }
+    
     return { success: true, folder: data }
   } catch (error) {
     console.error('Unexpected error in createFolder:', error)
@@ -3516,7 +3663,8 @@ export async function updateFolder(
 export async function moveDocumentToFolder(
   documentId: string,
   documentType: 'document' | 'rich',
-  targetFolderPath: string
+  targetFolderPath: string,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!supabase) {
@@ -3525,6 +3673,17 @@ export async function moveDocumentToFolder(
 
     const tableName = documentType === 'document' ? 'documents' : 'rich_documents'
     
+    // Get document info before moving for activity log
+    const { data: document, error: fetchError } = await supabase
+      .from(tableName)
+      .select('name, company_id, folder_path')
+      .eq('id', documentId)
+      .single()
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
     const { error } = await supabase
       .from(tableName)
       .update({ folder_path: targetFolderPath })
@@ -3532,6 +3691,24 @@ export async function moveDocumentToFolder(
 
     if (error) {
       return { success: false, error: error.message }
+    }
+
+    // Log activity for document move (if userId provided)
+    if (userId && document) {
+      await logActivity({
+        user_id: userId,
+        action_type: 'document_moved',
+        entity_type: documentType === 'document' ? 'document' : 'rich_document',
+        entity_id: documentId,
+        description: `Moved ${documentType === 'document' ? 'document' : 'rich document'} "${document.name}" to "${targetFolderPath}"`,
+        metadata: { 
+          document_name: document.name,
+          from_folder: document.folder_path || '/',
+          to_folder: targetFolderPath,
+          document_type: documentType
+        },
+        company_id: document.company_id,
+      })
     }
 
     return { success: true }
@@ -4559,6 +4736,21 @@ export async function saveRichDocument(
       if (!data) {
         return { success: false, error: 'Failed to create document' }
       }
+
+      // Log activity for rich document creation
+      await logActivity({
+        user_id: userId,
+        action_type: 'rich_document_created',
+        entity_type: 'rich_document',
+        entity_id: data.id,
+        description: `Created rich document "${title}"`,
+        metadata: { 
+          title: title,
+          folder_path: folderPath,
+          is_internal: isInternal
+        },
+        company_id: companyId,
+      })
 
       return { success: true, document: data }
     }

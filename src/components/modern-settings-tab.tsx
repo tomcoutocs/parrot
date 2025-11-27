@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign, Trash2, AlertTriangle, X } from "lucide-react"
+import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign, Trash2, AlertTriangle, X, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,8 +21,12 @@ import { Service, Company } from "@/lib/supabase"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { useSession } from "@/components/providers/session-provider"
 import { useRouter } from "next/navigation"
-import { Loader2 } from "lucide-react"
+import { Loader2, Settings } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-states"
+import { GoogleAdsCredentialsModal } from "@/components/modals/google-ads-credentials-modal"
+import { MetaAdsCredentialsModal } from "@/components/modals/meta-ads-credentials-modal"
+import { ShopifyCredentialsModal } from "@/components/modals/shopify-credentials-modal"
+import { KlaviyoCredentialsModal } from "@/components/modals/klaviyo-credentials-modal"
 
 interface ModernSettingsTabProps {
   activeSpace: string | null
@@ -39,6 +43,10 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState("")
   const [deleting, setDeleting] = useState(false)
+  const [showGoogleAdsModal, setShowGoogleAdsModal] = useState(false)
+  const [showMetaAdsModal, setShowMetaAdsModal] = useState(false)
+  const [showShopifyModal, setShowShopifyModal] = useState(false)
+  const [showKlaviyoModal, setShowKlaviyoModal] = useState(false)
   const router = useRouter()
   
   const [formData, setFormData] = useState({
@@ -57,7 +65,6 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
     meta_api_key: "",
     google_api_key: "",
     shopify_api_key: "",
-    klaviyo_api_key: "",
   })
 
   useEffect(() => {
@@ -82,7 +89,6 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         meta_api_key: "",
         google_api_key: "",
         shopify_api_key: "",
-        klaviyo_api_key: "",
       })
     }
   }, [activeSpace])
@@ -129,7 +135,6 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
             meta_api_key: spaceCompany.meta_api_key || "",
             google_api_key: spaceCompany.google_api_key || "",
             shopify_api_key: spaceCompany.shopify_api_key || "",
-            klaviyo_api_key: spaceCompany.klaviyo_api_key || "",
           }
         })
       }
@@ -178,7 +183,6 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         meta_api_key: formData.meta_api_key !== undefined ? formData.meta_api_key : undefined,
         google_api_key: formData.google_api_key !== undefined ? formData.google_api_key : undefined,
         shopify_api_key: formData.shopify_api_key !== undefined ? formData.shopify_api_key : undefined,
-        klaviyo_api_key: formData.klaviyo_api_key !== undefined ? formData.klaviyo_api_key : undefined,
       })
 
       if (!updateResult.success) {
@@ -567,120 +571,102 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label htmlFor="meta_api_key">Meta API Key</Label>
-                {formData.meta_api_key && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFormData({ ...formData, meta_api_key: "" })}
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                    title="Clear API key"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {company?.google_ads_developer_token && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  <div>
+                    <Label>Google Ads API</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configure Google Ads API credentials
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowGoogleAdsModal(true)}
+                  className="gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  {company?.google_ads_developer_token ? "Edit" : "Configure"}
+                </Button>
               </div>
-              <Input
-                id="meta_api_key"
-                type="password"
-                value={formData.meta_api_key}
-                onChange={(e) => setFormData({ ...formData, meta_api_key: e.target.value })}
-                placeholder="Enter Meta API key"
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground">
-                API key for Meta (Facebook/Instagram) integrations
-              </p>
-            </div>
 
-            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="google_api_key">Google API Key</Label>
-                {formData.google_api_key && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFormData({ ...formData, google_api_key: "" })}
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                    title="Clear API key"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {company?.meta_ads_app_id && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  <div>
+                    <Label>Meta Ads API</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configure Meta (Facebook/Instagram) Ads API credentials
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMetaAdsModal(true)}
+                  className="gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  {company?.meta_ads_app_id ? "Edit" : "Configure"}
+                </Button>
               </div>
-              <Input
-                id="google_api_key"
-                type="password"
-                value={formData.google_api_key}
-                onChange={(e) => setFormData({ ...formData, google_api_key: e.target.value })}
-                placeholder="Enter Google API key"
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground">
-                API key for Google services integrations
-              </p>
-            </div>
 
-            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="shopify_api_key">Shopify API Key</Label>
-                {formData.shopify_api_key && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFormData({ ...formData, shopify_api_key: "" })}
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                    title="Clear API key"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {company?.shopify_store_domain && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  <div>
+                    <Label>Shopify API</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configure Shopify API credentials
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowShopifyModal(true)}
+                  className="gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  {company?.shopify_store_domain ? "Edit" : "Configure"}
+                </Button>
               </div>
-              <Input
-                id="shopify_api_key"
-                type="password"
-                value={formData.shopify_api_key}
-                onChange={(e) => setFormData({ ...formData, shopify_api_key: e.target.value })}
-                placeholder="Enter Shopify API key"
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground">
-                API key for Shopify store integrations
-              </p>
-            </div>
 
-            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="klaviyo_api_key">Klaviyo API Key</Label>
-                {formData.klaviyo_api_key && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFormData({ ...formData, klaviyo_api_key: "" })}
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                    title="Clear API key"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {company?.klaviyo_public_api_key && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  <div>
+                    <Label>Klaviyo API</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configure Klaviyo API credentials
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowKlaviyoModal(true)}
+                  className="gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  {company?.klaviyo_public_api_key ? "Edit" : "Configure"}
+                </Button>
               </div>
-              <Input
-                id="klaviyo_api_key"
-                type="password"
-                value={formData.klaviyo_api_key}
-                onChange={(e) => setFormData({ ...formData, klaviyo_api_key: e.target.value })}
-                placeholder="Enter Klaviyo API key"
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground">
-                API key for Klaviyo email marketing integrations
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -759,6 +745,69 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* API Credentials Modals */}
+      {activeSpace && (
+        <>
+          <GoogleAdsCredentialsModal
+            isOpen={showGoogleAdsModal}
+            onClose={() => setShowGoogleAdsModal(false)}
+            onSaved={() => {
+              loadData()
+            }}
+            companyId={activeSpace}
+            initialCredentials={{
+              developer_token: company?.google_ads_developer_token,
+              client_id: company?.google_ads_client_id,
+              client_secret: company?.google_ads_client_secret,
+              refresh_token: company?.google_ads_refresh_token,
+              customer_id: company?.google_ads_customer_id,
+            }}
+          />
+          <MetaAdsCredentialsModal
+            isOpen={showMetaAdsModal}
+            onClose={() => setShowMetaAdsModal(false)}
+            onSaved={() => {
+              loadData()
+            }}
+            companyId={activeSpace}
+            initialCredentials={{
+              app_id: company?.meta_ads_app_id,
+              app_secret: company?.meta_ads_app_secret,
+              access_token: company?.meta_ads_access_token,
+              ad_account_id: company?.meta_ads_ad_account_id,
+              system_user_token: company?.meta_ads_system_user_token,
+            }}
+          />
+          <ShopifyCredentialsModal
+            isOpen={showShopifyModal}
+            onClose={() => setShowShopifyModal(false)}
+            onSaved={() => {
+              loadData()
+            }}
+            companyId={activeSpace}
+            initialCredentials={{
+              store_domain: company?.shopify_store_domain,
+              api_key: company?.shopify_api_key,
+              api_secret_key: company?.shopify_api_secret_key,
+              access_token: company?.shopify_access_token,
+              scopes: company?.shopify_scopes,
+            }}
+          />
+          <KlaviyoCredentialsModal
+            isOpen={showKlaviyoModal}
+            onClose={() => setShowKlaviyoModal(false)}
+            onSaved={() => {
+              loadData()
+            }}
+            companyId={activeSpace}
+            initialCredentials={{
+              public_api_key: company?.klaviyo_public_api_key,
+              private_api_key: company?.klaviyo_private_api_key,
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
