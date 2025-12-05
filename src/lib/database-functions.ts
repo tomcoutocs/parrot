@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation } from './supabase'
 import { getCurrentUser } from './auth'
+import { encrypt, decrypt } from './encryption'
 
 // Historical Metrics Types
 export interface SystemMetrics {
@@ -201,6 +202,8 @@ export async function fetchTasks(projectId?: string): Promise<TaskWithDetails[]>
     // Transform data to match our interface
     const transformedData = data?.map(task => ({
       ...task,
+      // Map 'medium' priority to 'normal' for display consistency
+      priority: task.priority === 'medium' ? 'normal' : task.priority,
       comment_count: task.task_comments?.length || 0
     })) || []
     
@@ -326,22 +329,35 @@ export async function updateTaskPosition(taskId: string, newPosition: number, ne
 
 export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'updated_at'>, userId: string): Promise<Task | null> {
   if (!supabase) {
+    console.error('Supabase client not initialized')
     return null
   }
 
   try {
+    await setAppContext()
+    
+    // Map 'normal' priority to 'medium' for database compatibility
+    // The database enum likely still uses 'medium', but we display it as 'Normal'
+    const dbPriority = taskData.priority === 'normal' ? 'medium' : taskData.priority
+    
+    const insertData: any = {
+      ...taskData,
+      priority: dbPriority,
+      created_by: userId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
     const { data, error } = await supabase
       .from('tasks')
-      .insert({
-        ...taskData,
-        created_by: userId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(insertData)
       .select()
       .single()
 
     if (error) {
+      console.error('Error creating task:', error)
+      console.error('Task data:', insertData)
+      console.error('Priority mapping:', { original: taskData.priority, db: dbPriority })
       return null
     }
 
@@ -754,12 +770,20 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
       return { success: false, error: 'Task not found' }
     }
     
+    // Map 'normal' priority to 'medium' for database compatibility
+    const updateData: any = {
+      ...taskData,
+      updated_at: new Date().toISOString()
+    }
+    
+    // Convert 'normal' to 'medium' if priority is being updated
+    if (updateData.priority === 'normal') {
+      updateData.priority = 'medium'
+    }
+    
     const { data, error } = await supabase
       .from('tasks')
-      .update({
-        ...taskData,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', taskId)
       .select()
       .single()
@@ -795,15 +819,18 @@ export async function updateTask(taskId: string, taskData: Partial<Task>, userId
       }
 
       // Notify on priority change
-      if (taskData.priority && taskData.priority !== currentTask.priority) {
+      // Compare using the database values (both should be 'medium' for normal)
+      const currentPriority = currentTask.priority === 'medium' ? 'normal' : currentTask.priority
+      const newPriority = updateData.priority === 'medium' ? 'normal' : updateData.priority
+      if (taskData.priority && currentPriority !== newPriority) {
         await createTaskUpdateNotification(
           taskId,
           data.title,
           userId,
           updatedByName,
           'priority',
-          currentTask.priority,
-          taskData.priority
+          currentPriority,
+          newPriority
         ).catch(() => {})
       }
 
@@ -1614,7 +1641,30 @@ export async function fetchCompanies(): Promise<Company[]> {
       return []
     }
 
-    return data || []
+    // Decrypt API keys and credentials after fetching
+    const decryptedData = await Promise.all((data || []).map(async (company) => ({
+      ...company,
+      // Legacy API keys
+      meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
+      google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
+      shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
+      klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+      // Google Ads API credentials (decrypt sensitive fields)
+      google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
+      google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
+      google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+      // Meta Ads API credentials (decrypt sensitive fields)
+      meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
+      meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
+      meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+      // Shopify API credentials (decrypt sensitive fields)
+      shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
+      shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+      // Klaviyo API credentials (decrypt sensitive fields)
+      klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
+    })))
+
+    return decryptedData
   } catch (error) {
     return []
   }
@@ -1672,8 +1722,8 @@ export async function fetchCompaniesWithServices(): Promise<Company[]> {
       return []
     }
 
-    // Transform the data to flatten the services structure
-    const transformedData = (data || []).map(company => {
+    // Transform the data to flatten the services structure and decrypt API keys
+    const transformedData = await Promise.all((data || []).map(async (company) => {
       const services = company.company_services
         ?.map((cs: { service_id: string; service: Service }) => cs.service)
         .filter(Boolean) || []
@@ -1682,9 +1732,27 @@ export async function fetchCompaniesWithServices(): Promise<Company[]> {
       
       return {
         ...company,
-        services
+        services,
+        // Legacy API keys
+        meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
+        google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
+        shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
+        klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+        // Google Ads API credentials (decrypt sensitive fields)
+        google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
+        google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
+        google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+        // Meta Ads API credentials (decrypt sensitive fields)
+        meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
+        meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
+        meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+        // Shopify API credentials (decrypt sensitive fields)
+        shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
+        shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+        // Klaviyo API credentials (decrypt sensitive fields)
+        klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
       }
-    })
+    }))
 
     return transformedData
   } catch (error) {
@@ -1744,17 +1812,42 @@ export async function createCompany(companyData: {
 }
 
 export async function updateCompany(companyId: string, companyData: {
-  name: string
+  name?: string
   description?: string
   industry?: string
   website?: string
   phone?: string
   address?: string
-  is_active: boolean
-  is_partner: boolean
+  is_active?: boolean
+  is_partner?: boolean
   retainer?: number
   revenue?: number
   manager_id?: string | null
+  // Legacy API keys
+  meta_api_key?: string
+  google_api_key?: string
+  shopify_api_key?: string
+  klaviyo_api_key?: string
+  // Google Ads API credentials
+  google_ads_developer_token?: string
+  google_ads_client_id?: string
+  google_ads_client_secret?: string
+  google_ads_refresh_token?: string
+  google_ads_customer_id?: string
+  // Meta Ads API credentials
+  meta_ads_app_id?: string
+  meta_ads_app_secret?: string
+  meta_ads_access_token?: string
+  meta_ads_ad_account_id?: string
+  meta_ads_system_user_token?: string
+  // Shopify API credentials
+  shopify_store_domain?: string
+  shopify_api_secret_key?: string
+  shopify_access_token?: string
+  shopify_scopes?: string
+  // Klaviyo API credentials
+  klaviyo_public_api_key?: string
+  klaviyo_private_api_key?: string
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1766,17 +1859,92 @@ export async function updateCompany(companyId: string, companyData: {
     await setAppContext()
     
     const updateData: any = {
-      name: companyData.name,
-      description: companyData.description,
-      industry: companyData.industry,
-      website: companyData.website,
-      phone: companyData.phone,
-      address: companyData.address,
-      is_partner: companyData.is_partner,
-      is_active: companyData.is_active,
-      retainer: companyData.retainer,
-      revenue: companyData.revenue,
       updated_at: new Date().toISOString()
+    }
+
+    // Only include fields that are provided
+    if (companyData.name !== undefined) updateData.name = companyData.name
+    if (companyData.description !== undefined) updateData.description = companyData.description
+    if (companyData.industry !== undefined) updateData.industry = companyData.industry
+    if (companyData.website !== undefined) updateData.website = companyData.website
+    if (companyData.phone !== undefined) updateData.phone = companyData.phone
+    if (companyData.address !== undefined) updateData.address = companyData.address
+    if (companyData.is_partner !== undefined) updateData.is_partner = companyData.is_partner
+    if (companyData.is_active !== undefined) updateData.is_active = companyData.is_active
+    if (companyData.retainer !== undefined) updateData.retainer = companyData.retainer
+    if (companyData.revenue !== undefined) updateData.revenue = companyData.revenue
+
+    // Add legacy API keys if provided (encrypt before storing)
+    if (companyData.meta_api_key !== undefined) {
+      updateData.meta_api_key = companyData.meta_api_key ? await encrypt(companyData.meta_api_key) : null
+    }
+    if (companyData.google_api_key !== undefined) {
+      updateData.google_api_key = companyData.google_api_key ? await encrypt(companyData.google_api_key) : null
+    }
+    if (companyData.shopify_api_key !== undefined) {
+      updateData.shopify_api_key = companyData.shopify_api_key ? await encrypt(companyData.shopify_api_key) : null
+    }
+    if (companyData.klaviyo_api_key !== undefined) {
+      updateData.klaviyo_api_key = companyData.klaviyo_api_key ? await encrypt(companyData.klaviyo_api_key) : null
+    }
+
+    // Add Google Ads API credentials (encrypt sensitive fields)
+    if (companyData.google_ads_developer_token !== undefined) {
+      updateData.google_ads_developer_token = companyData.google_ads_developer_token ? await encrypt(companyData.google_ads_developer_token) : null
+    }
+    if (companyData.google_ads_client_id !== undefined) {
+      updateData.google_ads_client_id = companyData.google_ads_client_id || null
+    }
+    if (companyData.google_ads_client_secret !== undefined) {
+      updateData.google_ads_client_secret = companyData.google_ads_client_secret ? await encrypt(companyData.google_ads_client_secret) : null
+    }
+    if (companyData.google_ads_refresh_token !== undefined) {
+      updateData.google_ads_refresh_token = companyData.google_ads_refresh_token ? await encrypt(companyData.google_ads_refresh_token) : null
+    }
+    if (companyData.google_ads_customer_id !== undefined) {
+      updateData.google_ads_customer_id = companyData.google_ads_customer_id || null
+    }
+
+    // Add Meta Ads API credentials (encrypt sensitive fields)
+    if (companyData.meta_ads_app_id !== undefined) {
+      updateData.meta_ads_app_id = companyData.meta_ads_app_id || null
+    }
+    if (companyData.meta_ads_app_secret !== undefined) {
+      updateData.meta_ads_app_secret = companyData.meta_ads_app_secret ? await encrypt(companyData.meta_ads_app_secret) : null
+    }
+    if (companyData.meta_ads_access_token !== undefined) {
+      updateData.meta_ads_access_token = companyData.meta_ads_access_token ? await encrypt(companyData.meta_ads_access_token) : null
+    }
+    if (companyData.meta_ads_ad_account_id !== undefined) {
+      updateData.meta_ads_ad_account_id = companyData.meta_ads_ad_account_id || null
+    }
+    if (companyData.meta_ads_system_user_token !== undefined) {
+      updateData.meta_ads_system_user_token = companyData.meta_ads_system_user_token ? await encrypt(companyData.meta_ads_system_user_token) : null
+    }
+
+    // Add Shopify API credentials (encrypt sensitive fields)
+    if (companyData.shopify_store_domain !== undefined) {
+      updateData.shopify_store_domain = companyData.shopify_store_domain || null
+    }
+    if (companyData.shopify_api_key !== undefined) {
+      updateData.shopify_api_key = companyData.shopify_api_key ? await encrypt(companyData.shopify_api_key) : null
+    }
+    if (companyData.shopify_api_secret_key !== undefined) {
+      updateData.shopify_api_secret_key = companyData.shopify_api_secret_key ? await encrypt(companyData.shopify_api_secret_key) : null
+    }
+    if (companyData.shopify_access_token !== undefined) {
+      updateData.shopify_access_token = companyData.shopify_access_token ? await encrypt(companyData.shopify_access_token) : null
+    }
+    if (companyData.shopify_scopes !== undefined) {
+      updateData.shopify_scopes = companyData.shopify_scopes || null
+    }
+
+    // Add Klaviyo API credentials (encrypt sensitive fields)
+    if (companyData.klaviyo_public_api_key !== undefined) {
+      updateData.klaviyo_public_api_key = companyData.klaviyo_public_api_key || null
+    }
+    if (companyData.klaviyo_private_api_key !== undefined) {
+      updateData.klaviyo_private_api_key = companyData.klaviyo_private_api_key ? await encrypt(companyData.klaviyo_private_api_key) : null
     }
 
     // Only include manager_id if it's provided (can be null to remove manager)
@@ -1792,6 +1960,37 @@ export async function updateCompany(companyId: string, companyData: {
       .single()
 
     if (error) {
+      // Gracefully handle missing API key columns
+      if (error.message?.includes('meta_api_key') || 
+          error.message?.includes('google_api_key') || 
+          error.message?.includes('shopify_api_key') || 
+          error.message?.includes('klaviyo_api_key') ||
+          (error as any).code === 'PGRST204') {
+        console.warn('API key columns not found in companies table, retrying without API keys')
+        
+        // Retry without API keys
+        const updateDataWithoutApiKeys = { ...updateData }
+        delete updateDataWithoutApiKeys.meta_api_key
+        delete updateDataWithoutApiKeys.google_api_key
+        delete updateDataWithoutApiKeys.shopify_api_key
+        delete updateDataWithoutApiKeys.klaviyo_api_key
+        
+        const { data: retryData, error: retryError } = await supabase
+          .from('companies')
+          .update(updateDataWithoutApiKeys)
+          .eq('id', companyId)
+          .select()
+          .single()
+        
+        if (retryError) {
+          console.error('Error updating company:', retryError)
+          return { success: false, error: retryError.message || 'Failed to update company' }
+        }
+        
+        console.log('Company updated successfully (without API keys):', retryData)
+        return { success: true, data: retryData }
+      }
+      
       console.error('Error updating company:', error)
       return { success: false, error: error.message || 'Failed to update company' }
     }
@@ -2717,6 +2916,7 @@ export interface Document {
   company_id: string
   uploaded_by: string
   folder_path: string
+  is_internal?: boolean
   created_at: string
   updated_at: string
 }
@@ -2732,6 +2932,7 @@ export interface DocumentFolder {
   updated_at: string
   is_system_folder?: boolean
   is_readonly?: boolean
+  is_internal?: boolean
 }
 
 // Create a new document record
@@ -2742,16 +2943,16 @@ export async function createDocumentRecord(
   fileType: string,
   companyId: string,
   folderPath: string = '/',
-  userId: string
+  userId: string,
+  isInternal: boolean = false
 ): Promise<{ success: boolean; document?: Document; error?: string }> {
   try {
     if (!supabase) {
       throw new Error('Supabase client not initialized')
     }
 
-    const { data, error } = await supabase
-      .from('documents')
-      .insert({
+      // Build insert data - conditionally include is_internal if column exists
+      const insertData: any = {
         name,
         file_path: filePath,
         file_size: fileSize,
@@ -2759,17 +2960,104 @@ export async function createDocumentRecord(
         company_id: companyId,
         uploaded_by: userId,
         folder_path: folderPath
-      })
-      .select()
-      .single()
+      }
 
-    if (error) {
-      return { success: false, error: error.message }
+      // Try to include is_internal, but handle gracefully if column doesn't exist
+      insertData.is_internal = isInternal
+
+      const { data, error } = await supabase
+        .from('documents')
+        .insert(insertData)
+        .select()
+        .single()
+
+      if (error) {
+        // If error is about missing is_internal column, retry without it
+        if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+          console.warn('is_internal column not found in documents table, creating document without it')
+          const { data: retryData, error: retryError } = await supabase
+            .from('documents')
+            .insert({
+              name,
+              file_path: filePath,
+              file_size: fileSize,
+              file_type: fileType,
+              company_id: companyId,
+              uploaded_by: userId,
+              folder_path: folderPath
+            })
+            .select()
+            .single()
+
+          if (retryError) {
+            return { success: false, error: retryError.message }
+          }
+
+          return { success: true, document: retryData }
+        }
+
+        return { success: false, error: error.message }
+      }
+
+    // Log activity for file upload
+    if (data) {
+      await logActivity({
+        user_id: userId,
+        action_type: 'file_uploaded',
+        entity_type: 'document',
+        entity_id: data.id,
+        description: `Uploaded file "${name}"`,
+        metadata: { 
+          file_name: name, 
+          file_size: fileSize, 
+          file_type: fileType,
+          folder_path: folderPath,
+          is_internal: isInternal
+        },
+        company_id: companyId,
+      })
     }
 
     return { success: true, document: data }
   } catch (error) {
     return { success: false, error: 'Failed to create document record' }
+  }
+}
+
+// Update document visibility (internal/external)
+export async function updateDocumentVisibility(
+  documentId: string,
+  isInternal: boolean,
+  documentType: 'document' | 'rich'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    await setAppContext()
+
+    const tableName = documentType === 'rich' ? 'rich_documents' : 'documents'
+    
+    const { error } = await supabase
+      .from(tableName)
+      .update({
+        is_internal: isInternal,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', documentId)
+
+    if (error) {
+      // If error is about missing is_internal column, return helpful error
+      if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+        return { success: false, error: 'is_internal column not found. Please run the database migration.' }
+      }
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to update document visibility' }
   }
 }
 
@@ -2946,7 +3234,8 @@ export async function createFolder(
   name: string,
   companyId: string,
   userId: string,
-  parentFolderId?: string
+  parentFolderId?: string,
+  isInternal: boolean = false
 ): Promise<{ success: boolean; folder?: DocumentFolder; error?: string }> {
   try {
     if (!supabase) {
@@ -2960,25 +3249,50 @@ export async function createFolder(
 
     // Build path
     let path = `/${name}`
+    let finalIsInternal = isInternal
     if (parentFolderId) {
       // Get parent folder path and check if it's a system folder
       const { data: parentFolder, error: parentError } = await supabase
         .from('document_folders')
-        .select('path, is_system_folder, is_readonly')
+        .select('path, is_system_folder, is_readonly, is_internal')
         .eq('id', parentFolderId)
         .single()
       
       if (parentError) {
-        return { success: false, error: `Parent folder error: ${parentError.message}` }
-      }
-      
-      if (parentFolder) {
+        // If error is about missing is_internal column, retry without it
+        if (parentError.message?.includes('is_internal') || (parentError as any).code === 'PGRST204') {
+          const { data: retryParentFolder, error: retryParentError } = await supabase
+            .from('document_folders')
+            .select('path, is_system_folder, is_readonly')
+            .eq('id', parentFolderId)
+            .single()
+          
+          if (retryParentError) {
+            return { success: false, error: `Parent folder error: ${retryParentError.message}` }
+          }
+          
+          if (retryParentFolder) {
+            if (retryParentFolder.is_system_folder && retryParentFolder.is_readonly) {
+              return { success: false, error: 'Cannot create folders inside readonly system folders' }
+            }
+            path = `${retryParentFolder.path}/${name}`
+            // is_internal column doesn't exist, so we can't inherit it
+            finalIsInternal = false
+          }
+        } else {
+          return { success: false, error: `Parent folder error: ${parentError.message}` }
+        }
+      } else if (parentFolder) {
         // Check if parent is a readonly system folder
         if (parentFolder.is_system_folder && parentFolder.is_readonly) {
           return { success: false, error: 'Cannot create folders inside readonly system folders' }
         }
         
         path = `${parentFolder.path}/${name}`
+        // Inherit internal status from parent if parent is internal (if column exists)
+        if (parentFolder.is_internal === true) {
+          finalIsInternal = true
+        }
       }
     }
 
@@ -3010,19 +3324,53 @@ export async function createFolder(
       }
     }
 
+    // Build insert data - conditionally include is_internal if column exists
+    const insertData: any = {
+      name,
+      company_id: companyId,
+      parent_folder_id: parentFolderId,
+      path,
+      created_by: userId
+    }
+
+    // Only include is_internal if the column exists (will be added via migration)
+    // For now, we'll try to include it and handle the error gracefully
+    try {
+      insertData.is_internal = finalIsInternal
+    } catch {
+      // Column doesn't exist yet, skip it
+    }
+
     const { data, error } = await supabase
       .from('document_folders')
-      .insert({
-        name,
-        company_id: companyId,
-        parent_folder_id: parentFolderId,
-        path,
-        created_by: userId
-      })
+      .insert(insertData)
       .select()
       .single()
 
     if (error) {
+      // If error is about missing is_internal column, retry without it
+      if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+        console.warn('is_internal column not found, creating folder without it')
+        const { data: retryData, error: retryError } = await supabase
+          .from('document_folders')
+          .insert({
+            name,
+            company_id: companyId,
+            parent_folder_id: parentFolderId,
+            path,
+            created_by: userId
+          })
+          .select()
+          .single()
+
+        if (retryError) {
+          console.error('Error creating folder in database:', retryError)
+          return { success: false, error: `Database error: ${retryError.message || 'Unknown error'}` }
+        }
+
+        return { success: true, folder: retryData }
+      }
+
       console.error('Error creating folder in database:', error)
       console.error('Error details:', {
         code: (error as any).code,
@@ -3034,6 +3382,25 @@ export async function createFolder(
     }
 
     console.log('Folder created successfully:', data)
+    
+    // Log activity for folder creation
+    if (data) {
+      await logActivity({
+        user_id: userId,
+        action_type: 'folder_created',
+        entity_type: 'folder',
+        entity_id: data.id,
+        description: `Created folder "${name}"`,
+        metadata: { 
+          folder_name: name, 
+          folder_path: path,
+          parent_folder_id: parentFolderId || null,
+          is_internal: finalIsInternal
+        },
+        company_id: companyId,
+      })
+    }
+    
     return { success: true, folder: data }
   } catch (error) {
     console.error('Unexpected error in createFolder:', error)
@@ -3158,6 +3525,195 @@ export async function deleteFolder(
     return { success: true }
   } catch (error) {
     return { success: false, error: 'Failed to delete folder' }
+  }
+}
+
+// Update folder name
+export async function updateFolder(
+  folderId: string,
+  newName: string
+): Promise<{ success: boolean; folder?: DocumentFolder; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    // Validate folder name
+    if (!newName.trim()) {
+      return { success: false, error: 'Folder name cannot be empty' }
+    }
+
+    if (newName.length > 255) {
+      return { success: false, error: 'Folder name is too long (maximum 255 characters)' }
+    }
+
+    if (/[<>:"/\\|?*]/.test(newName)) {
+      return { success: false, error: 'Folder name contains invalid characters' }
+    }
+
+    // Get current folder info
+    const { data: folder, error: fetchError } = await supabase
+      .from('document_folders')
+      .select('path, company_id, is_system_folder, is_readonly, parent_folder_id')
+      .eq('id', folderId)
+      .single()
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
+    // Prevent editing readonly system folders
+    if (folder.is_system_folder && folder.is_readonly) {
+      return { success: false, error: 'Cannot edit readonly system folders' }
+    }
+
+    // Build new path
+    let newPath = `/${newName.trim()}`
+    if (folder.parent_folder_id) {
+      // Get parent folder path
+      const { data: parentFolder, error: parentError } = await supabase
+        .from('document_folders')
+        .select('path')
+        .eq('id', folder.parent_folder_id)
+        .single()
+
+      if (parentError) {
+        return { success: false, error: `Parent folder error: ${parentError.message}` }
+      }
+
+      if (parentFolder) {
+        newPath = `${parentFolder.path}/${newName.trim()}`
+      }
+    }
+
+    // Update folder name and path
+    const { data: updatedFolder, error: updateError } = await supabase
+      .from('document_folders')
+      .update({
+        name: newName.trim(),
+        path: newPath,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', folderId)
+      .select()
+      .single()
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    // Update all subfolders' paths
+    const { data: subfolders } = await supabase
+      .from('document_folders')
+      .select('id, path')
+      .like('path', `${folder.path}%`)
+      .neq('id', folderId)
+
+    if (subfolders && subfolders.length > 0) {
+      for (const subfolder of subfolders) {
+        const newSubfolderPath = subfolder.path.replace(folder.path, newPath)
+        await supabase
+          .from('document_folders')
+          .update({ path: newSubfolderPath })
+          .eq('id', subfolder.id)
+      }
+    }
+
+    // Update all documents' folder_path
+    await supabase
+      .from('documents')
+      .update({ folder_path: newPath })
+      .eq('folder_path', folder.path)
+
+    // Update documents in subfolders
+    if (subfolders && subfolders.length > 0) {
+      for (const subfolder of subfolders) {
+        const newSubfolderPath = subfolder.path.replace(folder.path, newPath)
+        await supabase
+          .from('documents')
+          .update({ folder_path: newSubfolderPath })
+          .eq('folder_path', subfolder.path)
+      }
+    }
+
+    // Update rich documents' folder_path
+    await supabase
+      .from('rich_documents')
+      .update({ folder_path: newPath })
+      .eq('folder_path', folder.path)
+
+    // Update rich documents in subfolders
+    if (subfolders && subfolders.length > 0) {
+      for (const subfolder of subfolders) {
+        const newSubfolderPath = subfolder.path.replace(folder.path, newPath)
+        await supabase
+          .from('rich_documents')
+          .update({ folder_path: newSubfolderPath })
+          .eq('folder_path', subfolder.path)
+      }
+    }
+
+    return { success: true, folder: updatedFolder }
+  } catch (error) {
+    return { success: false, error: 'Failed to update folder' }
+  }
+}
+
+// Move a document to a folder
+export async function moveDocumentToFolder(
+  documentId: string,
+  documentType: 'document' | 'rich',
+  targetFolderPath: string,
+  userId?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized')
+    }
+
+    const tableName = documentType === 'document' ? 'documents' : 'rich_documents'
+    
+    // Get document info before moving for activity log
+    const { data: document, error: fetchError } = await supabase
+      .from(tableName)
+      .select('name, company_id, folder_path')
+      .eq('id', documentId)
+      .single()
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
+    const { error } = await supabase
+      .from(tableName)
+      .update({ folder_path: targetFolderPath })
+      .eq('id', documentId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    // Log activity for document move (if userId provided)
+    if (userId && document) {
+      await logActivity({
+        user_id: userId,
+        action_type: 'document_moved',
+        entity_type: documentType === 'document' ? 'document' : 'rich_document',
+        entity_id: documentId,
+        description: `Moved ${documentType === 'document' ? 'document' : 'rich document'} "${document.name}" to "${targetFolderPath}"`,
+        metadata: { 
+          document_name: document.name,
+          from_folder: document.folder_path || '/',
+          to_folder: targetFolderPath,
+          document_type: documentType
+        },
+        company_id: document.company_id,
+      })
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to move document' }
   }
 }
 
@@ -4053,6 +4609,7 @@ export interface RichDocument {
   company_id: string
   created_by: string
   folder_path: string
+  is_internal?: boolean
   created_at: string
   updated_at: string
 }
@@ -4064,7 +4621,8 @@ export async function saveRichDocument(
   companyId: string,
   userId: string,
   folderPath: string = '/',
-  documentId?: string
+  documentId?: string,
+  isInternal: boolean = false
 ): Promise<{ success: boolean; document?: RichDocument; error?: string }> {
   try {
     if (!supabase) {
@@ -4094,14 +4652,21 @@ export async function saveRichDocument(
         return { success: false, error: 'You can only edit documents you created' }
       }
 
-      // Update existing document
+      // Update existing document - include is_internal if updating
+      const updateData: any = {
+        title,
+        content,
+        updated_at: new Date().toISOString()
+      }
+      
+      // Include is_internal if it was passed (for updates that change visibility)
+      if (isInternal !== undefined) {
+        updateData.is_internal = isInternal
+      }
+
       const { data, error } = await supabase
         .from('rich_documents')
-        .update({
-          title,
-          content,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', documentId)
         .select()
         .single()
@@ -4124,22 +4689,68 @@ export async function saveRichDocument(
         return { success: false, error: 'Access denied to this company' }
       }
 
-      // Create new document
+      // Create new document - conditionally include is_internal
+      const insertData: any = {
+        title,
+        content,
+        company_id: companyId,
+        created_by: userId,
+        folder_path: folderPath
+      }
+
+      // Try to include is_internal, but handle gracefully if column doesn't exist
+      insertData.is_internal = isInternal
+
       const { data, error } = await supabase
         .from('rich_documents')
-        .insert({
-          title,
-          content,
-          company_id: companyId,
-          created_by: userId,
-          folder_path: folderPath
-        })
+        .insert(insertData)
         .select()
         .single()
 
       if (error) {
-        return { success: false, error: error.message }
+        // If error is about missing is_internal column, retry without it
+        if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
+          console.warn('is_internal column not found in rich_documents table, creating document without it')
+          const { data: retryData, error: retryError } = await supabase
+            .from('rich_documents')
+            .insert({
+              title,
+              content,
+              company_id: companyId,
+              created_by: userId,
+              folder_path: folderPath
+            })
+            .select()
+            .single()
+
+          if (retryError) {
+            return { success: false, error: retryError.message }
+          }
+
+          return { success: true, document: retryData }
+        }
+
+        return { success: false, error: error.message || 'Failed to create document' }
       }
+
+      if (!data) {
+        return { success: false, error: 'Failed to create document' }
+      }
+
+      // Log activity for rich document creation
+      await logActivity({
+        user_id: userId,
+        action_type: 'rich_document_created',
+        entity_type: 'rich_document',
+        entity_id: data.id,
+        description: `Created rich document "${title}"`,
+        metadata: { 
+          title: title,
+          folder_path: folderPath,
+          is_internal: isInternal
+        },
+        company_id: companyId,
+      })
 
       return { success: true, document: data }
     }

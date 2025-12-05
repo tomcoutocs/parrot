@@ -45,6 +45,68 @@ export default function RootLayout({
           closeButton={true}
         />
         <Analytics />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                const handledElements = new WeakSet();
+                
+                function setupScrollbar(element) {
+                  if (handledElements.has(element)) return;
+                  handledElements.add(element);
+                  
+                  let scrollTimeout;
+                  let isScrolling = false;
+                  
+                  function onScroll() {
+                    if (!isScrolling) {
+                      isScrolling = true;
+                      element.classList.add('scrolling');
+                    }
+                    
+                    clearTimeout(scrollTimeout);
+                    scrollTimeout = setTimeout(function() {
+                      isScrolling = false;
+                      element.classList.remove('scrolling');
+                    }, 500);
+                  }
+                  
+                  element.addEventListener('scroll', onScroll, { passive: true });
+                }
+                
+                function handleScrollbarVisibility() {
+                  const candidates = document.querySelectorAll('.scrollbar-thin, .parrot-scrollbar, [class*="overflow"]');
+                  candidates.forEach(function(element) {
+                    const style = window.getComputedStyle(element);
+                    if (style.overflowY === 'auto' || style.overflowY === 'scroll' || 
+                        style.overflowX === 'auto' || style.overflowX === 'scroll') {
+                      setupScrollbar(element);
+                    }
+                  });
+                }
+                
+                function init() {
+                  handleScrollbarVisibility();
+                  
+                  const observer = new MutationObserver(function() {
+                    handleScrollbarVisibility();
+                  });
+                  
+                  observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                  });
+                }
+                
+                if (document.readyState === 'loading') {
+                  document.addEventListener('DOMContentLoaded', init);
+                } else {
+                  init();
+                }
+              })();
+            `,
+          }}
+        />
       </body>
     </html>
   )

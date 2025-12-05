@@ -4,6 +4,7 @@
 import { supabase } from './supabase'
 import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation, DashboardWidget, SpaceDashboardConfig, DashboardNote, DashboardLink } from './supabase'
 import { getCurrentUser } from './auth'
+import { logActivity } from './database-functions'
 
 // Helper function to set application context for RLS
 async function setAppContext() {
@@ -145,6 +146,8 @@ export async function fetchTasksOptimized(projectId?: string): Promise<TaskWithD
 
     const transformedData = data?.map(task => ({
       ...task,
+      // Map 'medium' priority to 'normal' for display consistency
+      priority: task.priority === 'medium' ? 'normal' : task.priority,
       comment_count: task.task_comments?.length || 0,
       // Use the first assigned user from task_assignments if available, otherwise fall back to assigned_user
       assigned_user: task.task_assignments?.[0]?.user || task.assigned_user
@@ -184,7 +187,32 @@ export async function fetchCompaniesOptimized(): Promise<Company[]> {
       .order('name', { ascending: true })
 
     if (error) return []
-    return data || []
+    
+    // Decrypt API keys and credentials after fetching
+    const { decrypt } = await import('./encryption')
+    const decryptedData = await Promise.all((data || []).map(async (company) => ({
+      ...company,
+      // Legacy API keys
+      meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
+      google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
+      shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
+      klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+      // Google Ads API credentials (decrypt sensitive fields)
+      google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
+      google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
+      google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+      // Meta Ads API credentials (decrypt sensitive fields)
+      meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
+      meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
+      meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+      // Shopify API credentials (decrypt sensitive fields)
+      shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
+      shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+      // Klaviyo API credentials (decrypt sensitive fields)
+      klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
+    })))
+    
+    return decryptedData
   } catch (error) {
     return []
   }
@@ -306,18 +334,101 @@ export async function fetchCompanyEvents(companyId: string): Promise<Array<{
 export * from './database-functions'
 
 // Add missing functions that are called from projects tab
-export async function updateTaskPosition(taskId: string, position: number, status: Task['status'], userId: string) {
+export async function updateTaskPosition(taskId: string, position: number, status: Task['status'], userId: string, projectId?: string) {
   if (!supabase) return
 
   try {
     await setAppContext()
+    
+    // Get current task data for activity log
+    const { data: currentTask } = await supabase
+      .from('tasks')
+      .select('title, project_id, status, position, project:projects!tasks_project_id_fkey(company_id)')
+      .eq('id', taskId)
+      .single()
+
+    const updateData: { position: number; status: Task['status']; project_id?: string } = { position, status }
+    
+    // If projectId is provided, update the project as well (for cross-project moves)
+    const isCrossProjectMove = projectId && currentTask && currentTask.project_id !== projectId
+    if (projectId) {
+      updateData.project_id = projectId
+    }
+    
     const { error } = await supabase
       .from('tasks')
-      .update({ position, status })
+      .update(updateData)
       .eq('id', taskId)
 
     if (error) {
       throw error
+    }
+
+    // Log activity for task move (especially cross-project moves)
+    if (currentTask) {
+      const companyId = (currentTask.project as any)?.company_id
+      
+      // Determine if this is a status change, position change, or project move
+      const statusChanged = currentTask.status !== status
+      const positionChanged = currentTask.position !== position
+      const projectChanged = isCrossProjectMove
+
+      if (projectChanged) {
+        // Log cross-project move
+        await logActivity({
+          user_id: userId,
+          action_type: 'task_moved',
+          entity_type: 'task',
+          entity_id: taskId,
+          description: `Moved task "${currentTask.title}" to different project`,
+          metadata: { 
+            task_title: currentTask.title,
+            from_project_id: currentTask.project_id,
+            to_project_id: projectId,
+            new_status: status,
+            new_position: position
+          },
+          company_id: companyId,
+          project_id: projectId,
+          task_id: taskId,
+        })
+      } else if (statusChanged) {
+        // Log status change (this might already be logged elsewhere, but we'll log it here too for granularity)
+        await logActivity({
+          user_id: userId,
+          action_type: 'task_status_changed',
+          entity_type: 'task',
+          entity_id: taskId,
+          description: `Changed task "${currentTask.title}" status from ${currentTask.status} to ${status}`,
+          metadata: { 
+            task_title: currentTask.title,
+            from_status: currentTask.status,
+            to_status: status,
+            new_position: position
+          },
+          company_id: companyId,
+          project_id: currentTask.project_id,
+          task_id: taskId,
+        })
+      } else if (positionChanged) {
+        // Log position change within same status
+        await logActivity({
+          user_id: userId,
+          action_type: 'task_moved',
+          entity_type: 'task',
+          entity_id: taskId,
+          description: `Moved task "${currentTask.title}" to position ${position}`,
+          metadata: { 
+            task_title: currentTask.title,
+            from_position: currentTask.position,
+            to_position: position,
+            status: status
+          },
+          company_id: companyId,
+          project_id: currentTask.project_id,
+          task_id: taskId,
+        })
+      }
     }
   } catch (error) {
     throw error

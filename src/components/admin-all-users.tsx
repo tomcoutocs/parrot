@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { Users, Mail, Calendar, Plus, MoreHorizontal, Trash2, Edit, Search, Building2, Activity } from "lucide-react"
+import { Users, Mail, Calendar, Plus, MoreHorizontal, Trash2, Edit, Search, Building2, Activity, Download, Filter } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,6 +49,8 @@ export function AdminAllUsers() {
   const [editing, setEditing] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
+  const [activityUserFilter, setActivityUserFilter] = useState<string>("all")
+  const [activityTypeFilter, setActivityTypeFilter] = useState<string>("all")
   const [editFormData, setEditFormData] = useState({
     full_name: "",
     email: "",
@@ -72,23 +74,33 @@ export function AdminAllUsers() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
+      setActivitiesLoading(true)
       try {
-        await loadUsersData()
+        // Load users, companies, and activities in parallel
+        const [users, companiesData, recentActivities] = await Promise.all([
+          fetchUsersOptimized(),
+          fetchCompaniesOptimized(),
+          fetchRecentActivities(50, 90)
+        ])
+        
+        setCompanies(companiesData)
+        setAllUsers(users)
+        setFilteredUsers(users)
+        setActivities(recentActivities)
       } catch (error) {
-        console.error("Error loading users:", error)
+        console.error("Error loading data:", error)
       } finally {
         setLoading(false)
+        setActivitiesLoading(false)
       }
     }
 
     loadData()
-  }, [])
-
-  useEffect(() => {
+    
+    // Refresh activities every 30 seconds
     const loadActivities = async () => {
       setActivitiesLoading(true)
       try {
-        // Fetch more activities for comprehensive feed (90 days back)
         const recentActivities = await fetchRecentActivities(50, 90)
         setActivities(recentActivities)
       } catch (error) {
@@ -97,12 +109,104 @@ export function AdminAllUsers() {
         setActivitiesLoading(false)
       }
     }
-
-    loadActivities()
-    // Refresh activities every 30 seconds
+    
     const interval = setInterval(loadActivities, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // Get unique activity types for display
+  const formatActivityType = (type: string): string => {
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+
+  // Get filtered activities based on user and activity type filters
+  const getFilteredActivities = (): RecentActivity[] => {
+    let filtered = activities
+
+    // Filter by user
+    if (activityUserFilter !== "all") {
+      filtered = filtered.filter(activity => activity.user_id === activityUserFilter)
+    }
+
+    // Filter by activity type
+    if (activityTypeFilter !== "all") {
+      filtered = filtered.filter(activity => activity.type === activityTypeFilter)
+    }
+
+    return filtered
+  }
+
+  // Export activities to CSV
+  const exportActivitiesToCSV = (activitiesToExport: RecentActivity[]) => {
+    if (activitiesToExport.length === 0) {
+      toastError("No activities to export")
+      return
+    }
+
+    // Define CSV headers
+    const headers = [
+      "Timestamp",
+      "User",
+      "Activity Type",
+      "Description",
+      "Project",
+      "Task",
+      "Company"
+    ]
+
+    // Convert activities to CSV rows
+    const rows = activitiesToExport.map(activity => {
+      const timestamp = new Date(activity.timestamp).toLocaleString()
+      const user = activity.user_name || "Unknown"
+      const activityType = formatActivityType(activity.type)
+      const description = activity.description || activity.task_title || activity.project_name || ""
+      const project = activity.project_name || ""
+      const task = activity.task_title || ""
+      const company = activity.company_name || ""
+
+      return [
+        timestamp,
+        user,
+        activityType,
+        description,
+        project,
+        task,
+        company
+      ]
+    })
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => 
+        row.map(cell => {
+          // Escape commas and quotes in cell values
+          const cellStr = String(cell || "")
+          if (cellStr.includes(",") || cellStr.includes('"') || cellStr.includes("\n")) {
+            return `"${cellStr.replace(/"/g, '""')}"`
+          }
+          return cellStr
+        }).join(",")
+      )
+    ].join("\n")
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    
+    link.setAttribute("href", url)
+    link.setAttribute("download", `activity-export-${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    toastSuccess(`Exported ${activitiesToExport.length} activities`)
+  }
 
   // Filter users based on search and role
   useEffect(() => {
@@ -410,9 +514,67 @@ export function AdminAllUsers() {
         {/* Activity Feed */}
         <div className="lg:col-span-1">
           <Card className="p-4 border-border/60">
-            <div className="flex items-center gap-2 mb-4">
-              <Activity className="w-4 h-4" />
-              <h3 className="text-sm font-semibold">Activity Feed</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                <h3 className="text-sm font-semibold">Activity Feed</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Export filtered activities
+                  const filteredActivities = getFilteredActivities()
+                  exportActivitiesToCSV(filteredActivities)
+                }}
+                className="h-7 text-xs"
+              >
+                <Download className="w-3 h-3 mr-1.5" />
+                Export
+              </Button>
+            </div>
+            
+            {/* Filters */}
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Filters:</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={activityUserFilter} onValueChange={setActivityUserFilter}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="All Users" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Users</SelectItem>
+                    {Array.from(new Set(activities.map(a => a.user_id)))
+                      .map(userId => {
+                        const user = activities.find(a => a.user_id === userId)
+                        return user ? (
+                          <SelectItem key={userId} value={userId}>
+                            {user.user_name}
+                          </SelectItem>
+                        ) : null
+                      })
+                      .filter(Boolean)}
+                  </SelectContent>
+                </Select>
+                <Select value={activityTypeFilter} onValueChange={setActivityTypeFilter}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="All Activities" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Activities</SelectItem>
+                    {Array.from(new Set(activities.map(a => a.type)))
+                      .sort()
+                      .map(type => (
+                        <SelectItem key={type} value={type}>
+                          {formatActivityType(type)}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {activitiesLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -422,9 +584,27 @@ export function AdminAllUsers() {
               <div className="flex items-center justify-center py-8">
                 <div className="text-muted-foreground text-sm">No recent activity</div>
               </div>
+            ) : getFilteredActivities().length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-muted-foreground text-sm text-center">
+                  No activities match the current filters
+                  <br />
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 mt-1 text-xs"
+                    onClick={() => {
+                      setActivityUserFilter("all")
+                      setActivityTypeFilter("all")
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              </div>
             ) : (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {activities.map((activity) => {
+              <div className="space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin">
+                {getFilteredActivities().map((activity) => {
                   const initials = activity.user_name
                     .split(' ')
                     .map(n => n[0])

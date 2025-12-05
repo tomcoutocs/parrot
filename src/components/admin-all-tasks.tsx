@@ -1,15 +1,18 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Filter, Plus, Clock, AlertCircle, CheckSquare, Circle, Calendar } from "lucide-react"
+import { Search, Plus, Clock, AlertCircle, CheckSquare, Circle, Calendar, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { fetchTasksOptimized, fetchProjectsOptimized, fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
-import { TaskWithDetails, ProjectWithDetails, Company } from "@/lib/supabase"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { fetchTasksOptimized, fetchProjectsOptimized, fetchCompaniesOptimized, fetchUsersOptimized } from "@/lib/simplified-database-functions"
+import { TaskWithDetails, ProjectWithDetails, Company, User } from "@/lib/supabase"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
 interface TaskWithProject extends TaskWithDetails {
   project?: ProjectWithDetails & { company?: Company }
@@ -20,8 +23,14 @@ export function AdminAllTasks() {
   const [tasks, setTasks] = useState<TaskWithProject[]>([])
   const [projects, setProjects] = useState<ProjectWithDetails[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
+  const [filterCompany, setFilterCompany] = useState<string>("all")
+  const [filterProject, setFilterProject] = useState<string>("all")
+  const [filterStatus, setFilterStatus] = useState<string>("all")
+  const [filterPriority, setFilterPriority] = useState<string>("all")
+  const [filterAssignee, setFilterAssignee] = useState<string>("all")
 
   const handleTaskClick = (task: TaskWithProject) => {
     // Navigate to projects tab with the selected task, project, and space
@@ -40,30 +49,39 @@ export function AdminAllTasks() {
     const loadData = async () => {
       setLoading(true)
       try {
-        // Fetch all tasks (no project filter = all tasks)
-        const tasksData = await fetchTasksOptimized()
-        
-        // Fetch all projects and companies to enrich task data
-        const [projectsData, companiesData] = await Promise.all([
+        // Fetch all data in parallel for better performance
+        const [tasksData, allProjectsData, companiesData, usersData] = await Promise.all([
+          fetchTasksOptimized(),
           fetchProjectsOptimized(),
-          fetchCompaniesOptimized()
+          fetchCompaniesOptimized(),
+          fetchUsersOptimized()
         ])
 
         // Enrich projects with company data
-        const enrichedProjects = projectsData.map(project => {
+        const enrichedProjects = allProjectsData.map(project => {
           const company = companiesData.find(c => c.id === project.company_id)
           return { ...project, company }
         })
 
-        // Enrich tasks with project and company data
-        const enrichedTasks = tasksData.map(task => {
-          const project = enrichedProjects.find(p => p.id === task.project_id)
-          return { ...task, project }
-        })
+        // Create a set of active project IDs for quick lookup
+        const activeProjectIds = new Set(enrichedProjects.map(p => p.id))
+
+        // Enrich tasks with project and company data, and filter out tasks from archived projects
+        const enrichedTasks = tasksData
+          .map(task => {
+            const project = enrichedProjects.find(p => p.id === task.project_id)
+            return { ...task, project }
+          })
+          .filter(task => {
+            // Filter out tasks from archived projects
+            // If project is not in enrichedProjects (which excludes archived), the project is archived
+            return activeProjectIds.has(task.project_id) && task.project !== undefined
+          })
 
         setTasks(enrichedTasks)
         setProjects(enrichedProjects)
         setCompanies(companiesData)
+        setUsers(usersData)
       } catch (error) {
         console.error("Error loading tasks:", error)
       } finally {
@@ -115,8 +133,36 @@ export function AdminAllTasks() {
       task.project?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.project?.company?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.assigned_user?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
+    
+    const matchesCompany = filterCompany === "all" || task.project?.company_id === filterCompany
+    const matchesProject = filterProject === "all" || task.project_id === filterProject
+    const matchesStatus = filterStatus === "all" || task.status === filterStatus
+    const matchesPriority = filterPriority === "all" || task.priority === filterPriority
+    const matchesAssignee = filterAssignee === "all" || task.assigned_to === filterAssignee
+    
+    return matchesSearch && matchesCompany && matchesProject && matchesStatus && matchesPriority && matchesAssignee
   })
+
+  const activeFilterCount = 
+    (filterCompany !== "all" ? 1 : 0) + 
+    (filterProject !== "all" ? 1 : 0) + 
+    (filterStatus !== "all" ? 1 : 0) + 
+    (filterPriority !== "all" ? 1 : 0) + 
+    (filterAssignee !== "all" ? 1 : 0)
+  const hasActiveFilters = activeFilterCount > 0
+
+  const clearFilters = () => {
+    setFilterCompany("all")
+    setFilterProject("all")
+    setFilterStatus("all")
+    setFilterPriority("all")
+    setFilterAssignee("all")
+  }
+
+  // Get filtered projects based on company filter
+  const filteredProjectsForSelect = filterCompany === "all" 
+    ? projects 
+    : projects.filter(p => p.company_id === filterCompany)
 
   const getPriorityColor = (priority: string) => {
     const priorityLower = priority?.toLowerCase() || ""
@@ -184,7 +230,10 @@ export function AdminAllTasks() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading tasks...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading tasks...</p>
+        </div>
       </div>
     )
   }
@@ -254,20 +303,159 @@ export function AdminAllTasks() {
 
       {/* Filters */}
       <Card className="p-4 border-border/60">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search tasks..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex-1 relative min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search tasks..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={filterCompany} onValueChange={(value) => {
+              setFilterCompany(value)
+              // Reset project filter when company changes
+              if (value !== filterCompany) {
+                setFilterProject("all")
+              }
+            }}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All Companies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Companies</SelectItem>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterProject} onValueChange={setFilterProject}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All Projects" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {filteredProjectsForSelect.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="todo">To Do</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="review">Review</SelectItem>
+                <SelectItem value="done">Done</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterPriority} onValueChange={setFilterPriority}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue placeholder="All Priorities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="normal">Normal</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="All Assignees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Assignees</SelectItem>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.full_name || user.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-9 text-xs"
+              >
+                Clear filters
+              </Button>
+            )}
           </div>
-          <Button variant="outline" className="flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            Filter
-          </Button>
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-2">
+              {filterCompany !== "all" && (
+                <Badge variant="secondary" className="text-xs">
+                  {companies.find(c => c.id === filterCompany)?.name || "Company"}
+                  <button
+                    onClick={() => {
+                      setFilterCompany("all")
+                      setFilterProject("all")
+                    }}
+                    className="ml-1.5 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filterProject !== "all" && (
+                <Badge variant="secondary" className="text-xs">
+                  {projects.find(p => p.id === filterProject)?.name || "Project"}
+                  <button
+                    onClick={() => setFilterProject("all")}
+                    className="ml-1.5 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filterStatus !== "all" && (
+                <Badge variant="secondary" className="text-xs">
+                  {getStatusLabel(filterStatus)}
+                  <button
+                    onClick={() => setFilterStatus("all")}
+                    className="ml-1.5 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filterPriority !== "all" && (
+                <Badge variant="secondary" className="text-xs">
+                  {filterPriority.charAt(0).toUpperCase() + filterPriority.slice(1)}
+                  <button
+                    onClick={() => setFilterPriority("all")}
+                    className="ml-1.5 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filterAssignee !== "all" && (
+                <Badge variant="secondary" className="text-xs">
+                  {users.find(u => u.id === filterAssignee)?.full_name || users.find(u => u.id === filterAssignee)?.email || "Assignee"}
+                  <button
+                    onClick={() => setFilterAssignee("all")}
+                    className="ml-1.5 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -299,10 +487,11 @@ export function AdminAllTasks() {
               const priorityMap: Record<string, string> = {
                 "urgent": "Urgent",
                 "high": "High",
-                "medium": "Normal",
+                "normal": "Normal",
+                "medium": "Normal", // Backwards compatibility
                 "low": "Low"
               }
-              const priorityLabel = priorityMap[task.priority || "medium"] || "Normal"
+              const priorityLabel = priorityMap[task.priority || "normal"] || "Normal"
               
               // Map status to match TaskRow format
               const statusMap: Record<string, string> = {
@@ -326,10 +515,11 @@ export function AdminAllTasks() {
               const priorityColors: Record<string, { dot: string; text: string }> = {
                 "urgent": { dot: "bg-red-500", text: "text-red-600" },
                 "high": { dot: "bg-orange-500", text: "text-orange-600" },
-                "medium": { dot: "bg-gray-400", text: "text-muted-foreground" },
+                "normal": { dot: "bg-gray-400", text: "text-muted-foreground" },
+                "medium": { dot: "bg-gray-400", text: "text-muted-foreground" }, // Backwards compatibility
                 "low": { dot: "bg-blue-500", text: "text-blue-600" }
               }
-              const currentPriority = priorityColors[task.priority || "medium"] || priorityColors["medium"]
+              const currentPriority = priorityColors[task.priority || "normal"] || priorityColors["normal"]
               
               return (
                 <div

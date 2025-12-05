@@ -40,7 +40,7 @@ export default function CreateTaskModal({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<Task['status']>(initialStatus)
-  const [priority, setPriority] = useState<Task['priority']>('medium')
+  const [priority, setPriority] = useState<Task['priority']>('normal')
   const [assignedTo, setAssignedTo] = useState<string>('unassigned')
   const [dueDate, setDueDate] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
@@ -85,7 +85,7 @@ export default function CreateTaskModal({
         setTitle('')
         setDescription('')
         setStatus(initialStatus)
-        setPriority('medium')
+        setPriority('normal')
         setAssignedTo('unassigned')
         setDueDate('')
         
@@ -107,7 +107,7 @@ export default function CreateTaskModal({
       setTitle('')
       setDescription('')
       setStatus(initialStatus)
-      setPriority('medium')
+      setPriority('normal')
       setAssignedTo('unassigned')
       setDueDate('')
       setError('')
@@ -175,7 +175,7 @@ export default function CreateTaskModal({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
                   <SelectItem value="high">High</SelectItem>
                   <SelectItem value="urgent">Urgent</SelectItem>
                 </SelectContent>

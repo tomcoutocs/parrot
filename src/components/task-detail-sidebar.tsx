@@ -151,9 +151,12 @@ export default function TaskDetailSidebar({
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high':
+      case 'urgent':
         return 'bg-red-100 text-red-800 border-red-200'
-      case 'medium':
+      case 'high':
+        return 'bg-orange-100 text-orange-800 border-orange-200'
+      case 'normal':
+      case 'medium': // Handle both 'normal' and 'medium' (backwards compatibility)
         return 'bg-yellow-100 text-yellow-800 border-yellow-200'
       case 'low':
         return 'bg-green-100 text-green-800 border-green-200'
@@ -178,7 +181,7 @@ export default function TaskDetailSidebar({
             <div className="flex items-center gap-2 mb-3">
               {getStatusIcon(task.status)}
               <Badge className={getPriorityColor(task.priority)}>
-                {task.priority}
+                {(task.priority as string) === 'medium' ? 'normal' : task.priority}
               </Badge>
               <Badge variant="outline">
                 {task.status}

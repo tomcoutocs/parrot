@@ -34,9 +34,10 @@ const assignees = [
 ]
 
 const priorityOptions = [
-  { id: "High", label: "High" },
-  { id: "Normal", label: "Normal" },
-  { id: "Low", label: "Low" },
+  { id: "Low", label: "Low", dbValue: "low" },
+  { id: "Normal", label: "Normal", dbValue: "normal" },
+  { id: "High", label: "High", dbValue: "high" },
+  { id: "Urgent", label: "Urgent", dbValue: "urgent" },
 ]
 
 const statusLevels = [
@@ -50,7 +51,7 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor, users = [] }
   const [taskName, setTaskName] = useState("")
   const [assignee, setAssignee] = useState<string | undefined>(undefined)
   const [dueDate, setDueDate] = useState<string | undefined>(undefined)
-  const [priority, setPriority] = useState<string>("Normal")
+  const [priority, setPriority] = useState<string>("Normal") // Display label
   // Determine initial status based on statusColor
   const getInitialStatus = () => {
     const statusMap: Record<string, string> = {

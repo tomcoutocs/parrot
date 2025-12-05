@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 import {
   Dialog,
   DialogContent,
@@ -119,7 +120,7 @@ function transformTaskToDesignTask(task: TaskWithDetails): DesignTask & { origin
   }
   
   const priority = task.priority 
-    ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1)
+    ? ((task.priority as string) === 'medium' ? 'Normal' : task.priority.charAt(0).toUpperCase() + task.priority.slice(1))
     : "Normal"
 
   return {
@@ -216,6 +217,8 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   const [selectedProjectForEdit, setSelectedProjectForEdit] = useState<ProjectWithDetails | null>(null)
   const [editModalUsers, setEditModalUsers] = useState<User[]>([])
   const [projectsData, setProjectsData] = useState<ProjectWithDetails[]>([])
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -226,11 +229,22 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
 
       setLoading(true)
       try {
-        // Fetch projects for this space
-        const projectsData = await fetchProjectsOptimized(activeSpace || undefined)
-        
-        // Fetch users for this space - only show users, managers, and admins
-        const usersData = await fetchUsersOptimized()
+        // Fetch projects and users in parallel
+        const [projectsData, usersData, internalAssignmentsResult] = await Promise.all([
+          fetchProjectsOptimized(activeSpace || undefined),
+          fetchUsersOptimized(),
+          supabase ? (async () => {
+            try {
+              const result = await supabase
+                .from('internal_user_companies')
+                .select('user_id')
+                .eq('company_id', activeSpace)
+              return result
+            } catch {
+              return { data: null, error: null }
+            }
+          })() : Promise.resolve({ data: null, error: null })
+        ])
         
         // Get direct company users (users, managers, admins)
         const directSpaceUsers = usersData.filter(user => 
@@ -239,21 +253,10 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           (user.role === 'user' || user.role === 'manager' || user.role === 'admin')
         )
         
-        // Get internal users assigned to this space via internal_user_companies
-        let internalUserIds: string[] = []
-        if (supabase) {
-          try {
-            const { data: internalAssignments } = await supabase
-              .from('internal_user_companies')
-              .select('user_id')
-              .eq('company_id', activeSpace)
-            
-            if (internalAssignments) {
-              internalUserIds = internalAssignments.map(ia => ia.user_id)
-            }
-          } catch (error) {
-            console.error('Error fetching internal user assignments:', error)
-          }
+        // Get internal user IDs
+        const internalUserIds: string[] = []
+        if (internalAssignmentsResult && !internalAssignmentsResult.error && internalAssignmentsResult.data) {
+          internalUserIds.push(...internalAssignmentsResult.data.map((ia: { user_id: string }) => ia.user_id))
         }
         
         // Get internal users who are assigned to this space
@@ -279,8 +282,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         // Store projects data for edit modal
         setProjectsData(projectsData)
         
-        // Fetch tasks for projects in this space
-        // Get all project IDs first, then fetch tasks for those projects
+        // Fetch tasks for projects in this space in parallel
         const projectIds = projectsData.map(p => p.id)
         const allTasksData = projectIds.length > 0 
           ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
@@ -316,10 +318,25 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         const projectIdParam = searchParams?.get('projectId')
         const taskIdParam = searchParams?.get('taskId')
         
+        // Build list of status groups that have tasks (only expand those)
+        const statusGroupsWithTasks: string[] = []
+        transformedProjects.forEach(project => {
+          project.statusGroups.forEach(statusGroup => {
+            if (statusGroup.tasks.length > 0) {
+              const statusId = `${project.id}-${statusGroup.name.toLowerCase().replace(" ", "-")}`
+              statusGroupsWithTasks.push(statusId)
+            }
+          })
+        })
+        
         // If projectId is in URL, expand that project
         if (projectIdParam && transformedProjects.some(p => p.id === projectIdParam)) {
           setExpandedProjects([projectIdParam])
           setSelectedProjectId(projectIdParam)
+          
+          // Only expand status groups with tasks for this project
+          const projectStatusGroups = statusGroupsWithTasks.filter(id => id.startsWith(projectIdParam + '-'))
+          setExpandedStatuses(projectStatusGroups)
           
           // If taskId is also in URL, open the task sidebar after tasks are loaded
           if (taskIdParam) {
@@ -332,13 +349,15 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
             }
           }
         } else if (transformedProjects.length > 0) {
-          // Auto-expand first project and first status group
+          // Auto-expand first project and only status groups with tasks
           const firstProject = transformedProjects[0]
           setExpandedProjects([firstProject.id])
           setSelectedProjectId(firstProject.id) // Set default project for task creation
-          if (firstProject.statusGroups.length > 0) {
-            const firstStatusId = `${firstProject.id}-${firstProject.statusGroups[0].name.toLowerCase().replace(" ", "-")}`
-            setExpandedStatuses([firstStatusId])
+          
+          // Only expand status groups that have tasks
+          const firstProjectStatusGroups = statusGroupsWithTasks.filter(id => id.startsWith(firstProject.id + '-'))
+          if (firstProjectStatusGroups.length > 0) {
+            setExpandedStatuses(firstProjectStatusGroups)
           }
         }
       } catch (error) {
@@ -521,13 +540,14 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
       }
 
       // Handle priority - map TaskRow labels to database values
+      // Database still uses 'medium', but we display it as 'normal'
       if ('priority' in updates && updates.priority) {
-        const priorityMap: Record<string, Task['priority']> = {
+        const priorityMap: Record<string, string> = {
           'urgent': 'urgent',
           'high': 'high',
-          'normal': 'medium',  // TaskRow uses "Normal" but DB expects "medium"
+          'normal': 'medium', // Map 'normal' to 'medium' for database compatibility
           'low': 'low',
-          'medium': 'medium'
+          'medium': 'medium' // Keep 'medium' as is for backwards compatibility
         }
         const normalizedPriority = updates.priority.toLowerCase()
         dbUpdates.priority = priorityMap[normalizedPriority] || 'medium'
@@ -718,6 +738,19 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         newTasksMap.delete(taskId)
         setTasksMap(newTasksMap)
 
+        // Find status groups that will become empty
+        const statusGroupsToCollapse: string[] = []
+        projects.forEach(project => {
+          project.statusGroups.forEach(statusGroup => {
+            const hasTask = statusGroup.tasks.some(task => task.id === taskId)
+            if (hasTask && statusGroup.tasks.length === 1) {
+              // This is the last task, will be empty after deletion
+              const statusId = `${project.id}-${statusGroup.name.toLowerCase().replace(/\s+/g, "-")}`
+              statusGroupsToCollapse.push(statusId)
+            }
+          })
+        })
+
         // Update projects to remove the task
         setProjects(prevProjects => {
           return prevProjects.map(project => {
@@ -735,6 +768,11 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
             }
           })
         })
+
+        // Collapse empty status groups immediately
+        if (statusGroupsToCollapse.length > 0) {
+          setExpandedStatuses(prev => prev.filter(id => !statusGroupsToCollapse.includes(id)))
+        }
 
         // Close sidebar if the deleted task was open
         if (selectedTaskForSidebar?.id === taskId) {
@@ -1067,10 +1105,182 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   }
 
   const handleDragEnd = async (result: DropResult) => {
-    const { destination, source, draggableId } = result
+    const { destination, source, draggableId, type } = result
+
+    // Reset drag state
+    setDraggedTaskId(null)
+    setDragOverProjectId(null)
+
+    // Handle project drags (from outer context)
+    if (type === 'PROJECT' || draggableId && projects.find(p => p.id === draggableId)) {
+      // This is handled by handleProjectDragEnd
+      return
+    }
 
     // If dropped outside a droppable area, do nothing
     if (!destination) return
+
+    // Check if dropped on a project header (format: "project-header-{projectId}")
+    if (destination.droppableId.startsWith('project-header-')) {
+      const targetProjectId = destination.droppableId.replace('project-header-', '')
+      const task = tasksMap.get(draggableId)
+      if (!task || !session?.user?.id) return
+
+      // Move task to target project's "TO DO" status
+      const targetProject = projects.find(p => p.id === targetProjectId)
+      if (!targetProject) return
+
+      // Expand target project and TO DO status if needed
+      if (!expandedProjects.includes(targetProjectId)) {
+        setExpandedProjects(prev => [...prev, targetProjectId])
+      }
+      const todoStatusId = `${targetProjectId}-to-do`
+      if (!expandedStatuses.includes(todoStatusId)) {
+        setExpandedStatuses(prev => [...prev, todoStatusId])
+      }
+
+      // Optimistically update UI
+      const updatedTask = { ...task, project_id: targetProjectId, status: 'todo' as TaskWithDetails['status'] }
+      const newTasksMap = new Map(tasksMap)
+      newTasksMap.set(draggableId, updatedTask)
+      setTasksMap(newTasksMap)
+
+      // Find source status group name before updating projects
+      let sourceStatusGroupNameToCollapse: string | null = null
+      const sourceProject = projects.find(p => p.id === task.project_id)
+      if (sourceProject) {
+        const sourceStatusGroup = sourceProject.statusGroups.find(sg => 
+          sg.tasks.some(t => t.id === draggableId)
+        )
+        if (sourceStatusGroup && sourceStatusGroup.tasks.length === 1) {
+          // This is the last task, will be empty after removal
+          sourceStatusGroupNameToCollapse = sourceStatusGroup.name
+        }
+      }
+
+      // Update projects state
+      setProjects(prevProjects => {
+        const newProjects = prevProjects.map(p => {
+          // Remove from source project
+          if (p.id === task.project_id) {
+            const updatedStatusGroups = p.statusGroups.map(sg => ({
+              ...sg,
+              tasks: sg.tasks.filter(t => t.id !== draggableId)
+            }))
+            const totalTasks = updatedStatusGroups.reduce((sum, sg) => sum + sg.tasks.length, 0)
+            
+            return {
+              ...p,
+              statusGroups: updatedStatusGroups,
+              taskCount: totalTasks
+            }
+          }
+          // Add to target project
+          if (p.id === targetProjectId) {
+            const todoGroup = p.statusGroups.find(sg => sg.name === 'TO DO')
+            if (todoGroup) {
+              const updatedStatusGroups = p.statusGroups.map(sg => {
+                if (sg.name === 'TO DO') {
+                  const designTask = transformTaskToDesignTask(updatedTask)
+                  return {
+                    ...sg,
+                    tasks: [...sg.tasks, designTask]
+                  }
+                }
+                return sg
+              })
+              const totalTasks = updatedStatusGroups.reduce((sum, sg) => sum + sg.tasks.length, 0)
+              return {
+                ...p,
+                statusGroups: updatedStatusGroups,
+                taskCount: totalTasks
+              }
+            }
+          }
+          return p
+        })
+        return newProjects
+      })
+
+      // Collapse source status group if it became empty
+      if (sourceStatusGroupNameToCollapse && sourceProject) {
+        const sourceStatusId = `${sourceProject.id}-${sourceStatusGroupNameToCollapse.toLowerCase().replace(/\s+/g, "-")}`
+        setExpandedStatuses(prev => prev.filter(id => id !== sourceStatusId))
+      }
+
+      // Update database
+      try {
+        await updateTaskPosition(draggableId, 0, 'todo', session.user.id, targetProjectId)
+        toastSuccess(`Task moved to "${targetProject.name}"`)
+        
+        // Refresh data in background
+        if (!activeSpace) return
+        const projectsData = await fetchProjectsOptimized(activeSpace || undefined)
+        setProjectsData(projectsData)
+        
+        const projectIds = projectsData.map(p => p.id)
+        const allTasksData = projectIds.length > 0 
+          ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+          : []
+        
+        const refreshedTasksMap = new Map<string, TaskWithDetails>()
+        allTasksData.forEach(task => {
+          refreshedTasksMap.set(task.id, task)
+        })
+        setTasksMap(refreshedTasksMap)
+        
+        const transformedProjects: Project[] = projectsData.map((project) => {
+          const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+          const designTasks = projectTasks.map(transformTaskToDesignTask)
+          const statusGroups = groupTasksByStatus(designTasks)
+          
+          return {
+            id: project.id,
+            name: project.name || "Unnamed Project",
+            dueDate: "-",
+            launchDate: undefined,
+            statusGroups,
+            taskCount: projectTasks.length
+          }
+        })
+        
+        setProjects(transformedProjects)
+      } catch (error) {
+        console.error("Error moving task to project:", error)
+        toastError("Failed to move task")
+        // Revert optimistic update
+        if (!activeSpace) return
+        const projectsData = await fetchProjectsOptimized(activeSpace || undefined)
+        const projectIds = projectsData.map(p => p.id)
+        const allTasksData = projectIds.length > 0 
+          ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+          : []
+        
+        const newTasksMap = new Map<string, TaskWithDetails>()
+        allTasksData.forEach(task => {
+          newTasksMap.set(task.id, task)
+        })
+        setTasksMap(newTasksMap)
+        
+        const transformedProjects: Project[] = projectsData.map((project) => {
+          const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+          const designTasks = projectTasks.map(transformTaskToDesignTask)
+          const statusGroups = groupTasksByStatus(designTasks)
+          
+          return {
+            id: project.id,
+            name: project.name || "Unnamed Project",
+            dueDate: "-",
+            launchDate: undefined,
+            statusGroups,
+            taskCount: projectTasks.length
+          }
+        })
+        
+        setProjects(transformedProjects)
+      }
+      return
+    }
 
     // If dropped in the same position, do nothing
     if (destination.droppableId === source.droppableId && destination.index === source.index) {
@@ -1081,6 +1291,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     // Find the project ID (everything before the first dash that matches a project ID)
     let projectId = ''
     let destStatusGroupName = ''
+    let sourceProjectId = ''
     
     // Try to find project ID by matching against known project IDs
     for (const project of projects) {
@@ -1103,6 +1314,14 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
       }
     }
 
+    // Find source project ID
+    for (const project of projects) {
+      if (source.droppableId.startsWith(project.id + '-')) {
+        sourceProjectId = project.id
+        break
+      }
+    }
+
     if (!projectId || !destStatusGroupName) {
       console.error("Could not parse droppable ID:", destination.droppableId)
       return
@@ -1116,10 +1335,18 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     const task = tasksMap.get(draggableId)
     if (!task) return
 
+    // Check if this is a cross-project move
+    const isCrossProjectMove = sourceProjectId !== projectId
+
     // Expand the destination status section if it's collapsed
     const destStatusId = `${projectId}-${destStatusGroupName.toLowerCase().replace(/\s+/g, "-")}`
     if (!expandedStatuses.includes(destStatusId)) {
       setExpandedStatuses(prev => [...prev, destStatusId])
+    }
+
+    // Expand destination project if it's collapsed (for cross-project moves)
+    if (isCrossProjectMove && !expandedProjects.includes(projectId)) {
+      setExpandedProjects(prev => [...prev, projectId])
     }
 
     // Convert status group name to database status
@@ -1148,14 +1375,67 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     }
 
     // Optimistically update UI immediately for smooth experience
-    const updatedTask = { ...task, status: newStatus }
+    const updatedTask = { ...task, status: newStatus, project_id: projectId }
     const newTasksMap = new Map(tasksMap)
     newTasksMap.set(draggableId, updatedTask)
     setTasksMap(newTasksMap)
 
+    // Check if source status group will be empty after move
+    const sourceProject = projects.find(p => p.id === sourceProjectId)
+    const willSourceBeEmpty = sourceProject && (() => {
+      const sourceStatusGroup = sourceProject.statusGroups.find(sg => sg.name === sourceStatusGroupName)
+      return sourceStatusGroup && sourceStatusGroup.tasks.length === 1
+    })()
+
     // Optimistically update projects state
     setProjects(prevProjects => {
       return prevProjects.map(p => {
+        // Handle cross-project moves
+        if (isCrossProjectMove) {
+          // Remove from source project
+          if (p.id === sourceProjectId) {
+            const sourceStatusGroup = p.statusGroups.find(sg => sg.name === sourceStatusGroupName)
+            if (sourceStatusGroup) {
+              const updatedStatusGroups = p.statusGroups.map(sg => {
+                if (sg.name === sourceStatusGroupName) {
+                  return { ...sg, tasks: sg.tasks.filter(t => t.id !== draggableId) }
+                }
+                return sg
+              })
+              const totalTasks = updatedStatusGroups.reduce((sum, sg) => sum + sg.tasks.length, 0)
+              
+              return {
+                ...p,
+                statusGroups: updatedStatusGroups,
+                taskCount: totalTasks
+              }
+            }
+          }
+          // Add to destination project
+          if (p.id === projectId) {
+            const destStatusGroup = p.statusGroups.find(sg => sg.name === destStatusGroupName)
+            if (destStatusGroup) {
+              const movedTask = transformTaskToDesignTask(updatedTask)
+              const updatedStatusGroups = p.statusGroups.map(sg => {
+                if (sg.name === destStatusGroupName) {
+                  const destTasks = [...sg.tasks]
+                  destTasks.splice(destination.index, 0, movedTask)
+                  return { ...sg, tasks: destTasks }
+                }
+                return sg
+              })
+              const totalTasks = updatedStatusGroups.reduce((sum, sg) => sum + sg.tasks.length, 0)
+              return {
+                ...p,
+                statusGroups: updatedStatusGroups,
+                taskCount: totalTasks
+              }
+            }
+          }
+          return p
+        }
+
+        // Handle same-project moves
         if (p.id !== projectId) return p
 
         // Find source and destination status groups
@@ -1166,7 +1446,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
 
         // Remove task from source group
         const sourceTasks = sourceStatusGroup.tasks.filter(t => t.id !== draggableId)
-        const movedTask = sourceStatusGroup.tasks.find(t => t.id === draggableId)
+        const movedTask = sourceStatusGroup.tasks.find(t => t.id !== draggableId)
         
         if (!movedTask) return p
 
@@ -1192,20 +1472,45 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
       })
     })
 
+    // Collapse source status group if it became empty (for cross-project moves)
+    if (willSourceBeEmpty && sourceProject && isCrossProjectMove) {
+      const sourceStatusId = `${sourceProjectId}-${sourceStatusGroupName.toLowerCase().replace(/\s+/g, "-")}`
+      setExpandedStatuses(prev => prev.filter(id => id !== sourceStatusId))
+    }
+    
+    // Collapse source status group if it became empty (for same-project moves)
+    if (!isCrossProjectMove) {
+      const project = projects.find(p => p.id === projectId)
+      if (project) {
+        const sourceStatusGroup = project.statusGroups.find(sg => sg.name === sourceStatusGroupName)
+        if (sourceStatusGroup && sourceStatusGroup.tasks.length === 1) {
+          // This is the last task, will be empty after move
+          const sourceStatusId = `${projectId}-${sourceStatusGroupName.toLowerCase().replace(/\s+/g, "-")}`
+          setExpandedStatuses(prev => prev.filter(id => id !== sourceStatusId))
+        }
+      }
+    }
+
     // Update database in the background (no loading state)
     if (session?.user?.id) {
-      updateTaskPosition(draggableId, destination.index, newStatus, session.user.id)
+      updateTaskPosition(draggableId, destination.index, newStatus, session.user.id, isCrossProjectMove ? projectId : undefined)
         .then(() => {
           // Silently refresh data in background to ensure consistency
           if (!activeSpace) return
           fetchProjectsOptimized(activeSpace || undefined)
             .then(projectsData => {
+              // Update projectsData state to keep it in sync
+              setProjectsData(projectsData)
+              
               const projectIds = projectsData.map(p => p.id)
-              return projectIds.length > 0 
-                ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
-                : Promise.resolve([])
+              return Promise.all([
+                Promise.resolve(projectsData),
+                projectIds.length > 0 
+                  ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+                  : Promise.resolve([])
+              ])
             })
-            .then(allTasksData => {
+            .then(([projectsData, allTasksData]) => {
               const refreshedTasksMap = new Map<string, TaskWithDetails>()
               allTasksData.forEach(task => {
                 refreshedTasksMap.set(task.id, task)
@@ -1239,12 +1544,18 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           if (!activeSpace) return
           fetchProjectsOptimized(activeSpace || undefined)
             .then(projectsData => {
+              // Update projectsData state to keep it in sync
+              setProjectsData(projectsData)
+              
               const projectIds = projectsData.map(p => p.id)
-              return projectIds.length > 0 
-                ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
-                : Promise.resolve([])
+              return Promise.all([
+                Promise.resolve(projectsData),
+                projectIds.length > 0 
+                  ? Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+                  : Promise.resolve([])
+              ])
             })
-            .then(allTasksData => {
+            .then(([projectsData, allTasksData]) => {
               const newTasksMap = new Map<string, TaskWithDetails>()
               allTasksData.forEach(task => {
                 newTasksMap.set(task.id, task)
@@ -1275,7 +1586,10 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading tasks...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading tasks...</p>
+        </div>
       </div>
     )
   }
@@ -1320,8 +1634,26 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           No projects yet. Create your first project to get started.
         </div>
       ) : (
-        <DragDropContext onDragEnd={handleProjectDragEnd}>
-          <Droppable droppableId="projects-list">
+        <DragDropContext 
+          onDragStart={(start) => {
+            // Track which task is being dragged
+            const { draggableId } = start
+            // Check if it's a task (not a project)
+            if (!projects.find(p => p.id === draggableId)) {
+              setDraggedTaskId(draggableId)
+            }
+          }}
+          onDragEnd={(result) => {
+            // Handle both project and task drags
+            const { type, draggableId } = result
+            if (type === 'PROJECT' || (draggableId && projects.find(p => p.id === draggableId))) {
+              handleProjectDragEnd(result)
+            } else {
+              handleDragEnd(result)
+            }
+          }}
+        >
+          <Droppable droppableId="projects-list" type="PROJECT">
             {(provided) => (
               <div 
                 {...provided.droppableProps}
@@ -1358,77 +1690,96 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                           }`}
                         >
                           <CardContent className="p-0">
-                            {/* Project Header */}
-                            <div
-                              {...provided.dragHandleProps}
-                              onClick={(e) => {
-                                // Only toggle if not dragging
-                                if (!snapshot.isDragging) {
-                                  toggleProject(project.id)
-                                }
-                              }}
-                              className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors group cursor-grab active:cursor-grabbing rounded-t-lg"
-                            >
-                <ChevronRight 
-                  className={`w-4 h-4 text-muted-foreground transition-transform ${
-                    isProjectExpanded ? "rotate-90" : ""
-                  }`}
-                />
-                <span className="text-sm font-medium">{project.name}</span>
-                {project.taskCount !== undefined && (
-                  <span className="text-xs text-muted-foreground ml-1.5">
-                    ({project.taskCount})
-                  </span>
-                )}
-                <div className="flex items-center gap-3 ml-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Calendar className="w-3 h-3" />
-                    <span>{project.dueDate}</span>
-                  </div>
-                  {isUpcomingLaunch && project.launchDate && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md">
-                      <span className="text-[10px] font-medium">LAUNCH</span>
-                      <span>{project.launchDate}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="ml-auto" onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
-                        <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => {
-                        const projectData = projectsData.find(p => p.id === project.id)
-                        if (projectData) {
-                          setSelectedProjectForEdit(projectData)
-                          setShowEditProjectModal(true)
-                        }
-                      }}>
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit Project
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to archive "${project.name}"? This will hide it from the project list but keep all data.`)) {
-                            handleArchiveProject(project.id)
-                          }
-                        }}
-                        className="text-muted-foreground"
-                      >
-                        <Archive className="w-4 h-4 mr-2" />
-                        Archive
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
+                            {/* Project Header with Drop Zone */}
+                            <Droppable droppableId={`project-header-${project.id}`} type="TASK">
+                              {(providedDrop, snapshotDrop) => (
+                                <div
+                                  ref={providedDrop.innerRef}
+                                  {...providedDrop.droppableProps}
+                                  className={`relative ${
+                                    snapshotDrop.isDraggingOver ? 'bg-muted border-2 border-dashed border-foreground/50' : ''
+                                  }`}
+                                >
+                                  <div
+                                    {...provided.dragHandleProps}
+                                    onClick={(e) => {
+                                      // Only toggle if not dragging
+                                      if (!snapshot.isDragging) {
+                                        toggleProject(project.id)
+                                      }
+                                    }}
+                                    className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors group cursor-grab active:cursor-grabbing rounded-t-lg"
+                                  >
+                                    <ChevronRight 
+                                      className={`w-4 h-4 text-muted-foreground transition-transform ${
+                                        isProjectExpanded ? "rotate-90" : ""
+                                      }`}
+                                    />
+                                    <span className="text-sm font-medium">{project.name}</span>
+                                    {project.taskCount !== undefined && (
+                                      <span className="text-xs text-muted-foreground ml-1.5">
+                                        ({project.taskCount})
+                                      </span>
+                                    )}
+                                    <div className="flex items-center gap-3 ml-2 text-xs">
+                                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                                        <Calendar className="w-3 h-3" />
+                                        <span>{project.dueDate}</span>
+                                      </div>
+                                      {isUpcomingLaunch && project.launchDate && (
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md">
+                                          <span className="text-[10px] font-medium">LAUNCH</span>
+                                          <span>{project.launchDate}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="ml-auto" onClick={(e) => e.stopPropagation()}>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
+                                            <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem onClick={() => {
+                                            const projectData = projectsData.find(p => p.id === project.id)
+                                            if (projectData) {
+                                              setSelectedProjectForEdit(projectData)
+                                              setShowEditProjectModal(true)
+                                            }
+                                          }}>
+                                            <Edit className="w-4 h-4 mr-2" />
+                                            Edit Project
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem 
+                                            onClick={() => {
+                                              if (confirm(`Are you sure you want to archive "${project.name}"? This will hide it from the project list but keep all data.`)) {
+                                                handleArchiveProject(project.id)
+                                              }
+                                            }}
+                                            className="text-muted-foreground"
+                                          >
+                                            <Archive className="w-4 h-4 mr-2" />
+                                            Archive
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  </div>
+                                  {providedDrop.placeholder}
+                                  {snapshotDrop.isDraggingOver && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                                      <div className="text-xs font-medium text-foreground bg-background/90 px-3 py-1.5 rounded-md border border-foreground/20 shadow-lg">
+                                        Drop task here to move to "{project.name}"
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </Droppable>
 
                   {/* Project Content */}
                   {isProjectExpanded && (
-                    <DragDropContext onDragEnd={handleDragEnd}>
                       <div className="bg-muted/20">
                     {project.statusGroups
                       .map((statusGroup) => {
@@ -1540,11 +1891,12 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                           
                                           // Map priority to database format
                                           const priorityMap: Record<string, string> = {
+                                            "Low": "low",
+                                            "Normal": "normal",
                                             "High": "high",
-                                            "Normal": "medium",
-                                            "Low": "low"
+                                            "Urgent": "urgent"
                                           }
-                                          const dbPriority = task.priority ? priorityMap[task.priority] || "medium" : "medium"
+                                          const dbPriority = task.priority ? priorityMap[task.priority] || "normal" : "normal"
 
                                           // Use assignee ID directly (already in correct format)
                                           const assigneeUserId = task.assignee
@@ -1599,6 +1951,12 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                                           }
                                         } catch (error) {
                                           console.error("Error creating task:", error)
+                                          // Show error to user
+                                          if (error instanceof Error) {
+                                            alert(`Failed to create task: ${error.message}`)
+                                          } else {
+                                            alert('Failed to create task. Please check the console for details.')
+                                          }
                                         }
                                         
                                         setShowingInlineCreate(null)
@@ -1636,7 +1994,6 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
                       )
                       })}
                       </div>
-                    </DragDropContext>
                   )}
                 </CardContent>
                       </Card>

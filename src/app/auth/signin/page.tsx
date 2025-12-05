@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Mail, Lock } from 'lucide-react'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -42,59 +42,69 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-start justify-center px-4 sm:px-6 lg:px-8" style={{ backgroundColor: 'rgba(17, 55, 62, 0.1)' }}>
-      <div className="max-w-md w-full space-y-1">
-        <div className="text-center">
+    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="max-w-md w-full space-y-8">
+        <div className="text-center space-y-4">
           <Image
             src="/parrot-grad-main.png"
             alt="Parrot Logo"
-            width={512}
-            height={512}
-            className="mx-auto h-128 w-128 object-contain"
+            width={200}
+            height={200}
+            className="mx-auto h-32 w-32 object-contain"
           />
-          <h2 className="mt-0 text-2xl font-extrabold text-gray-900">
-            Welcome to Parrot
-          </h2>
-          <p className="mt-0 text-sm text-gray-600">
-            Sign in to access your business dashboard
-          </p>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-bold tracking-tight">
+              Welcome to Parrot
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Sign in to access your business dashboard
+            </p>
+          </div>
         </div>
 
-        <Card className="parrot-card-dark p-6">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-gray-900">Sign In</CardTitle>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl">Sign In</CardTitle>
             <CardDescription>
               Enter your credentials to access your account
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email address</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    className="pl-10"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="pl-10"
+                  />
+                </div>
               </div>
 
               {error && (
@@ -105,7 +115,8 @@ export default function SignInPage() {
 
               <Button 
                 type="submit" 
-                className="w-full parrot-button-primary" 
+                className="w-full" 
+                size="lg"
                 disabled={isLoading}
               >
                 {isLoading ? (

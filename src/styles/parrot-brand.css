@@ -451,22 +451,50 @@ html.dark .parrot-page-bg,
   color: #94a3b8;
 }
 
-/* Dark mode scrollbar */
+/* Dark mode scrollbar - hidden until hover/scroll */
+.dark .parrot-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.dark .parrot-scrollbar:hover,
+.dark .parrot-scrollbar:focus-within,
+.dark .parrot-scrollbar.scrolling {
+  scrollbar-color: oklch(var(--muted-foreground) / 0.4) transparent;
+}
+
+.dark .parrot-scrollbar:hover:hover,
+.dark .parrot-scrollbar:focus-within:hover,
+.dark .parrot-scrollbar.scrolling:hover {
+  scrollbar-color: oklch(var(--muted-foreground) / 0.6) transparent;
+}
+
 .dark .parrot-scrollbar::-webkit-scrollbar {
   width: 8px;
+  background: transparent;
 }
 
 .dark .parrot-scrollbar::-webkit-scrollbar-track {
-  background: rgba(71, 85, 105, 0.2);
+  background: transparent;
 }
 
 .dark .parrot-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.5);
+  background-color: transparent;
   border-radius: 4px;
+  transition: background-color 0.3s ease;
 }
 
-.dark .parrot-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 85, 105, 0.7);
+.dark .parrot-scrollbar:hover::-webkit-scrollbar-thumb,
+.dark .parrot-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.dark .parrot-scrollbar.scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(var(--muted-foreground) / 0.4);
+}
+
+.dark .parrot-scrollbar:hover::-webkit-scrollbar-thumb:hover,
+.dark .parrot-scrollbar:focus-within::-webkit-scrollbar-thumb:hover,
+.dark .parrot-scrollbar.scrolling::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(var(--muted-foreground) / 0.6);
 }
 
 /* Dark mode form elements */
@@ -1104,22 +1132,44 @@ html.dark .parrot-page-bg,
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-/* Custom scrollbar with brand colors */
+/* Custom scrollbar with brand colors - hidden until hover/scroll */
+.parrot-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.parrot-scrollbar:hover,
+.parrot-scrollbar:focus-within,
+.parrot-scrollbar.scrolling {
+  scrollbar-color: oklch(var(--muted-foreground) / 0.3) transparent;
+}
+
 .parrot-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  background: transparent !important;
 }
 
 .parrot-scrollbar::-webkit-scrollbar-track {
-  background: var(--parrot-gray);
+  background: transparent !important;
 }
 
 .parrot-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--parrot-gradient);
-  border-radius: 3px;
+  background-color: transparent !important;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
 }
 
-.parrot-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--parrot-gradient-hover);
+.parrot-scrollbar:hover::-webkit-scrollbar-thumb,
+.parrot-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.parrot-scrollbar.scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(var(--muted-foreground) / 0.3) !important;
+}
+
+.dark .parrot-scrollbar:hover::-webkit-scrollbar-thumb,
+.dark .parrot-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.dark .parrot-scrollbar.scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(var(--muted-foreground) / 0.4) !important;
 }
 
 /* Theme-based Highlight Classes */

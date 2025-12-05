@@ -1,9 +1,21 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import { TrendingUp, TrendingDown, Download, Calendar, ChevronDown } from "lucide-react"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { TrendingUp, TrendingDown, Download, Calendar, ChevronDown, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
+import { fetchCompanyReportsData } from "@/lib/api-integrations"
+import { Company } from "@/lib/supabase"
+import { LoadingSpinner } from "@/components/ui/loading-states"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface PerformanceDataPoint {
   date: string
@@ -12,25 +24,6 @@ interface PerformanceDataPoint {
   revenue: number
   metaRev: number
   googleRev: number
-}
-
-const performanceDataBySpace: Record<string, PerformanceDataPoint[]> = {
-  "1": [
-    { date: "Oct 1", metaSpend: 2100, googleSpend: 1800, revenue: 14200, metaRev: 7800, googleRev: 6400 },
-    { date: "Oct 8", metaSpend: 2300, googleSpend: 1900, revenue: 15800, metaRev: 8600, googleRev: 7200 },
-    { date: "Oct 15", metaSpend: 2500, googleSpend: 2000, revenue: 17200, metaRev: 9400, googleRev: 7800 },
-    { date: "Oct 22", metaSpend: 2400, googleSpend: 2100, revenue: 16800, metaRev: 9100, googleRev: 7700 },
-    { date: "Oct 29", metaSpend: 2600, googleSpend: 2200, revenue: 18500, metaRev: 10200, googleRev: 8300 },
-    { date: "Nov 5", metaSpend: 2700, googleSpend: 2300, revenue: 19400, metaRev: 10800, googleRev: 8600 },
-  ],
-  "default": [
-    { date: "Oct 1", metaSpend: 2100, googleSpend: 1800, revenue: 14200, metaRev: 7800, googleRev: 6400 },
-    { date: "Oct 8", metaSpend: 2300, googleSpend: 1900, revenue: 15800, metaRev: 8600, googleRev: 7200 },
-    { date: "Oct 15", metaSpend: 2500, googleSpend: 2000, revenue: 17200, metaRev: 9400, googleRev: 7800 },
-    { date: "Oct 22", metaSpend: 2400, googleSpend: 2100, revenue: 16800, metaRev: 9100, googleRev: 7700 },
-    { date: "Oct 29", metaSpend: 2600, googleSpend: 2200, revenue: 18500, metaRev: 10200, googleRev: 8300 },
-    { date: "Nov 5", metaSpend: 2700, googleSpend: 2300, revenue: 19400, metaRev: 10800, googleRev: 8600 },
-  ],
 }
 
 interface ChannelDataPoint {
@@ -44,93 +37,171 @@ interface ChannelDataPoint {
   isPositive: boolean
 }
 
-const channelDataBySpace: Record<string, ChannelDataPoint[]> = {
-  "1": [
-    { 
-      channel: "Meta Ads",
-      spend: 15600,
-      revenue: 56000,
-      roas: 3.59,
-      conversions: 234,
-      cpa: 66.67,
-      change: "+18%",
-      isPositive: true
-    },
-    { 
-      channel: "Google Ads",
-      spend: 13300,
-      revenue: 46200,
-      roas: 3.47,
-      conversions: 198,
-      cpa: 67.17,
-      change: "+12%",
-      isPositive: true
-    },
-  ],
-  "default": [
-    { 
-      channel: "Meta Ads",
-      spend: 15600,
-      revenue: 56000,
-      roas: 3.59,
-      conversions: 234,
-      cpa: 66.67,
-      change: "+18%",
-      isPositive: true
-    },
-    { 
-      channel: "Google Ads",
-      spend: 13300,
-      revenue: 46200,
-      roas: 3.47,
-      conversions: 198,
-      cpa: 67.17,
-      change: "+12%",
-      isPositive: true
-    },
-  ],
-}
-
 interface ModernReportsTabProps {
   activeSpace: string | null
 }
 
-export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
-  const performanceData = performanceDataBySpace[activeSpace || "default"] || performanceDataBySpace["default"]
-  const channelData = channelDataBySpace[activeSpace || "default"] || channelDataBySpace["default"]
-  
-  const totalSpend = channelData.reduce((sum, c) => sum + c.spend, 0)
-  const totalRevenue = channelData.reduce((sum, c) => sum + c.revenue, 0)
-  const totalConversions = channelData.reduce((sum, c) => sum + c.conversions, 0)
-  const blendedROAS = totalRevenue / totalSpend
-  const avgCPA = totalSpend / totalConversions
+type DateRange = "1" | "7" | "30"
 
-  const summaryMetrics = [
+const dateRangeLabels: Record<DateRange, string> = {
+  "1": "Last 24 hours",
+  "7": "Last 7 days",
+  "30": "Last 30 days",
+}
+
+export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
+  const [dateRange, setDateRange] = useState<DateRange>("30")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [performanceData, setPerformanceData] = useState<PerformanceDataPoint[]>([])
+  const [channelData, setChannelData] = useState<ChannelDataPoint[]>([])
+  const [summaryMetrics, setSummaryMetrics] = useState<{
+    totalRevenue: number
+    totalSpend: number
+    blendedROAS: number
+    avgCPA: number
+  }>({
+    totalRevenue: 0,
+    totalSpend: 0,
+    blendedROAS: 0,
+    avgCPA: 0,
+  })
+  const [company, setCompany] = useState<Company | null>(null)
+
+  // Load company data and fetch reports
+  useEffect(() => {
+    const loadReportsData = async () => {
+      if (!activeSpace) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        // Fetch company data with decrypted credentials
+        const companies = await fetchCompaniesOptimized()
+        const spaceCompany = companies.find(c => c.id === activeSpace)
+
+        if (!spaceCompany) {
+          setError("Company not found")
+          setLoading(false)
+          return
+        }
+
+        setCompany(spaceCompany)
+
+        // Check if any API credentials are configured
+        const hasGoogleAds = !!(
+          spaceCompany.google_ads_developer_token &&
+          spaceCompany.google_ads_client_id &&
+          spaceCompany.google_ads_refresh_token &&
+          spaceCompany.google_ads_customer_id
+        )
+        const hasMetaAds = !!(
+          spaceCompany.meta_ads_app_id &&
+          spaceCompany.meta_ads_access_token &&
+          spaceCompany.meta_ads_ad_account_id
+        )
+        const hasShopify = !!(
+          spaceCompany.shopify_store_domain &&
+          spaceCompany.shopify_access_token
+        )
+
+        if (!hasGoogleAds && !hasMetaAds && !hasShopify) {
+          setError("No API credentials configured. Please configure at least one API in Settings.")
+          setLoading(false)
+          return
+        }
+
+        // Fetch real data from APIs
+        const reportsData = await fetchCompanyReportsData(spaceCompany, dateRange)
+        
+        console.log('Reports data received:', {
+          performanceDataPoints: reportsData.performanceData.length,
+          channelDataCount: reportsData.channelData.length,
+          samplePerformanceData: reportsData.performanceData.slice(0, 5)
+        })
+        
+        setPerformanceData(reportsData.performanceData)
+        setChannelData(reportsData.channelData)
+        setSummaryMetrics(reportsData.summaryMetrics)
+      } catch (err) {
+        console.error("Error loading reports data:", err)
+        setError(err instanceof Error ? err.message : "Failed to load reports data")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadReportsData()
+  }, [activeSpace, dateRange])
+
+  const summaryMetricsDisplay = [
     {
       label: "Total Revenue",
-      value: `$${(totalRevenue / 1000).toFixed(1)}k`,
-      change: "+16%",
+      value: `$${(summaryMetrics.totalRevenue / 1000).toFixed(1)}k`,
+      change: "+0%", // Would need historical data to calculate
       isPositive: true
     },
     {
       label: "Total Ad Spend",
-      value: `$${(totalSpend / 1000).toFixed(1)}k`,
-      change: "+15%",
+      value: `$${(summaryMetrics.totalSpend / 1000).toFixed(1)}k`,
+      change: "+0%", // Would need historical data to calculate
       isPositive: false
     },
     {
       label: "Blended ROAS",
-      value: blendedROAS.toFixed(2),
-      change: "+8%",
+      value: summaryMetrics.blendedROAS.toFixed(2),
+      change: "+0%", // Would need historical data to calculate
       isPositive: true
     },
     {
       label: "Avg CPA",
-      value: `$${avgCPA.toFixed(2)}`,
-      change: "-5%",
+      value: `$${summaryMetrics.avgCPA.toFixed(2)}`,
+      change: "+0%", // Would need historical data to calculate
       isPositive: true
     },
   ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (channelData.length === 0 && performanceData.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-medium">Performance Reports</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {dateRangeLabels[dateRange]}
+            </p>
+          </div>
+        </div>
+        <Card className="p-8 border-border/60">
+          <div className="text-center text-muted-foreground">
+            <p className="text-sm">No data available for the selected date range.</p>
+            <p className="text-xs mt-2">Make sure your API credentials are configured correctly in Settings.</p>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -139,15 +210,30 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
         <div>
           <h2 className="text-sm font-medium">Performance Reports</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Last 30 days
+            {dateRangeLabels[dateRange]}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="gap-2">
             <Calendar className="w-3.5 h-3.5" />
-            Last 30 days
+                {dateRangeLabels[dateRange]}
             <ChevronDown className="w-3.5 h-3.5" />
           </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setDateRange("1")}>
+                Last 24 hours
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDateRange("7")}>
+                Last 7 days
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDateRange("30")}>
+                Last 30 days
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" className="gap-2">
             <Download className="w-3.5 h-3.5" />
             Export
@@ -157,7 +243,7 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
 
       {/* Summary Metrics */}
       <div className="grid grid-cols-4 gap-4">
-        {summaryMetrics.map((metric) => (
+        {summaryMetricsDisplay.map((metric) => (
           <Card key={metric.label} className="p-4 border-border/60">
             <div className="text-xs text-muted-foreground mb-1">{metric.label}</div>
             <div className="flex items-baseline gap-2">
@@ -190,19 +276,25 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
         </div>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={performanceData}>
+            <LineChart 
+              data={performanceData}
+              margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
               <XAxis 
                 dataKey="date" 
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: '#9ca3af', fontSize: 12 }}
+                interval="preserveStartEnd"
+                minTickGap={30}
               />
               <YAxis 
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: '#9ca3af', fontSize: 12 }}
                 tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                domain={[0, 'auto']}
               />
               <Tooltip 
                 contentStyle={{ 
@@ -220,6 +312,7 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
+                connectNulls={false}
               />
               <Line 
                 type="monotone" 
@@ -229,6 +322,7 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
                 dot={false}
                 activeDot={{ r: 4 }}
                 name="Total Spend"
+                connectNulls={false}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -272,76 +366,41 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
           </div>
         </Card>
 
-        {/* Channel Spend Comparison */}
+        {/* Conversion Metrics */}
         <Card className="p-4 border-border/60">
-          <h3 className="mb-3 text-sm font-medium">Spend by Channel</h3>
-          <div className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={performanceData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9ca3af', fontSize: 12 }}
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9ca3af', fontSize: 12 }}
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    fontSize: '12px'
-                  }}
-                  formatter={(value: number) => `$${value.toLocaleString()}`}
-                />
-                <Bar dataKey="metaSpend" fill="#8b5cf6" name="Meta Ads" />
-                <Bar dataKey="googleSpend" fill="#3b82f6" name="Google Ads" />
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="mb-3 text-sm font-medium">Conversion Metrics</h3>
+          
+          {/* Table Header */}
+          <div className="grid grid-cols-6 gap-4 px-3 py-2 text-xs text-muted-foreground border-b border-border/40 mb-0.5">
+            <div className="col-span-2">Channel</div>
+            <div className="text-center">Conversions</div>
+            <div className="text-center">Conv. Rate</div>
+            <div className="text-center">CPA</div>
+            <div className="text-center">Trend</div>
+          </div>
+
+          {/* Table Rows */}
+          <div className="space-y-0">
+            {channelData.map((channel) => (
+              <div 
+                key={channel.channel}
+                className="grid grid-cols-6 gap-4 px-3 py-2.5 hover:bg-muted/30 transition-colors items-center rounded-md"
+              >
+                <div className="col-span-2 text-sm">{channel.channel}</div>
+                <div className="text-sm text-center">{channel.conversions.toFixed(2)}</div>
+                <div className="text-sm text-center">3.2%</div>
+                <div className="text-sm text-center">${channel.cpa.toFixed(2)}</div>
+                <div className={`text-xs flex items-center justify-center gap-0.5 ${
+                  channel.isPositive ? "text-green-600" : "text-red-600"
+                }`}>
+                  {channel.isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {channel.change}
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
       </div>
-
-      {/* Conversion Metrics */}
-      <Card className="p-4 border-border/60">
-        <h3 className="mb-3 text-sm font-medium">Conversion Metrics</h3>
-        
-        {/* Table Header */}
-        <div className="grid grid-cols-6 gap-4 px-3 py-2 text-xs text-muted-foreground border-b border-border/40 mb-0.5">
-          <div className="col-span-2">Channel</div>
-          <div>Conversions</div>
-          <div>Conv. Rate</div>
-          <div>CPA</div>
-          <div>Trend</div>
-        </div>
-
-        {/* Table Rows */}
-        <div className="space-y-0">
-          {channelData.map((channel) => (
-            <div 
-              key={channel.channel}
-              className="grid grid-cols-6 gap-4 px-3 py-2.5 hover:bg-muted/30 transition-colors items-center rounded-md"
-            >
-              <div className="col-span-2 text-sm">{channel.channel}</div>
-              <div className="text-sm">{channel.conversions}</div>
-              <div className="text-sm">3.2%</div>
-              <div className="text-sm">${channel.cpa.toFixed(2)}</div>
-              <div className={`text-xs flex items-center gap-0.5 ${
-                channel.isPositive ? "text-green-600" : "text-red-600"
-              }`}>
-                {channel.isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {channel.change}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   )
 }

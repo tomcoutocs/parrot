@@ -133,6 +133,8 @@ export async function fetchTasksOptimized(projectId?: string): Promise<TaskWithD
 
         const transformedData = data?.map(task => ({
           ...task,
+          // Map 'medium' priority to 'normal' for display consistency
+          priority: task.priority === 'medium' ? 'normal' : task.priority,
           comment_count: task.task_comments?.length || 0
         })) || []
         
@@ -220,7 +222,31 @@ export async function fetchCompaniesOptimized(): Promise<Company[]> {
 
         if (error) return []
 
-        return data || []
+        // Decrypt API keys and credentials after fetching
+        const { decrypt } = await import('./encryption')
+        const decryptedData = await Promise.all((data || []).map(async (company) => ({
+          ...company,
+          // Legacy API keys
+          meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
+          google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
+          shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
+          klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+          // Google Ads API credentials (decrypt sensitive fields)
+          google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
+          google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
+          google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+          // Meta Ads API credentials (decrypt sensitive fields)
+          meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
+          meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
+          meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+          // Shopify API credentials (decrypt sensitive fields)
+          shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
+          shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+          // Klaviyo API credentials (decrypt sensitive fields)
+          klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
+        })))
+
+        return decryptedData
       } catch (error) {
         return []
       }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -82,9 +82,10 @@ interface DocumentEditorPageProps {
   documentId: string
   inline?: boolean
   spaceId?: string | null
+  isInternal?: boolean
 }
 
-export default function DocumentEditorPage({ documentId, inline = false, spaceId: propSpaceId }: DocumentEditorPageProps) {
+export default function DocumentEditorPage({ documentId, inline = false, spaceId: propSpaceId, isInternal = false }: DocumentEditorPageProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
@@ -93,6 +94,10 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   const [loading, setLoading] = useState(true)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [author, setAuthor] = useState<string>('')
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const handleSaveRef = useRef<((isAutoSave?: boolean) => Promise<void>) | null>(null)
   const isNewDocument = documentId === 'new'
   const [isWiki, setIsWiki] = useState(false)
   const [documentIcon, setDocumentIcon] = useState<string>('')
@@ -131,6 +136,17 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   useEffect(() => {
     setIsMounted(true)
   }, [])
+
+  // Safety fallback: ensure loading stops after a reasonable time
+  useEffect(() => {
+    if (loading && !isNewDocument) {
+      const timeout = setTimeout(() => {
+        console.warn('Loading timeout - forcing loading to stop')
+        setLoading(false)
+      }, 10000) // 10 second safety timeout
+      return () => clearTimeout(timeout)
+    }
+  }, [loading, isNewDocument])
   
   // Get current space ID from prop, URL, or use user's company_id
   // For non-admin users, always use their company_id as the space
@@ -208,6 +224,9 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
           keepMarks: true,
           keepAttributes: false,
         },
+        // Exclude Link and Underline since we're adding them separately with custom config
+        link: false,
+        underline: false,
       }),
       Placeholder.configure({
         placeholder: 'Type "/" for commands or just start typing...',
@@ -389,6 +408,16 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
       },
     },
     onUpdate: ({ editor }) => {
+      // Mark as having unsaved changes
+      setHasUnsavedChanges(true)
+      
+      // Trigger auto-save with debounce
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+      // Auto-save is handled via useEffect watching hasUnsavedChanges
+      // Just mark that changes exist
+      
       // Check if editor is mounted and ready
       if (!editor || !editor.view) {
         return
@@ -1025,69 +1054,99 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     }
   }, [showFloatingToolbar, editor])
 
+  // Track if document has been loaded to prevent infinite loops
+  const documentLoadedRef = useRef(false)
+
   // Load existing document if editing
   useEffect(() => {
-    if (!isNewDocument && session?.user?.id) {
-      const loadDocument = async () => {
-        setLoading(true)
-        try {
-          const result = await getRichDocument(documentId)
-          if (result.success && result.document) {
-            // Set title from document, but also include it in editor content as first heading
-            setDocumentTitle(result.document.title)
-            if (editor) {
-              // If content exists, use it; otherwise create a heading with the title
-              const content = result.document.content || ''
-              if (content) {
-                editor.commands.setContent(content)
-              } else if (result.document.title) {
-                editor.commands.setContent(`<h1>${result.document.title}</h1>`)
-              }
-            }
-            setLastSaved(result.document.updated_at ? new Date(result.document.updated_at) : null)
-            
-            // Fetch author information
-            if (result.document.created_by && supabase) {
-              try {
-                const { data: userData } = await supabase
-                  .from('users')
-                  .select('full_name, email')
-                  .eq('id', result.document.created_by)
-                  .single()
-                
-                if (userData) {
-                  setAuthor(userData.full_name || userData.email || 'Unknown')
-                } else {
-                  setAuthor('Unknown')
-                }
-              } catch (err) {
-                console.error('Error loading author:', err)
-                setAuthor('Unknown')
-              }
-            } else {
-              setAuthor('Unknown')
-            }
-          } else {
-            toastError('Document not found')
-          }
-        } catch (err) {
-          console.error('Error loading document:', err)
-          toastError('Failed to load document', {
-            description: err instanceof Error ? err.message : 'Please try again'
-          })
-        } finally {
-          setLoading(false)
-        }
-      }
-      loadDocument()
-    } else if (isNewDocument) {
+    // Reset loaded flag when documentId changes
+    if (documentId) {
+      documentLoadedRef.current = false
+    }
+  }, [documentId])
+
+  useEffect(() => {
+    if (isNewDocument) {
       // For new documents, set loading to false immediately
       setLoading(false)
       if (session?.user) {
         setAuthor(session.user.name || session.user.email || 'Unknown')
       }
+      return
     }
-  }, [documentId, isNewDocument, session, editor])
+
+    if (!session?.user?.id || !documentId) {
+      return
+    }
+
+    // Wait for editor to be ready, but don't wait forever
+    if (!editor) {
+      // Set a timeout to stop loading if editor doesn't initialize
+      const timeout = setTimeout(() => {
+        if (!documentLoadedRef.current) {
+          console.warn('Editor not ready, but stopping loading anyway')
+          setLoading(false)
+        }
+      }, 5000) // 5 second timeout
+      return () => clearTimeout(timeout)
+    }
+
+    if (documentLoadedRef.current) {
+      return
+    }
+
+    const loadDocument = async () => {
+      documentLoadedRef.current = true
+      setLoading(true)
+      try {
+        const result = await getRichDocument(documentId)
+        if (result.success && result.document) {
+          // Set title from document, but also include it in editor content as first heading
+          setDocumentTitle(result.document.title)
+          // If content exists, use it; otherwise create a heading with the title
+          const content = result.document.content || ''
+          if (content && editor) {
+            editor.commands.setContent(content)
+          } else if (result.document.title && editor) {
+            editor.commands.setContent(`<h1>${result.document.title}</h1>`)
+          }
+          setLastSaved(result.document.updated_at ? new Date(result.document.updated_at) : null)
+          
+          // Fetch author information
+          if (result.document.created_by && supabase) {
+            try {
+              const { data: userData } = await supabase
+                .from('users')
+                .select('full_name, email')
+                .eq('id', result.document.created_by)
+                .single()
+              
+              if (userData) {
+                setAuthor(userData.full_name || userData.email || 'Unknown')
+              } else {
+                setAuthor('Unknown')
+              }
+            } catch (err) {
+              console.error('Error loading author:', err)
+              setAuthor('Unknown')
+            }
+          } else {
+            setAuthor('Unknown')
+          }
+        } else {
+          toastError('Document not found')
+        }
+      } catch (err) {
+        console.error('Error loading document:', err)
+        toastError('Failed to load document', {
+          description: err instanceof Error ? err.message : 'Please try again'
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadDocument()
+  }, [documentId, isNewDocument, session?.user?.id, editor])
 
   // Focus editor on mount for new documents
   useEffect(() => {
@@ -1151,9 +1210,11 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     }
   }
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async (isAutoSave: boolean = false) => {
     if (!editor || !session?.user?.id) {
-      toastError('Editor not initialized or user not authenticated')
+      if (!isAutoSave) {
+        toastError('Editor not initialized or user not authenticated')
+      }
       return
     }
 
@@ -1161,12 +1222,23 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
     const content = editor.getHTML()
     const extractedTitle = extractTitleFromContent(content)
     
-    if (!extractedTitle || extractedTitle === 'Untitled') {
+    // For auto-save, allow saving even with "Untitled" if it's an existing document
+    // For manual save, require a proper title
+    if (!isAutoSave && (!extractedTitle || extractedTitle === 'Untitled')) {
       toastError('Please add a title (first heading) to your document')
       return
     }
 
-    setSaving(true)
+    // Skip auto-save if no title and it's a new document
+    if (isAutoSave && isNewDocument && (!extractedTitle || extractedTitle === 'Untitled')) {
+      return
+    }
+
+    if (isAutoSave) {
+      setIsAutoSaving(true)
+    } else {
+      setSaving(true)
+    }
 
     try {
       const content = editor.getHTML()
@@ -1174,22 +1246,28 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
       const companyId = currentSpaceId || session.user.company_id || ''
 
       if (!companyId) {
-        toastError('Please select a space first')
+        if (!isAutoSave) {
+          toastError('Please select a space first')
+        }
         return
       }
 
       const result = await saveRichDocument(
-        extractedTitle.trim(),
+        extractedTitle.trim() || 'Untitled',
         content,
         companyId,
         session.user.id,
         '/',
-        isNewDocument ? undefined : documentId
+        isNewDocument ? undefined : documentId,
+        isInternal
       )
 
       if (result.success && result.document) {
-        toastSuccess('Document saved successfully!')
+        if (!isAutoSave) {
+          toastSuccess('Document saved successfully!')
+        }
         setLastSaved(new Date())
+        setHasUnsavedChanges(false)
         
         // If this was a new document, redirect to the new document ID with space context
         if (isNewDocument && result.document.id) {
@@ -1197,17 +1275,96 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
           router.replace(`/documents/${result.document.id}${spaceQuery}`)
         }
       } else {
-        toastError(result.error || 'Failed to save document')
+        if (!isAutoSave) {
+          toastError(result.error || 'Failed to save document')
+        }
       }
     } catch (err) {
       console.error('Error saving document:', err)
-      toastError('Failed to save document', {
-        description: err instanceof Error ? err.message : 'Please try again'
-      })
+      if (!isAutoSave) {
+        toastError('Failed to save document', {
+          description: err instanceof Error ? err.message : 'Please try again'
+        })
+      }
     } finally {
-      setSaving(false)
+      if (isAutoSave) {
+        setIsAutoSaving(false)
+      } else {
+        setSaving(false)
+      }
     }
-  }
+  }, [editor, session, currentSpaceId, isNewDocument, documentId, isInternal, router])
+
+  // Store handleSave in ref so it can be accessed in useEffect
+  useEffect(() => {
+    handleSaveRef.current = handleSave
+  }, [handleSave])
+
+  // Auto-save effect - watches for unsaved changes and triggers save after debounce
+  useEffect(() => {
+    if (!hasUnsavedChanges || !editor || !session?.user?.id || isAutoSaving || saving) {
+      return
+    }
+
+    // Clear existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current)
+    }
+
+    // Set new timeout for auto-save (3 seconds after user stops typing - increased to reduce frequency)
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      if (!handleSaveRef.current || isAutoSaving || saving) return
+      
+      const content = editor.getHTML()
+      const extractedTitle = extractTitleFromContent(content)
+      
+      // Skip auto-save if no title and it's a new document
+      if (isNewDocument && (!extractedTitle || extractedTitle === 'Untitled')) {
+        return
+      }
+      
+      handleSaveRef.current(true)
+    }, 3000)
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [hasUnsavedChanges, editor, session?.user?.id, isAutoSaving, saving, isNewDocument, documentId])
+
+  // Save on page unload
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges && editor) {
+        // Try to save synchronously if possible
+        const content = editor.getHTML()
+        const extractedTitle = extractTitleFromContent(content)
+        
+        // Only warn if there are actual changes and a title exists
+        if (extractedTitle && extractedTitle !== 'Untitled') {
+          // Note: Modern browsers ignore custom messages, but we can still trigger the dialog
+          e.preventDefault()
+          e.returnValue = ''
+          
+          // Attempt to save before leaving
+          handleSave(true).catch(() => {
+            // Silently fail on unload
+          })
+        }
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      // Clear timeout on unmount
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [hasUnsavedChanges, editor])
 
   // Load tasks and documents for linking
   useEffect(() => {
@@ -1316,6 +1473,13 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   ]
 
   if (!isMounted) {
+    if (inline) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      )
+    }
     return (
       <ModernDashboardLayout 
         activeTab="documents" 
@@ -1331,6 +1495,13 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   }
 
   if (loading) {
+    if (inline) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      )
+    }
     return (
       <ModernDashboardLayout 
         activeTab="documents" 
@@ -1347,6 +1518,16 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
 
   if (!editor) {
     console.error('Editor not initialized')
+    if (inline) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <p className="text-destructive mb-4">Editor failed to initialize</p>
+            <Button onClick={() => window.location.reload()}>Reload Page</Button>
+          </div>
+        </div>
+      )
+    }
     return (
       <ModernDashboardLayout 
         activeTab="documents" 
@@ -1552,13 +1733,13 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
               <Button
                 className="bg-foreground text-background hover:bg-foreground/90 gap-2 shadow-lg"
                 size="sm"
-                onClick={handleSave}
-                disabled={saving}
+                onClick={() => handleSave(false)}
+                disabled={saving || isAutoSaving}
               >
-                {saving ? (
+                {saving || isAutoSaving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
+                    {isAutoSaving ? 'Auto-saving...' : 'Saving...'}
                   </>
                 ) : (
                   <>

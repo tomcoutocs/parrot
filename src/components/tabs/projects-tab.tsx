@@ -5,7 +5,7 @@ import { useSession } from '@/components/providers/session-provider'
 import { useSearchParams } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import EmptyState from '@/components/ui/empty-state'
-import { LoadingTaskGrid, DataLoadingState, InlineLoading } from '@/components/ui/loading-states'
+import { LoadingTaskGrid, DataLoadingState, InlineLoading, LoadingSpinner } from '@/components/ui/loading-states'
 import TaskDetailSidebar from '@/components/task-detail-sidebar'
 import { EnhancedTooltip, HelpIcon, tooltipContent } from '@/components/ui/enhanced-tooltips'
 import { 
@@ -64,7 +64,6 @@ import {
   updateTaskPosition, 
   subscribeToTasksOptimized, 
   subscribeToProjectsOptimized,
-  testDatabaseConnection,
   deleteTask,
   deleteProjectOptimized,
   invalidateProjectCache
@@ -89,7 +88,8 @@ const columns = [
 
 const priorityColors = {
   low: 'bg-green-100 text-green-800',
-  medium: 'bg-yellow-100 text-yellow-800', 
+  normal: 'bg-yellow-100 text-yellow-800',
+  medium: 'bg-yellow-100 text-yellow-800', // Backwards compatibility - maps to normal
   high: 'bg-orange-100 text-orange-800',
   urgent: 'bg-red-100 text-red-800'
 }
@@ -138,7 +138,7 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
           className={`mb-3 ${snapshot.isDragging ? 'rotate-3 scale-105' : ''}`}
         >
           <Card 
-            className={`parrot-task-card hover:shadow-md transition-shadow parrot-task-status-${task.status} parrot-task-priority-${task.priority}`}
+            className={`parrot-task-card hover:shadow-md transition-shadow parrot-task-status-${task.status} parrot-task-priority-${(task.priority as string) === 'medium' ? 'normal' : task.priority}`}
           >
             <CardHeader className="parrot-task-card-header pb-2">
               <div className="flex justify-between items-start gap-2">
@@ -196,9 +196,9 @@ function TaskCard({ task, index, userRole, onEditTask, onDeleteTask, onManageAss
                 <div className="flex items-center gap-2">
                   <Badge 
                     variant="outline" 
-                    className={`text-xs parrot-task-priority-${task.priority}`}
+                    className={`text-xs parrot-task-priority-${(task.priority as string) === 'medium' ? 'normal' : task.priority}`}
                   >
-                    {task.priority}
+                    {(task.priority as string) === 'medium' ? 'normal' : task.priority}
                   </Badge>
                   <Badge 
                     variant="secondary" 
@@ -380,7 +380,8 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
         return <Flag className="h-4 w-4 text-red-600" />
       case 'high':
         return <Flag className="h-4 w-4 text-orange-600" />
-      case 'medium':
+      case 'normal':
+      case 'medium': // Handle both 'normal' and 'medium' (backwards compatibility)
         return <Flag className="h-4 w-4 text-yellow-600" />
       case 'low':
         return <Flag className="h-4 w-4 text-green-600" />
@@ -553,8 +554,8 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                 >
                   {task.priority ? (
                     <div className="flex items-center space-x-1">
-                      {getPriorityIcon(task.priority)}
-                      <span className="text-xs text-gray-600">{task.priority}</span>
+                      {getPriorityIcon((task.priority as string) === 'medium' ? 'normal' : task.priority)}
+                      <span className="text-xs text-gray-600">{(task.priority as string) === 'medium' ? 'normal' : task.priority}</span>
                     </div>
                   ) : (
                     <Flag className="h-4 w-4" />
@@ -570,9 +571,9 @@ function TaskRow({ task, index, userRole, onEditTask, onDeleteTask, onManageAssi
                   <Flag className="mr-2 h-4 w-4 text-orange-600" />
                   High
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handlePrioritySelect('medium')}>
+                <DropdownMenuItem onClick={() => handlePrioritySelect('normal')}>
                   <Flag className="mr-2 h-4 w-4 text-yellow-600" />
-                  Medium
+                  Normal
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handlePrioritySelect('low')}>
                   <Flag className="mr-2 h-4 w-4 text-green-600" />
@@ -953,9 +954,6 @@ export default function ProjectsTab({
     const loadData = async () => {
       setLoading(true)
       try {
-        // Test database connection first
-        await testDatabaseConnection()
-        
         // Get user's company ID for filtering (use currentSpaceId if available, otherwise user's company)
         const companyId = currentSpaceId || (session?.user?.role === 'admin' ? undefined : session?.user?.company_id)
         
@@ -1096,7 +1094,7 @@ export default function ProjectsTab({
         title: 'Task',
         description: '',
         status: status,
-        priority: 'medium' as const, // Default priority
+        priority: 'normal' as const, // Default priority
         due_date: undefined, // Will show placeholder calendar icon
         assigned_to: undefined, // Will show placeholder user icon
         position: nextPosition,
@@ -1383,19 +1381,23 @@ export default function ProjectsTab({
   }, [])
 
   if (!session) {
-    return <div>Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading projects...</p>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Projects</h2>
-          <div className="flex gap-2">
-            <InlineLoading text="Loading projects..." />
-          </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading projects...</p>
         </div>
-        <LoadingTaskGrid count={6} />
       </div>
     )
   }

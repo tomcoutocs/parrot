@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,9 +21,10 @@ import { fetchUsersOptimized, fetchCompaniesOptimized } from "@/lib/simplified-d
 import { fetchCompanyUsers } from "@/lib/company-detail-functions"
 import { User, Company } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
-import { updateUser, deleteUser } from "@/lib/database-functions"
+import { updateUser, deleteUser, assignCompanyToInternalUser } from "@/lib/database-functions"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { useSession } from "@/components/providers/session-provider"
+import { LoadingSpinner } from "@/components/ui/loading-states"
 
 interface ModernUsersTabProps {
   activeSpace?: string | null
@@ -31,8 +33,12 @@ interface ModernUsersTabProps {
 export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
   const { data: session } = useSession()
   const [isAddUserOpen, setIsAddUserOpen] = useState(false)
+  const [isAddExistingUserOpen, setIsAddExistingUserOpen] = useState(false)
   const [isEditUserOpen, setIsEditUserOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [availableUsers, setAvailableUsers] = useState<User[]>([])
+  const [selectedExistingUserIds, setSelectedExistingUserIds] = useState<string[]>([])
+  const [addingUsers, setAddingUsers] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -64,68 +70,56 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     const loadData = async () => {
       setLoading(true)
       try {
-        console.log('ModernUsersTab: Loading users for activeSpace:', activeSpace)
-        
-        const companiesData = await fetchCompaniesOptimized()
+        // Load companies and users in parallel
+        const [companiesData, allUsers] = await Promise.all([
+          fetchCompaniesOptimized(),
+          activeSpace ? Promise.resolve([]) : fetchUsersOptimized() // Only fetch all users if no activeSpace
+        ])
         
         // If we have an activeSpace, fetch users for that specific company
         let filteredUsers: User[] = []
         if (activeSpace) {
-          console.log('ModernUsersTab: Fetching users for space:', activeSpace)
-          
-          // Use fetchCompanyUsers which properly queries users for a company
-          // Filter to only active users
-          const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
-          console.log('ModernUsersTab: Company users from fetchCompanyUsers:', companyUsers.length)
-          console.log('ModernUsersTab: Company users:', companyUsers.map(u => ({ 
-            email: u.email, 
-            company_id: u.company_id,
-            role: u.role,
-            is_active: u.is_active
-          })))
-          
-          // Also fetch all users to get internal users assigned via internal_user_companies
-          const allUsers = await fetchUsersOptimized()
-          
-          // Get internal users assigned to this space via internal_user_companies
-          let internalUserIds: string[] = []
-          if (supabase) {
-            try {
-              const { data: internalAssignments, error } = await supabase
-                .from('internal_user_companies')
-                .select('user_id')
-                .eq('company_id', activeSpace)
-              
-              console.log('ModernUsersTab: Internal assignments query result:', { 
-                error, 
-                count: internalAssignments?.length || 0 
-              })
-              
-              if (!error && internalAssignments) {
-                internalUserIds = internalAssignments.map(assignment => assignment.user_id)
-                console.log('ModernUsersTab: Internal user IDs:', internalUserIds)
-              } else if (error) {
-                console.error("ModernUsersTab: Error fetching internal user assignments:", error)
+          // Fetch company users and internal user assignments in parallel
+          const [companyUsersResult, internalAssignmentsResult] = await Promise.all([
+            fetchCompanyUsers(activeSpace).catch(() => []),
+            supabase ? (async () => {
+              try {
+                const result = await supabase
+                  .from('internal_user_companies')
+                  .select('user_id')
+                  .eq('company_id', activeSpace)
+                return result
+              } catch {
+                return { data: null, error: null }
               }
-            } catch (err) {
-              console.error("ModernUsersTab: Exception fetching internal user assignments:", err)
-            }
+            })() : Promise.resolve({ data: null, error: null })
+          ])
+          
+          // Filter to only active users
+          const companyUsers = (Array.isArray(companyUsersResult) ? companyUsersResult : []).filter(user => user.is_active !== false)
+          
+          // Get internal user IDs
+          const internalUserIds: string[] = []
+          if (internalAssignmentsResult && !internalAssignmentsResult.error && internalAssignmentsResult.data) {
+            internalUserIds.push(...internalAssignmentsResult.data.map((assignment: { user_id: string }) => assignment.user_id))
           }
           
-          // Get internal users by their IDs from all users
-          const internalUsers = allUsers.filter(user => internalUserIds.includes(user.id))
-          console.log('ModernUsersTab: Internal users found:', internalUsers.length)
-          
-          // Combine company users and internal users, removing duplicates
-          const allSpaceUsers = [...companyUsers, ...internalUsers]
-          filteredUsers = allSpaceUsers.filter((user, index, self) => 
-            index === self.findIndex(u => u.id === user.id)
-          )
-          
-          console.log('ModernUsersTab: Total filtered users:', filteredUsers.length)
+          // Only fetch all users if we need to get internal users
+          if (internalUserIds.length > 0) {
+            const allUsersData = await fetchUsersOptimized()
+            const internalUsers = allUsersData.filter(user => internalUserIds.includes(user.id))
+            
+            // Combine company users and internal users, removing duplicates
+            const allSpaceUsers = [...companyUsers, ...internalUsers]
+            filteredUsers = allSpaceUsers.filter((user, index, self) => 
+              index === self.findIndex(u => u.id === user.id)
+            )
+          } else {
+            filteredUsers = companyUsers
+          }
         } else {
           // No activeSpace - show all users
-          filteredUsers = await fetchUsersOptimized()
+          filteredUsers = allUsers
         }
         
         setUsers(filteredUsers)
@@ -327,6 +321,119 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     }
   }
 
+  const loadAvailableUsers = async () => {
+    if (!activeSpace) return
+    
+    try {
+      // Get all users
+      const allUsers = await fetchUsersOptimized()
+      
+      // Get current users in the space
+      const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
+      let internalUserIds: string[] = []
+      if (supabase) {
+        try {
+          const { data: internalAssignments } = await supabase
+            .from('internal_user_companies')
+            .select('user_id')
+            .eq('company_id', activeSpace)
+          
+          if (internalAssignments) {
+            internalUserIds = internalAssignments.map(assignment => assignment.user_id)
+          }
+        } catch (err) {
+          console.error("Error fetching internal user assignments:", err)
+        }
+      }
+      
+      const currentUserIds = new Set([
+        ...companyUsers.map(u => u.id),
+        ...internalUserIds
+      ])
+      
+      // Filter to only managers and internal users who are not already in the space
+      const available = allUsers.filter(user => 
+        (user.role === 'manager' || user.role === 'internal') &&
+        !currentUserIds.has(user.id) &&
+        user.is_active !== false
+      )
+      
+      setAvailableUsers(available)
+    } catch (error) {
+      console.error("Error loading available users:", error)
+      setAvailableUsers([])
+    }
+  }
+
+  const handleAddExistingUsers = async () => {
+    if (!activeSpace || selectedExistingUserIds.length === 0) return
+
+    setAddingUsers(true)
+    try {
+      for (const userId of selectedExistingUserIds) {
+        const user = availableUsers.find(u => u.id === userId)
+        if (!user) continue
+
+        if (user.role === 'internal') {
+          // For internal users, add to internal_user_companies table
+          await assignCompanyToInternalUser(userId, activeSpace, false)
+        } else if (user.role === 'manager') {
+          // For managers, update company_id using updateUser
+          await updateUser(userId, {
+            email: user.email,
+            full_name: user.full_name || '',
+            role: user.role as 'admin' | 'manager' | 'user' | 'internal',
+            is_active: user.is_active !== false,
+            company_id: activeSpace,
+            assigned_manager_id: user.assigned_manager_id || undefined,
+            tab_permissions: user.tab_permissions || []
+          })
+        }
+      }
+
+      toastSuccess(`Successfully added ${selectedExistingUserIds.length} user${selectedExistingUserIds.length !== 1 ? 's' : ''} to the space`)
+      setIsAddExistingUserOpen(false)
+      setSelectedExistingUserIds([])
+      
+      // Reload users
+      const companiesData = await fetchCompaniesOptimized()
+      setCompanies(companiesData)
+      
+      if (activeSpace) {
+        const companyUsers = (await fetchCompanyUsers(activeSpace)).filter(user => user.is_active !== false)
+        const allUsers = await fetchUsersOptimized()
+        
+        let internalUserIds: string[] = []
+        if (supabase) {
+          try {
+            const { data: internalAssignments } = await supabase
+              .from('internal_user_companies')
+              .select('user_id')
+              .eq('company_id', activeSpace)
+            
+            if (internalAssignments) {
+              internalUserIds = internalAssignments.map(assignment => assignment.user_id)
+            }
+          } catch (err) {
+            console.error("Error fetching internal user assignments:", err)
+          }
+        }
+        
+        const internalUsers = allUsers.filter(user => internalUserIds.includes(user.id))
+        const allSpaceUsers = [...companyUsers, ...internalUsers]
+        const filteredUsers = allSpaceUsers.filter((user, index, self) => 
+          index === self.findIndex(u => u.id === user.id)
+        )
+        setUsers(filteredUsers)
+      }
+    } catch (error) {
+      console.error('Error adding existing users:', error)
+      toastError('An error occurred while adding users')
+    } finally {
+      setAddingUsers(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -445,7 +552,10 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading users...</div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading users...</p>
+        </div>
       </div>
     )
   }
@@ -460,13 +570,14 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
             Manage internal team members and client access
           </p>
         </div>
-        <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <UserPlus className="w-3.5 h-3.5" />
-              Add User
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <UserPlus className="w-3.5 h-3.5" />
+                Add User
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Add New User</DialogTitle>
@@ -604,6 +715,126 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
             </form>
           </DialogContent>
         </Dialog>
+        
+        {activeSpace && (
+          <Dialog 
+            open={isAddExistingUserOpen} 
+            onOpenChange={(open) => {
+              setIsAddExistingUserOpen(open)
+              if (open) {
+                // Load available users when dialog opens
+                loadAvailableUsers()
+              } else {
+                setSelectedExistingUserIds([])
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <UserPlus className="w-3.5 h-3.5" />
+                Add Existing User
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Add Existing Users</DialogTitle>
+                <DialogDescription>
+                  Select existing internal users and managers to add to this space
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                {/* Managers */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Managers</Label>
+                  <div className="space-y-2 max-h-32 overflow-y-auto border border-border/60 rounded-md p-2">
+                    {availableUsers.filter(user => user.role === 'manager').length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">No managers available</p>
+                    ) : (
+                      availableUsers
+                        .filter(user => user.role === 'manager')
+                        .map(user => (
+                          <div key={user.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`existing-user-${user.id}`}
+                              checked={selectedExistingUserIds.includes(user.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedExistingUserIds([...selectedExistingUserIds, user.id])
+                                } else {
+                                  setSelectedExistingUserIds(selectedExistingUserIds.filter(id => id !== user.id))
+                                }
+                              }}
+                            />
+                            <Label
+                              htmlFor={`existing-user-${user.id}`}
+                              className="text-sm font-normal cursor-pointer flex-1"
+                            >
+                              {user.full_name || user.email || "Unknown"}
+                            </Label>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Internal Users */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Internal Users</Label>
+                  <div className="space-y-2 max-h-32 overflow-y-auto border border-border/60 rounded-md p-2">
+                    {availableUsers.filter(user => user.role === 'internal').length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">No internal users available</p>
+                    ) : (
+                      availableUsers
+                        .filter(user => user.role === 'internal')
+                        .map(user => (
+                          <div key={user.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`existing-user-${user.id}`}
+                              checked={selectedExistingUserIds.includes(user.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedExistingUserIds([...selectedExistingUserIds, user.id])
+                                } else {
+                                  setSelectedExistingUserIds(selectedExistingUserIds.filter(id => id !== user.id))
+                                }
+                              }}
+                            />
+                            <Label
+                              htmlFor={`existing-user-${user.id}`}
+                              className="text-sm font-normal cursor-pointer flex-1"
+                            >
+                              {user.full_name || user.email || "Unknown"}
+                            </Label>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsAddExistingUserOpen(false)
+                    setSelectedExistingUserIds([])
+                  }}
+                  disabled={addingUsers}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleAddExistingUsers}
+                  disabled={addingUsers || selectedExistingUserIds.length === 0}
+                >
+                  {addingUsers ? "Adding..." : `Add ${selectedExistingUserIds.length} User${selectedExistingUserIds.length !== 1 ? 's' : ''}`}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+        </div>
       </div>
 
       {/* Filters & Search */}

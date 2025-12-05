@@ -22,6 +22,7 @@ import {
   Eye,
   Download
 } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-states'
 import {
   Table,
   TableBody,
@@ -105,23 +106,28 @@ export default function ProjectOverviewTab() {
         allTasks = []
       }
       
-      // Combine tasks with company and project data
-      const tasksWithCompany = allTasks.map(task => {
-        const project = allProjects.find(p => p.id === task.project_id)
-        const company = project ? allCompanies.find(c => c.id === project.company_id) : undefined
-        return {
-          ...task,
-          company: company ? {
-            id: company.id,
-            name: company.name,
-            industry: company.industry
-          } : undefined,
-          project: project ? {
-            id: project.id,
-            title: project.name
-          } : undefined
-        }
-      })
+      // Combine tasks with company and project data, and filter out tasks from archived projects
+      const tasksWithCompany = allTasks
+        .map(task => {
+          const project = allProjects.find(p => p.id === task.project_id)
+          const company = project ? allCompanies.find(c => c.id === project.company_id) : undefined
+          return {
+            ...task,
+            company: company ? {
+              id: company.id,
+              name: company.name,
+              industry: company.industry
+            } : undefined,
+            project: project ? {
+              id: project.id,
+              title: project.name
+            } : undefined
+          }
+        })
+        .filter(task => {
+          // Filter out tasks from archived projects (if project is not in allProjects, it's archived)
+          return task.project !== undefined
+        })
 
              setTasks(tasksWithCompany)
        setCompanies(allCompanies)
@@ -180,8 +186,10 @@ export default function ProjectOverviewTab() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
+      case 'urgent': return 'bg-red-100 text-red-800'
+      case 'high': return 'bg-orange-100 text-orange-800'
+      case 'normal': return 'bg-yellow-100 text-yellow-800'
+      case 'medium': return 'bg-yellow-100 text-yellow-800' // Backwards compatibility
       case 'low': return 'bg-green-100 text-green-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -260,7 +268,10 @@ export default function ProjectOverviewTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" />
+          <p className="text-sm text-muted-foreground">Loading project...</p>
+        </div>
       </div>
     )
   }
@@ -486,8 +497,8 @@ export default function ProjectOverviewTab() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getPriorityColor(task.priority || 'medium')}>
-                        {task.priority || 'medium'}
+                      <Badge className={getPriorityColor(task.priority || 'normal')}>
+                        {(task.priority as string) === 'medium' ? 'normal' : (task.priority || 'normal')}
                       </Badge>
                     </TableCell>
                     <TableCell>

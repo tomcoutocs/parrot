@@ -26,10 +26,10 @@ export function LoadingOverlay({ isLoading, children }: { isLoading: boolean, ch
   return (
     <div className="relative">
       {children}
-      <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
-        <div className="flex flex-col items-center gap-2">
-          <LoadingSpinner size="lg" />
-          <p className="text-sm text-gray-600">Loading...</p>
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner size="lg" className="text-primary" />
+          <p className="text-sm text-muted-foreground font-medium">Loading...</p>
         </div>
       </div>
     </div>
@@ -283,9 +283,9 @@ export function LoadingUserGrid({ count = 6 }: { count?: number }) {
 // Inline loading states
 export function InlineLoading({ text = 'Loading...' }: { text?: string }) {
   return (
-    <div className="flex items-center gap-2 text-sm text-gray-600">
-      <LoadingSpinner size="sm" />
-      <span>{text}</span>
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <LoadingSpinner size="sm" className="text-primary" />
+      <span className="animate-pulse">{text}</span>
     </div>
   )
 }
@@ -333,12 +333,17 @@ export function PageLoading({
   const displayHint = hint || hints[Math.floor(Math.random() * hints.length)]
   
   return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-      <LoadingSpinner size="lg" />
-      <div className="text-center">
-        <p className="text-lg text-gray-900 dark:text-gray-100 font-medium">{message}</p>
+    <div className="flex flex-col items-center justify-center min-h-[300px] gap-4 py-8">
+      <div className="relative">
+        <LoadingSpinner size="lg" className="text-primary" />
+        <div className="absolute inset-0 animate-ping">
+          <LoadingSpinner size="lg" className="text-primary/20" />
+        </div>
+      </div>
+      <div className="text-center space-y-2">
+        <p className="text-lg font-semibold text-foreground">{message}</p>
         {displayHint && (
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{displayHint}</p>
+          <p className="text-sm text-muted-foreground animate-pulse">{displayHint}</p>
         )}
       </div>
     </div>

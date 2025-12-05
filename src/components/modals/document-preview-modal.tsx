@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { X, Download, Eye, FileText, Image as ImageIcon, File, FileVideo, FileAudio, FileSpreadsheet } from 'lucide-react'
+import { X, Download, Eye, FileText, Image as ImageIcon, File, FileVideo, FileAudio, FileSpreadsheet, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +26,8 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
   const [previewContent, setPreviewContent] = useState<PreviewContent | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [pdfZoom, setPdfZoom] = useState(100)
 
   useEffect(() => {
     if (doc && isOpen) {
@@ -186,16 +188,35 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen)
+  }
+
+  const handleZoomIn = () => {
+    setPdfZoom(prev => Math.min(prev + 25, 200))
+  }
+
+  const handleZoomOut = () => {
+    setPdfZoom(prev => Math.max(prev - 25, 50))
+  }
+
+  const handleResetZoom = () => {
+    setPdfZoom(100)
+  }
+
   if (!doc) return null
+
+  const fileType = getFileType(doc.name, doc.file_type)
+  const isPdf = fileType === 'pdf'
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-        <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div className="flex items-center space-x-3">
-            {getFileIcon(getFileType(doc.name, doc.file_type))}
-            <div>
-              <DialogTitle className="text-lg font-semibold">{doc.name}</DialogTitle>
+      <DialogContent className={`${isFullscreen ? 'max-w-[95vw] max-h-[95vh]' : 'max-w-6xl max-h-[90vh]'} overflow-hidden flex flex-col`}>
+        <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4 flex-shrink-0">
+          <div className="flex items-center space-x-3 min-w-0 flex-1">
+            {getFileIcon(fileType)}
+            <div className="min-w-0">
+              <DialogTitle className="text-lg font-semibold truncate">{doc.name}</DialogTitle>
               <div className="flex items-center space-x-2 mt-1">
                 <Badge variant="secondary" className="text-xs">
                   {formatFileSize(doc.file_size)}
@@ -206,7 +227,23 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-shrink-0">
+            {isPdf && previewContent && (
+              <>
+                <Button variant="outline" size="sm" onClick={handleZoomOut} title="Zoom Out">
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleResetZoom} title="Reset Zoom">
+                  <span className="text-xs">{pdfZoom}%</span>
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleZoomIn} title="Zoom In">
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            <Button variant="outline" size="sm" onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
             <Button variant="outline" size="sm" onClick={handleDownload}>
               <Download className="h-4 w-4 mr-2" />
               Download
@@ -214,7 +251,7 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto min-h-0">
           {loading && (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
@@ -233,43 +270,55 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
           {previewContent && !loading && !error && (
             <div className="space-y-4">
               {previewContent.type === 'image' && (
-                <div className="flex justify-center">
+                <div className="flex justify-center items-center min-h-[70vh] bg-muted/30 rounded-lg p-4">
                   <Image
                     src={previewContent.url}
                     alt={doc.name}
-                    width={800}
-                    height={600}
-                    className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-lg"
+                    width={1200}
+                    height={900}
+                    className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-lg"
                     onError={() => setError('Failed to load image preview')}
+                    unoptimized
                   />
                 </div>
               )}
 
               {previewContent.type === 'pdf' && (
-                <div className="w-full h-[60vh]">
-                  <iframe
-                    src={previewContent.url}
-                    className="w-full h-full border rounded-lg"
-                    title={doc.name}
-                    onError={() => setError('Failed to load PDF preview')}
-                  />
+                <div className="w-full flex flex-col items-center bg-muted/30 rounded-lg p-4 min-h-[70vh]">
+                  <div 
+                    className="w-full overflow-auto border rounded-lg bg-white shadow-lg"
+                    style={{ 
+                      height: isFullscreen ? '85vh' : '75vh',
+                      transform: `scale(${pdfZoom / 100})`,
+                      transformOrigin: 'top center',
+                      maxWidth: `${100 / (pdfZoom / 100)}%`
+                    }}
+                  >
+                    <iframe
+                      src={`${previewContent.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                      className="w-full h-full border-0"
+                      title={doc.name}
+                      onError={() => setError('Failed to load PDF preview')}
+                      style={{ minHeight: '100%' }}
+                    />
+                  </div>
                 </div>
               )}
 
               {previewContent.type === 'text' && (
-                <div className="bg-gray-50 rounded-lg p-4 max-h-[60vh] overflow-auto">
-                  <pre className="whitespace-pre-wrap text-sm font-mono">
+                <div className="bg-background border rounded-lg p-6 min-h-[70vh] overflow-auto">
+                  <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed text-foreground max-w-full">
                     {previewContent.content || 'Text content could not be loaded. Click download to view the file.'}
                   </pre>
                 </div>
               )}
 
               {previewContent.type === 'video' && (
-                <div className="flex justify-center">
+                <div className="flex justify-center items-center min-h-[70vh] bg-muted/30 rounded-lg p-4">
                   <video
                     src={previewContent.url}
                     controls
-                    className="max-w-full max-h-[60vh] rounded-lg shadow-lg"
+                    className="max-w-full max-h-[75vh] rounded-lg shadow-lg"
                     onError={() => setError('Failed to load video preview')}
                   >
                     Your browser does not support video playback.
@@ -278,15 +327,24 @@ export default function DocumentPreviewModal({ document: doc, isOpen, onClose }:
               )}
 
               {previewContent.type === 'audio' && (
-                <div className="flex justify-center">
-                  <audio
-                    src={previewContent.url}
-                    controls
-                    className="w-full max-w-md"
-                    onError={() => setError('Failed to load audio preview')}
-                  >
-                    Your browser does not support audio playback.
-                  </audio>
+                <div className="flex justify-center items-center min-h-[70vh] bg-muted/30 rounded-lg p-4">
+                  <div className="w-full max-w-2xl bg-background border rounded-lg p-8 shadow-lg">
+                    <div className="flex items-center gap-4 mb-4">
+                      {getFileIcon('audio')}
+                      <div>
+                        <h3 className="font-semibold">{doc.name}</h3>
+                        <p className="text-sm text-muted-foreground">{formatFileSize(doc.file_size)}</p>
+                      </div>
+                    </div>
+                    <audio
+                      src={previewContent.url}
+                      controls
+                      className="w-full"
+                      onError={() => setError('Failed to load audio preview')}
+                    >
+                      Your browser does not support audio playback.
+                    </audio>
+                  </div>
                 </div>
               )}
             </div>
