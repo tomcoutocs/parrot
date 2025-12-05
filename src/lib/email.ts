@@ -69,7 +69,7 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
       console.warn('⚠️ RESEND_API_KEY not configured or Resend client not initialized, falling back to mock email')
       console.log('📧 Mock email sent:', {
         to: data.recipientEmail,
-        subject: `Invitation to join ${data.companyName}`,
+        subject: `Parrot portal invites you to join ${data.companyName}`,
         recipientName: data.recipientName,
         companyName: data.companyName,
         inviterName: data.inviterName,
@@ -83,31 +83,63 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
     const invitationUrl = generateInvitationUrl(data.invitationToken)
     const expiresDate = new Date(data.expiresAt).toLocaleDateString()
 
+    // Plain text version for better deliverability
+    const emailText = `Hello ${data.recipientName},
+
+${data.inviterName} has invited you to join ${data.companyName} as a ${data.role}.
+
+Accept your invitation by clicking the link below:
+${invitationUrl}
+
+This invitation will expire on ${expiresDate}.
+
+If you have any questions, please contact ${data.inviterName}.
+
+Best regards,
+The Parrot Portal Team`
+
     const emailHtml = `
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Invitation to join ${data.companyName}</title>
+          <meta http-equiv="X-UA-Compatible" content="IE=edge">
+          <title>Parrot portal invites you to join ${data.companyName}</title>
         </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
-            <h1 style="color: #2563eb; margin-bottom: 20px;">You're Invited!</h1>
-            <p style="font-size: 18px; margin-bottom: 20px;">Hello ${data.recipientName},</p>
-            <p style="font-size: 16px; margin-bottom: 30px;">
-              ${data.inviterName} has invited you to join <strong>${data.companyName}</strong> as a <strong>${data.role}</strong>.
-            </p>
-            <a href="${invitationUrl}" 
-               style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-bottom: 20px;">
-              Accept Invitation
-            </a>
-            <p style="font-size: 14px; color: #666; margin-top: 30px;">
-              This invitation will expire on ${expiresDate}.<br>
-              If the button doesn't work, copy and paste this link into your browser:<br>
-              <a href="${invitationUrl}" style="color: #2563eb;">${invitationUrl}</a>
-            </p>
-          </div>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f4; margin: 0; padding: 0;">
+          <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f4f4f4;">
+            <tr>
+              <td align="center" style="padding: 20px 0;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="padding: 40px 30px; text-align: center;">
+                      <h1 style="color: #2563eb; margin: 0 0 20px 0; font-size: 24px; font-weight: 600;">You're Invited!</h1>
+                      <p style="font-size: 16px; margin: 0 0 20px 0; color: #333333;">Hello ${data.recipientName},</p>
+                      <p style="font-size: 16px; margin: 0 0 30px 0; color: #666666;">
+                        ${data.inviterName} has invited you to join <strong style="color: #333333;">${data.companyName}</strong> as a <strong style="color: #333333;">${data.role}</strong>.
+                      </p>
+                      <table role="presentation" style="margin: 0 auto;">
+                        <tr>
+                          <td>
+                            <a href="${invitationUrl}" 
+                               style="background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 16px;">
+                              Accept Invitation
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="font-size: 14px; color: #666666; margin: 30px 0 0 0; line-height: 1.6;">
+                        This invitation will expire on ${expiresDate}.<br>
+                        If the button doesn't work, copy and paste this link into your browser:<br>
+                        <a href="${invitationUrl}" style="color: #2563eb; word-break: break-all; text-decoration: underline;">${invitationUrl}</a>
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
         </body>
       </html>
     `
@@ -133,8 +165,12 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
     const result = await resend.emails.send({
       from: fromEmail,
       to: [data.recipientEmail],
-      subject: `Invitation to join ${data.companyName}`,
+      subject: `Parrot portal invites you to join ${data.companyName}`,
       html: emailHtml,
+      text: emailText,
+      headers: {
+        'X-Entity-Ref-ID': data.invitationToken.substring(0, 20), // Unique identifier for tracking
+      },
     })
 
     if (result.error) {
@@ -157,7 +193,7 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Em
     console.log('📧 Email sent successfully via Resend:', {
       id: result.data?.id,
       to: data.recipientEmail,
-      subject: `Invitation to join ${data.companyName}`
+      subject: `Parrot portal invites you to join ${data.companyName}`
     })
 
     return {
@@ -300,6 +336,19 @@ export async function sendPasswordResetEmail(data: PasswordResetEmailData): Prom
       </html>
     `
 
+    const emailText = `Hello ${data.recipientName},
+
+We received a request to reset your password. Click the link below to create a new password:
+
+${resetUrl}
+
+This link will expire on ${expiresDate}.
+
+If you didn't request a password reset, you can safely ignore this email.
+
+Best regards,
+The Parrot Team`
+
     const fromEmail = process.env.FROM_EMAIL
     
     if (!fromEmail) {
@@ -315,6 +364,10 @@ export async function sendPasswordResetEmail(data: PasswordResetEmailData): Prom
       to: [data.recipientEmail],
       subject: 'Reset Your Password',
       html: emailHtml,
+      text: emailText,
+      headers: {
+        'X-Entity-Ref-ID': data.resetToken.substring(0, 20), // Unique identifier for tracking
+      },
     })
 
     if (result.error) {
@@ -412,6 +465,23 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<EmailRes
       </html>
     `
 
+    const emailText = `Welcome to ${data.companyName || 'Parrot'}!
+
+Hello ${data.recipientName},
+
+Your account has been created${data.companyName ? ` at ${data.companyName}` : ''} as a ${data.role}.
+
+Your login credentials:
+Email: ${data.recipientEmail}
+Password: ${data.password}
+
+Please change your password after your first login for security.
+
+Sign in here: ${data.loginUrl}
+
+Best regards,
+The Parrot Team`
+
     // Check if we have a valid from email configured
     const fromEmail = process.env.FROM_EMAIL
     
@@ -428,6 +498,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<EmailRes
       to: [data.recipientEmail],
       subject: `Welcome to ${data.companyName || 'Parrot'}`,
       html: emailHtml,
+      text: emailText,
     })
 
     if (result.error) {

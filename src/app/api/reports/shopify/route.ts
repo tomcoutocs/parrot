@@ -30,9 +30,13 @@ export async function POST(request: NextRequest) {
     let pageInfo = null
 
     while (hasMore) {
-      let url = `https://${storeDomain}/admin/api/2024-01/orders.json?status=any&created_at_min=${formatDate(startDate)}&created_at_max=${formatDate(endDate)}&limit=250`
+      let url: string
       if (pageInfo) {
-        url += `&page_info=${pageInfo}`
+        // When using page_info for pagination, cannot include status, created_at_min, or created_at_max
+        url = `https://${storeDomain}/admin/api/2024-01/orders.json?page_info=${pageInfo}&limit=250`
+      } else {
+        // First request: include filters
+        url = `https://${storeDomain}/admin/api/2024-01/orders.json?status=any&created_at_min=${formatDate(startDate)}&created_at_max=${formatDate(endDate)}&limit=250`
       }
 
       const apiResponse = await fetch(url, {

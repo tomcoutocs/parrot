@@ -57,6 +57,26 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     spaces: [] as string[],
   })
 
+  // When dialog opens and activeSpace is set, default to that space and client type
+  useEffect(() => {
+    if (isAddUserOpen && activeSpace) {
+      setFormData(prev => ({
+        ...prev,
+        type: "client",
+        spaces: [activeSpace]
+      }))
+    } else if (!isAddUserOpen) {
+      // Reset form when dialog closes
+      setFormData({
+        name: "",
+        email: "",
+        role: "user",
+        type: "client",
+        spaces: [],
+      })
+    }
+  }, [isAddUserOpen, activeSpace])
+
   // Form state for editing users
   const [editFormData, setEditFormData] = useState({
     name: "",
@@ -438,53 +458,62 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     e.preventDefault()
     
     if (!formData.name || !formData.email) {
-      console.error("Name and email are required")
+      toastError("Name and email are required")
       return
     }
 
+    if (!session?.user?.id) {
+      toastError("You must be logged in to send invitations")
+      return
+    }
+
+    // Determine company_id based on user type and spaces
+    let companyId: string | null = null
+    if (formData.type === "client" && formData.spaces.length > 0) {
+      companyId = formData.spaces[0]
+    } else if (formData.type === "internal" && formData.spaces.length > 0) {
+      // For internal users, use the first space as the primary company
+      companyId = formData.spaces[0]
+    } else if (activeSpace) {
+      // If no space selected but we're in a space context, use that
+      companyId = activeSpace
+    }
+
+    // Require a company_id for invitations
+    if (!companyId) {
+      toastError("Please select a space for this user")
+      return
+    }
+
+    // Determine role
+    let role: 'admin' | 'manager' | 'user' | 'internal' = formData.role
+    if (formData.type === "internal") {
+      role = "internal"
+    }
+
     try {
-      // Generate a temporary password (in production, you might want to require admin to set it)
-      const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`
-      
-      // Prepare user data based on type
-      const userData: any = {
-        email: formData.email,
-        full_name: formData.name,
-        password: tempPassword,
-        tab_permissions: []
-      }
-
-      // Set role and company assignments based on user type
-      if (formData.type === "client") {
-        // Client users get the selected role and are assigned to a company
-        userData.role = formData.role // admin, manager, or user
-        if (formData.spaces.length > 0) {
-          userData.company_id = formData.spaces[0]
-        }
-      } else {
-        // Internal users have role "internal" and can be assigned to multiple companies
-        userData.role = "internal"
-        if (formData.spaces.length > 0) {
-          userData.company_ids = formData.spaces
-          userData.primary_company_id = formData.spaces[0]
-        }
-      }
-
-      console.log("Creating user:", userData)
-
-      // Call the API route to create user and send welcome email
-      const response = await fetch('/api/users', {
+      // Use invitation API instead of direct user creation
+      const response = await fetch('/api/invitations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(userData),
+        body: JSON.stringify({
+          email: formData.email,
+          full_name: formData.name,
+          company_id: companyId,
+          role: role,
+          invited_by: session.user.id,
+          tab_permissions: [],
+          company_name: companies.find(c => c.id === companyId)?.name || (activeSpace ? companies.find(c => c.id === activeSpace)?.name : 'Company'),
+          inviter_name: session.user.name || 'Administrator'
+        }),
       })
 
       const result = await response.json()
 
       if (result.success) {
-        console.log("User created successfully:", result.user)
+        toastSuccess("Invitation sent successfully! The user will receive an email to sign in.")
         setIsAddUserOpen(false)
         setFormData({
           name: "",
@@ -494,7 +523,7 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
           spaces: [],
         })
         
-        // Reload users
+        // Reload users to show any pending invitations
         const companiesData = await fetchCompaniesOptimized()
         setCompanies(companiesData)
         
@@ -530,12 +559,11 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
           setUsers(allUsers)
         }
       } else {
-        console.error("Failed to create user:", result.error)
-        alert(`Failed to create user: ${result.error}`)
+        toastError(result.error || "Failed to send invitation")
       }
     } catch (error) {
-      console.error("Error creating user:", error)
-      alert(`Error creating user: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error("Error sending invitation:", error)
+      toastError("An error occurred while sending the invitation")
     }
   }
 
@@ -612,24 +640,37 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
               </div>
 
               {/* User Type & Role */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="type">User Type</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value: "internal" | "client") => 
-                      setFormData({ ...formData, type: value })
-                    }
-                  >
-                    <SelectTrigger id="type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="internal">Internal Team</SelectItem>
-                      <SelectItem value="client">Client</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className={`grid gap-4 ${activeSpace ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                {!activeSpace && (
+                  <div className="space-y-2">
+                    <Label htmlFor="type">User Type</Label>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value: "internal" | "client") => 
+                        setFormData({ ...formData, type: value })
+                      }
+                    >
+                      <SelectTrigger id="type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="internal">Internal Team</SelectItem>
+                        <SelectItem value="client">Client</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {activeSpace && (
+                  <div className="space-y-2">
+                    <Label htmlFor="type">User Type</Label>
+                    <Input
+                      id="type"
+                      value="Client"
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="role">Role</Label>
@@ -655,31 +696,40 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
               {formData.type === "client" && (
                 <div className="space-y-2">
                   <Label htmlFor="spaces">Space Access</Label>
-                  <Select
-                    value={formData.spaces[0] || ""}
-                    onValueChange={(value) => 
-                      setFormData({ ...formData, spaces: [value] })
-                    }
-                  >
-                    <SelectTrigger id="spaces">
-                      <SelectValue placeholder="Select a space" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companies.map((company) => (
-                        <SelectItem key={company.id} value={company.id}>
-                          <div className="flex items-center gap-2">
-                            {company.is_active !== false && (
-                              <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]" />
-                            )}
-                            {company.is_active === false && (
-                              <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-                            )}
-                            {company.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {activeSpace ? (
+                    <Input
+                      id="spaces"
+                      value={companies.find(c => c.id === activeSpace)?.name || "Selected Space"}
+                      disabled
+                      className="bg-muted"
+                    />
+                  ) : (
+                    <Select
+                      value={formData.spaces[0] || ""}
+                      onValueChange={(value) => 
+                        setFormData({ ...formData, spaces: [value] })
+                      }
+                    >
+                      <SelectTrigger id="spaces">
+                        <SelectValue placeholder="Select a space" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companies.map((company) => (
+                          <SelectItem key={company.id} value={company.id}>
+                            <div className="flex items-center gap-2">
+                              {company.is_active !== false && (
+                                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]" />
+                              )}
+                              {company.is_active === false && (
+                                <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                              )}
+                              {company.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Client users can only access assigned spaces
                   </p>
@@ -875,11 +925,10 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
       <Card className="border-border/60 overflow-hidden">
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-muted/20 border-b border-border/40 text-xs text-muted-foreground">
-          <div className="col-span-4">User</div>
-          <div className="col-span-2">Type</div>
-          <div className="col-span-2">Role</div>
-          <div className="col-span-3">Spaces</div>
-          <div className="col-span-1">Status</div>
+          <div className="col-span-5">User</div>
+          <div className="col-span-2 text-center">Role</div>
+          <div className="col-span-4 text-center">Spaces</div>
+          <div className="col-span-1 text-center">Status</div>
         </div>
 
         {/* Table Body */}
@@ -890,7 +939,6 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
             </div>
           ) : (
             filteredUsers.map((user) => {
-              const userType = user.role === "admin" ? "internal" : (user.company_id ? "client" : "internal")
               const userCompany = companies.find(c => c.id === user.company_id)
               
               return (
@@ -898,7 +946,7 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
                   key={user.id}
                   className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-muted/20 transition-colors items-center group"
                 >
-                  <div className="col-span-4 flex items-center gap-3">
+                  <div className="col-span-5 flex items-center gap-3">
                     <Avatar className="w-8 h-8">
                       <AvatarImage src="" />
                       <AvatarFallback className="bg-muted text-xs">
@@ -910,20 +958,14 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
                     </div>
                   </div>
 
-                  <div className="col-span-2">
-                    <Badge variant="outline" className="capitalize">
-                      {userType}
-                    </Badge>
-                  </div>
-
-                  <div className="col-span-2">
+                  <div className="col-span-2 flex items-center justify-center">
                     <Badge variant="outline" className={`gap-1 ${getRoleBadge(user.role)}`}>
                       {getRoleIcon(user.role)}
                       <span className="capitalize">{user.role}</span>
                     </Badge>
                   </div>
 
-                  <div className="col-span-3">
+                  <div className="col-span-4 flex items-center justify-center">
                     {userCompany ? (
                       <span className="text-xs text-muted-foreground">{userCompany.name}</span>
                     ) : (
@@ -931,11 +973,11 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
                     )}
                   </div>
 
-                  <div className="col-span-1 flex items-center justify-between">
+                  <div className="col-span-1 flex items-center justify-center relative">
                     <div className="w-2 h-2 rounded-full bg-green-500" />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
+                        <button className="absolute right-0 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
                           <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                         </button>
                       </DropdownMenuTrigger>

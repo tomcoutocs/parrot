@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { createCompany, updateCompanyServices, assignCompanyToInternalUser, updateUser } from "@/lib/database-functions"
+import { createCompany, updateCompanyServices, assignCompanyToInternalUser, updateUser, createDefaultOnboardingProject, createDefaultOnboardingDocument } from "@/lib/database-functions"
+import { useSession } from "@/components/providers/session-provider"
 import { fetchServicesOptimized } from "@/lib/simplified-database-functions"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
 import { Service, User } from "@/lib/supabase"
@@ -28,6 +29,7 @@ interface CreateSpaceModalProps {
 
 
 export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModalProps) {
+  const { data: session } = useSession()
   const [spaceName, setSpaceName] = useState("")
   const [companyName, setCompanyName] = useState("")
   const [description, setDescription] = useState("")
@@ -111,6 +113,34 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
       }
 
       const companyId = result.data.id
+
+      // Create default onboarding project with tasks
+      if (session?.user?.id) {
+        try {
+          const onboardingResult = await createDefaultOnboardingProject(companyId, session.user.id)
+          if (!onboardingResult.success) {
+            console.error("Failed to create default onboarding project:", onboardingResult.error)
+            // Don't fail the whole operation, just log the error
+          }
+        } catch (onboardingError) {
+          console.error('Error creating default onboarding project:', onboardingError)
+          // Don't fail the whole operation, just log the error
+        }
+      }
+
+      // Create default onboarding document in external documents folder
+      if (session?.user?.id) {
+        try {
+          const docResult = await createDefaultOnboardingDocument(companyId, session.user.id)
+          if (!docResult.success) {
+            console.error("Failed to create default onboarding document:", docResult.error)
+            // Don't fail the whole operation, just log the error
+          }
+        } catch (docError) {
+          console.error('Error creating default onboarding document:', docError)
+          // Don't fail the whole operation, just log the error
+        }
+      }
 
       // Update company services if any are selected
       if (selectedServices.length > 0) {

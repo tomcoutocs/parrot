@@ -10,13 +10,19 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Mail, Lock } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Loader2, Mail, Lock, CheckCircle2 } from 'lucide-react'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetSuccess, setResetSuccess] = useState(false)
+  const [isSendingReset, setIsSendingReset] = useState(false)
   const router = useRouter()
   const auth = useAuth()
 
@@ -39,6 +45,50 @@ export default function SignInPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleForgotPassword = () => {
+    setShowResetModal(true)
+    setResetEmail('')
+    setResetError('')
+    setResetSuccess(false)
+  }
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setResetError('')
+    setResetSuccess(false)
+    setIsSendingReset(true)
+
+    try {
+      const response = await fetch('/api/password-reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: resetEmail }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setResetError(data.error || 'Failed to send reset email. Please try again.')
+      } else {
+        setResetSuccess(true)
+        setResetEmail('')
+      }
+    } catch (err) {
+      setResetError('An error occurred. Please try again.')
+    } finally {
+      setIsSendingReset(false)
+    }
+  }
+
+  const handleCloseResetModal = () => {
+    setShowResetModal(false)
+    setResetEmail('')
+    setResetError('')
+    setResetSuccess(false)
   }
 
   return (
@@ -90,7 +140,16 @@ export default function SignInPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -131,6 +190,83 @@ export default function SignInPage() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Password Reset Modal */}
+        <Dialog open={showResetModal} onOpenChange={setShowResetModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reset Password</DialogTitle>
+              <DialogDescription>
+                Enter your email address and we'll send you a link to reset your password.
+              </DialogDescription>
+            </DialogHeader>
+            {resetSuccess ? (
+              <div className="space-y-4">
+                <Alert className="border-green-500 bg-green-50">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    Password reset link has been sent to your email. Please check your inbox and follow the instructions to reset your password.
+                  </AlertDescription>
+                </Alert>
+                <Button onClick={handleCloseResetModal} className="w-full">
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="reset-email"
+                      name="reset-email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="Enter your email"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                {resetError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{resetError}</AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloseResetModal}
+                    className="flex-1"
+                    disabled={isSendingReset}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                    disabled={isSendingReset}
+                  >
+                    {isSendingReset ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      'Send Reset Link'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

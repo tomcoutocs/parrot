@@ -93,6 +93,11 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 # NextAuth Configuration
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your_nextauth_secret_here
+
+# Email Configuration (Resend)
+RESEND_API_KEY=re_xxxxxxxxxxxxx
+FROM_EMAIL=noreply@yourdomain.com  # Must be from a verified domain in Resend
+NEXT_PUBLIC_APP_URL=http://localhost:3000  # Your production URL for email links
 ```
 
 ### 4. Database Setup

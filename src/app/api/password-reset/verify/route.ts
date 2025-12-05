@@ -15,6 +15,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (!supabase) {
+      return NextResponse.json(
+        { valid: false, error: 'Database not configured' },
+        { status: 500 }
+      )
+    }
+
     // Check if token exists and is valid
     try {
       const { data: resetToken, error } = await supabase

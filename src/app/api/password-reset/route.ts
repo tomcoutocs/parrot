@@ -18,6 +18,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database not configured' },
+        { status: 500 }
+      )
+    }
+
     // Find user by email
     const { data: user, error: userError } = await supabase
       .from('users')

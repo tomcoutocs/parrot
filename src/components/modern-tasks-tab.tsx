@@ -246,11 +246,11 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           })() : Promise.resolve({ data: null, error: null })
         ])
         
-        // Get direct company users (users, managers, admins)
+        // Get direct company users (users, managers, admins, internal)
         const directSpaceUsers = usersData.filter(user => 
           user.company_id === activeSpace && 
           user.is_active !== false &&
-          (user.role === 'user' || user.role === 'manager' || user.role === 'admin')
+          (user.role === 'user' || user.role === 'manager' || user.role === 'admin' || user.role === 'internal')
         )
         
         // Get internal user IDs
@@ -260,10 +260,11 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         }
         
         // Get internal users who are assigned to this space
+        // Include all roles: user, manager, admin, and internal
         const internalUsers = usersData.filter(user => 
           internalUserIds.includes(user.id) && 
           user.is_active !== false &&
-          (user.role === 'admin' || user.role === 'manager')
+          (user.role === 'user' || user.role === 'manager' || user.role === 'admin' || user.role === 'internal')
         )
         
         // Combine and deduplicate
@@ -373,15 +374,63 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   // Load users for edit modal
   useEffect(() => {
     const loadEditModalUsers = async () => {
+      if (!activeSpace) {
+        // If no space is selected, use the already filtered users from the main loadData
+        return
+      }
+      
       try {
-        const usersData = await fetchUsers()
-        setEditModalUsers(usersData)
+        // Use the same filtering logic as the main users list
+        const [usersData, internalAssignmentsResult] = await Promise.all([
+          fetchUsersOptimized(),
+          supabase ? (async () => {
+            try {
+              const result = await supabase
+                .from('internal_user_companies')
+                .select('user_id')
+                .eq('company_id', activeSpace)
+              return result
+            } catch {
+              return { data: null, error: null }
+            }
+          })() : Promise.resolve({ data: null, error: null })
+        ])
+        
+        // Get direct company users (users, managers, admins, internal)
+        const directSpaceUsers = usersData.filter(user => 
+          user.company_id === activeSpace && 
+          user.is_active !== false &&
+          (user.role === 'user' || user.role === 'manager' || user.role === 'admin' || user.role === 'internal')
+        )
+        
+        // Get internal user IDs
+        const internalUserIds: string[] = []
+        if (internalAssignmentsResult && !internalAssignmentsResult.error && internalAssignmentsResult.data) {
+          internalUserIds.push(...internalAssignmentsResult.data.map((ia: { user_id: string }) => ia.user_id))
+        }
+        
+        // Get internal users who are assigned to this space (all roles: user, manager, admin, internal)
+        const internalUsers = usersData.filter(user => 
+          internalUserIds.includes(user.id) && 
+          user.is_active !== false &&
+          (user.role === 'user' || user.role === 'manager' || user.role === 'admin' || user.role === 'internal')
+        )
+        
+        // Combine and deduplicate
+        const allSpaceUsers = [...directSpaceUsers, ...internalUsers]
+        const uniqueUsers = Array.from(
+          new Map(allSpaceUsers.map(user => [user.id, user])).values()
+        )
+        
+        setEditModalUsers(uniqueUsers)
       } catch (error) {
         console.error("Error loading users for edit modal:", error)
+        // Fallback to empty array on error
+        setEditModalUsers([])
       }
     }
     loadEditModalUsers()
-  }, [])
+  }, [activeSpace])
 
   const handleProjectUpdated = () => {
     // Reload projects after update

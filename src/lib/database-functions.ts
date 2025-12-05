@@ -1811,6 +1811,109 @@ export async function createCompany(companyData: {
   }
 }
 
+/**
+ * Creates the default onboarding document as a PDF in the external documents folder
+ * This function calls a server-side API route to generate the PDF
+ */
+export async function createDefaultOnboardingDocument(
+  companyId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch('/api/create-onboarding-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ companyId, userId }),
+    })
+
+    const result = await response.json()
+    return result
+  } catch (error) {
+    console.error('Error creating default onboarding document:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+  }
+}
+
+/**
+ * Creates a default onboarding project with standard tasks for a new space
+ */
+export async function createDefaultOnboardingProject(
+  companyId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+
+    // Create the default project
+    const projectResult = await createProject(
+      {
+        name: 'Onboarding',
+        description: 'Default onboarding project',
+        company_id: companyId,
+        status: 'active',
+        manager_id: null,
+        created_by: userId
+      },
+      userId
+    )
+
+    if (!projectResult.success || !projectResult.data) {
+      return { success: false, error: projectResult.error || 'Failed to create default project' }
+    }
+
+    const projectId = projectResult.data.id
+
+    // Default onboarding tasks
+    const defaultTasks = [
+      'Onboarding Form',
+      'Shopify Access',
+      'Meta Access',
+      'Google Access',
+      'Google Ads',
+      'Google Analytics',
+      'Merchant Center',
+      'Youtube Studio'
+    ]
+
+    // Create all tasks
+    for (let i = 0; i < defaultTasks.length; i++) {
+      const taskTitle = defaultTasks[i]
+      const taskResult = await createTask(
+        {
+          project_id: projectId,
+          title: taskTitle,
+          description: undefined,
+          status: 'todo',
+          priority: 'high', // High priority as requested
+          assigned_to: undefined, // Unassigned as requested
+          due_date: undefined, // No due date as requested
+          estimated_hours: 0,
+          actual_hours: 0,
+          position: i + 1,
+          created_by: userId
+        },
+        userId
+      )
+
+      if (!taskResult) {
+        // Log error but continue creating other tasks
+        console.error(`Failed to create task: ${taskTitle}`)
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error creating default onboarding project:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+  }
+}
+
 export async function updateCompany(companyId: string, companyData: {
   name?: string
   description?: string
@@ -2013,21 +2116,221 @@ export async function deleteCompany(companyId: string): Promise<{ success: boole
     console.log('Deleting company:', companyId)
     await setAppContext()
     
-    const { error } = await supabase
+    // First, check if company exists
+    const { data: company, error: fetchError } = await supabase
+      .from('companies')
+      .select('id, name')
+      .eq('id', companyId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching company:', fetchError)
+      return { success: false, error: fetchError.message || 'Company not found' }
+    }
+
+    if (!company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    // Delete related data in the correct order (cascading deletion)
+    // 1. Delete activity logs for tasks in projects belonging to this company
+    const { data: projects } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('company_id', companyId)
+
+    if (projects && projects.length > 0) {
+      const projectIds = projects.map(p => p.id)
+      
+      // Get all tasks for these projects
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('id')
+        .in('project_id', projectIds)
+
+      if (tasks && tasks.length > 0) {
+        const taskIds = tasks.map(t => t.id)
+        
+        // Delete activity logs for these tasks
+        const { error: activityLogsError } = await supabase
+          .from('activity_logs')
+          .delete()
+          .in('task_id', taskIds)
+
+        if (activityLogsError) {
+          console.warn('Error deleting activity logs (continuing anyway):', activityLogsError)
+        }
+
+        // 2. Delete tasks
+        const { error: tasksError } = await supabase
+          .from('tasks')
+          .delete()
+          .in('project_id', projectIds)
+
+        if (tasksError) {
+          console.warn('Error deleting tasks (continuing anyway):', tasksError)
+        }
+      }
+
+      // 3. Delete projects
+      const { error: projectsError } = await supabase
+        .from('projects')
+        .delete()
+        .eq('company_id', companyId)
+
+      if (projectsError) {
+        console.warn('Error deleting projects (continuing anyway):', projectsError)
+      }
+    }
+
+    // 4. Delete documents (both regular and rich documents)
+    const { error: documentsError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('company_id', companyId)
+
+    if (documentsError) {
+      console.warn('Error deleting documents (continuing anyway):', documentsError)
+    }
+
+    const { error: richDocumentsError } = await supabase
+      .from('rich_documents')
+      .delete()
+      .eq('company_id', companyId)
+
+    if (richDocumentsError) {
+      console.warn('Error deleting rich documents (continuing anyway):', richDocumentsError)
+    }
+
+    // 5. Delete company services associations
+    const { error: companyServicesError } = await supabase
+      .from('company_services')
+      .delete()
+      .eq('company_id', companyId)
+
+    if (companyServicesError) {
+      console.warn('Error deleting company services (continuing anyway):', companyServicesError)
+    }
+
+    // 6. Delete internal user company assignments
+    const { error: internalUserCompaniesError } = await supabase
+      .from('internal_user_companies')
+      .delete()
+      .eq('company_id', companyId)
+
+    if (internalUserCompaniesError) {
+      console.warn('Error deleting internal user company assignments (continuing anyway):', internalUserCompaniesError)
+    }
+
+    // 7. Update users to remove company_id reference (set to null)
+    const { error: usersUpdateError } = await supabase
+      .from('users')
+      .update({ company_id: null })
+      .eq('company_id', companyId)
+
+    if (usersUpdateError) {
+      console.warn('Error updating users (continuing anyway):', usersUpdateError)
+    }
+
+    // Now attempt to delete the company
+    const { error, data } = await supabase
       .from('companies')
       .delete()
       .eq('id', companyId)
+      .select()
 
     if (error) {
-      console.error('Error deleting company:', error)
-      return { success: false, error: error.message || 'Failed to delete company' }
+      // Handle specific error types
+      let errorMessage = 'Failed to delete company'
+      
+      // Check for error message first
+      if (error.message) {
+        errorMessage = error.message
+        
+        // Parse foreign key constraint errors for better user messages
+        if (error.message.includes('violates foreign key constraint')) {
+          if (error.message.includes('activity_logs')) {
+            errorMessage = 'Cannot delete company: There are activity logs associated with tasks in this company. Please delete all tasks and their associated data first.'
+          } else if (error.message.includes('tasks')) {
+            errorMessage = 'Cannot delete company: There are tasks associated with this company. Please delete all tasks first.'
+          } else if (error.message.includes('projects')) {
+            errorMessage = 'Cannot delete company: There are projects associated with this company. Please delete all projects first.'
+          } else if (error.message.includes('users')) {
+            errorMessage = 'Cannot delete company: There are users associated with this company. Please remove all users first.'
+          } else if (error.message.includes('documents')) {
+            errorMessage = 'Cannot delete company: There are documents associated with this company. Please delete all documents first.'
+          } else {
+            errorMessage = 'Cannot delete company: It is referenced by other records. Please remove all associated data first.'
+          }
+        }
+      } else if (error.code) {
+        // Handle PostgreSQL error codes
+        if (error.code === '23503') {
+          errorMessage = 'Cannot delete company: It is referenced by other records (users, projects, documents, tasks, etc.). Please remove all associated data first.'
+        } else if (error.code === '42501') {
+          errorMessage = 'Permission denied: You do not have permission to delete this company.'
+        } else {
+          errorMessage = `Database error (${error.code}): ${error.details || 'Unknown error'}`
+        }
+      } else if (error.details) {
+        errorMessage = error.details
+        
+        // Parse foreign key constraint errors in details too
+        if (error.details.includes('violates foreign key constraint')) {
+          if (error.details.includes('activity_logs')) {
+            errorMessage = 'Cannot delete company: There are activity logs associated with tasks in this company. Please delete all tasks and their associated data first.'
+          } else {
+            errorMessage = 'Cannot delete company: It is referenced by other records. Please remove all associated data first.'
+          }
+        }
+      } else if (error.hint) {
+        errorMessage = `${errorMessage}. ${error.hint}`
+      } else {
+        // If error object is empty or doesn't have standard properties
+        const errorString = JSON.stringify(error)
+        if (errorString !== '{}') {
+          errorMessage = `Error: ${errorString}`
+        } else {
+          // Default message for empty error objects (likely foreign key constraint)
+          errorMessage = 'Cannot delete company: It is referenced by other records (users, projects, documents, tasks, activity logs, etc.). Please remove all associated data first.'
+        }
+      }
+      
+      // Log the formatted error message (only log raw error if it has useful info)
+      if (error.message || error.code || error.details) {
+        console.error('Error deleting company:', errorMessage)
+      } else {
+        console.error('Error deleting company:', errorMessage, '(Raw error object was empty or unhelpful)')
+      }
+      
+      return { success: false, error: errorMessage }
     }
 
     console.log('Company deleted successfully')
     return { success: true }
   } catch (error) {
     console.error('Error deleting company:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+    
+    // Better error handling for caught errors
+    let errorMessage = 'An unexpected error occurred'
+    
+    if (error instanceof Error) {
+      errorMessage = error.message
+    } else if (typeof error === 'object' && error !== null) {
+      const errorObj = error as any
+      if (errorObj.message) {
+        errorMessage = errorObj.message
+      } else if (errorObj.details) {
+        errorMessage = errorObj.details
+      } else {
+        const errorString = JSON.stringify(error)
+        if (errorString !== '{}') {
+          errorMessage = `Error: ${errorString}`
+        }
+      }
+    }
+    
+    return { success: false, error: errorMessage }
   }
 } 
 
@@ -3417,15 +3720,20 @@ export async function deleteDocument(
       throw new Error('Supabase client not initialized')
     }
 
-    // First get the document to get the file path
+    // First get the document to check if it's a system document
     const { data: document, error: fetchError } = await supabase
       .from('documents')
-      .select('file_path')
+      .select('file_path, name')
       .eq('id', documentId)
       .single()
 
     if (fetchError) {
       return { success: false, error: fetchError.message }
+    }
+
+    // Prevent deletion of system onboarding document
+    if (document.name === 'Onboarding_Doc.pdf' || document.name === 'Onboarding Doc.pdf') {
+      return { success: false, error: 'This is a system document and cannot be deleted' }
     }
 
     // Delete from storage
@@ -4877,6 +5185,11 @@ export async function deleteRichDocument(
 
     if (!existingDoc) {
       return { success: false, error: 'Document not found' }
+    }
+
+    // Prevent deletion of system onboarding document
+    if (existingDoc.title === 'Onboarding_Doc.pdf' || existingDoc.title === 'Onboarding Doc.pdf') {
+      return { success: false, error: 'This is a system document and cannot be deleted' }
     }
 
     if (existingDoc.created_by !== currentUser.id) {

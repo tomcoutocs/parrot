@@ -31,6 +31,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database not configured' },
+        { status: 500 }
+      )
+    }
+
     // Find the reset token
     let userId: string | null = null
 
