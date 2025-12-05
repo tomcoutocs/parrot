@@ -209,7 +209,18 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor, users = [] }
             onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            {format(new Date(dueDate), "MM/dd/yy")}
+            {(() => {
+              // Parse date correctly to avoid timezone shifts
+              let date: Date
+              if (dueDate.includes('-')) {
+                // YYYY-MM-DD format - parse as local date
+                const [year, month, day] = dueDate.split('-').map(Number)
+                date = new Date(year, month - 1, day)
+              } else {
+                date = new Date(dueDate)
+              }
+              return format(date, "MM/dd/yy")
+            })()}
           </button>
         ) : (
           <button

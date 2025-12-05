@@ -99,12 +99,10 @@ function transformTaskToDesignTask(task: TaskWithDetails): DesignTask & { origin
       // Handle both ISO string and YYYY-MM-DD format
       let date: Date
       if (typeof task.due_date === 'string' && task.due_date.includes('T')) {
-        // ISO string - extract date components in UTC to avoid timezone shifts
+        // ISO string - parse and use local timezone components
         const isoDate = new Date(task.due_date)
-        const utcYear = isoDate.getUTCFullYear()
-        const utcMonth = isoDate.getUTCMonth()
-        const utcDay = isoDate.getUTCDate()
-        date = new Date(utcYear, utcMonth, utcDay) // Create in local timezone
+        // Use local timezone methods to avoid date shifts
+        date = new Date(isoDate.getFullYear(), isoDate.getMonth(), isoDate.getDate())
       } else {
         // YYYY-MM-DD format - parse directly as local date
         const [yearStr, monthStr, dayStr] = task.due_date.split('-')
@@ -116,7 +114,6 @@ function transformTaskToDesignTask(task: TaskWithDetails): DesignTask & { origin
       const year = String(date.getFullYear()).slice(-2)
       dueDate = `${month}/${day}/${year}`
     } catch (e) {
-      console.error("Error parsing due_date:", e)
       dueDate = ""
     }
   }
@@ -540,13 +537,21 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
       if ('dueDate' in updates) {
         if (updates.dueDate && typeof updates.dueDate === 'string') {
           try {
-            const [month, day, year] = updates.dueDate.split("/")
-            const fullYear = `20${year}`
-            // Store as YYYY-MM-DD string (date-only, no time)
-            const dbDate = `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-            dbUpdates.due_date = dbDate
+            // Handle both MM/dd/yy format and YYYY-MM-DD format
+            if (updates.dueDate.includes('/')) {
+              // MM/dd/yy format
+              const [month, day, year] = updates.dueDate.split("/")
+              const fullYear = `20${year}`
+              // Store as YYYY-MM-DD string (date-only, no time)
+              const dbDate = `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+              dbUpdates.due_date = dbDate
+            } else if (updates.dueDate.includes('-')) {
+              // Already in YYYY-MM-DD format, use formatDateForDatabase to ensure consistency
+              dbUpdates.due_date = formatDateForDatabase(updates.dueDate)
+            } else {
+              dbUpdates.due_date = null
+            }
           } catch (e) {
-            console.error("Error parsing date:", e)
             dbUpdates.due_date = null
           }
         } else {

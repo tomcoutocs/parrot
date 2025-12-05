@@ -59,12 +59,25 @@ function getDueDateStatus(dueDate: string) {
   if (!dueDate) return null
   
   try {
-    // Parse date in format MM/DD/YY
-    const [month, day, year] = dueDate.split("/")
-    const fullYear = `20${year}`
-    const dateObj = new Date(`${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
+    let dateObj: Date
+    // Parse date in format MM/DD/YY or YYYY-MM-DD
+    if (dueDate.includes('/')) {
+      // MM/DD/YY format
+      const [month, day, year] = dueDate.split("/")
+      const fullYear = `20${year}`
+      // Create date in local timezone to avoid shifts
+      dateObj = new Date(parseInt(fullYear), parseInt(month) - 1, parseInt(day))
+    } else if (dueDate.includes('-')) {
+      // YYYY-MM-DD format
+      const [year, month, day] = dueDate.split('-').map(Number)
+      dateObj = new Date(year, month - 1, day)
+    } else {
+      return { status: "normal", color: "text-muted-foreground", dotColor: null }
+    }
+    
     const today = new Date()
     today.setHours(0, 0, 0, 0)
+    dateObj.setHours(0, 0, 0, 0)
     
     const daysUntilDue = differenceInDays(dateObj, today)
     

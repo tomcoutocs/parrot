@@ -248,6 +248,114 @@ export function formatExpirationDate(expiresAt: string): string {
 }
 
 // Email sending function for welcome emails when users are created directly
+export interface PasswordResetEmailData {
+  recipientName: string
+  recipientEmail: string
+  resetToken: string
+  expiresAt: string
+}
+
+// Email sending function for password reset
+export async function sendPasswordResetEmail(data: PasswordResetEmailData): Promise<EmailResult> {
+  try {
+    if (!process.env.RESEND_API_KEY || !resend) {
+      console.warn('⚠️ RESEND_API_KEY not configured, falling back to mock email')
+      console.log('📧 Mock password reset email sent:', {
+        to: data.recipientEmail,
+        resetToken: data.resetToken
+      })
+      return { success: true }
+    }
+
+    const resetUrl = generatePasswordResetUrl(data.resetToken)
+    const expiresDate = new Date(data.expiresAt).toLocaleDateString()
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Reset Your Password</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
+            <h1 style="color: #2563eb; margin-bottom: 20px;">Reset Your Password</h1>
+            <p style="font-size: 18px; margin-bottom: 20px;">Hello ${data.recipientName},</p>
+            <p style="font-size: 16px; margin-bottom: 30px;">
+              We received a request to reset your password. Click the button below to create a new password.
+            </p>
+            <a href="${resetUrl}" 
+               style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-bottom: 20px;">
+              Reset Password
+            </a>
+            <p style="font-size: 14px; color: #666; margin-top: 30px;">
+              This link will expire on ${expiresDate}.<br>
+              If you didn't request a password reset, you can safely ignore this email.<br><br>
+              If the button doesn't work, copy and paste this link into your browser:<br>
+              <a href="${resetUrl}" style="color: #2563eb; word-break: break-all;">${resetUrl}</a>
+            </p>
+          </div>
+        </body>
+      </html>
+    `
+
+    const fromEmail = process.env.FROM_EMAIL
+    
+    if (!fromEmail) {
+      console.error('❌ FROM_EMAIL not configured.')
+      return {
+        success: false,
+        error: 'Email configuration error: FROM_EMAIL not set'
+      }
+    }
+
+    const result = await resend.emails.send({
+      from: fromEmail,
+      to: [data.recipientEmail],
+      subject: 'Reset Your Password',
+      html: emailHtml,
+    })
+
+    if (result.error) {
+      console.error('Resend API error:', result.error)
+      
+      if (result.error.message?.includes('domain is not verified')) {
+        return {
+          success: false,
+          error: 'Domain verification error: Please verify your domain in Resend dashboard'
+        }
+      }
+      
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email'
+      }
+    }
+
+    console.log('📧 Password reset email sent successfully via Resend:', {
+      id: result.data?.id,
+      to: data.recipientEmail
+    })
+
+    return {
+      success: true
+    }
+  } catch (error) {
+    console.error('Failed to send password reset email:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }
+  }
+}
+
+// Helper function to generate password reset URL
+export function generatePasswordResetUrl(token: string, baseUrl?: string): string {
+  const base = baseUrl || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  return `${base}/auth/reset-password?token=${token}`
+}
+
 export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<EmailResult> {
   try {
     console.log('🔍 Welcome email sending debug info:', {

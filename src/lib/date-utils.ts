@@ -4,7 +4,7 @@
 
 /**
  * Formats a date string for HTML date input (YYYY-MM-DD)
- * Handles timezone conversion properly
+ * Handles timezone conversion properly by using local date components
  */
 export function formatDateForInput(dateString: string | null | undefined): string {
   if (!dateString) return ''
@@ -15,13 +15,22 @@ export function formatDateForInput(dateString: string | null | undefined): strin
       return dateString
     }
     
-    // Parse the date and extract the date components
-    const date = new Date(dateString)
+    // Parse the date - handle both ISO strings and date-only strings
+    let date: Date
+    if (dateString.includes('T')) {
+      // ISO string with time - parse directly
+      date = new Date(dateString)
+    } else {
+      // Date-only string (YYYY-MM-DD) - create date in local timezone
+      const [year, month, day] = dateString.split('-').map(Number)
+      date = new Date(year, month - 1, day)
+    }
     
-    // Get the date components (this will work correctly with noon UTC dates)
-    const year = date.getUTCFullYear()
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-    const day = String(date.getUTCDate()).padStart(2, '0')
+    // Get the date components using local timezone (not UTC)
+    // This ensures the date displayed matches what the user selected
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
     
     return `${year}-${month}-${day}`
   } catch (error) {
@@ -32,20 +41,39 @@ export function formatDateForInput(dateString: string | null | undefined): strin
 
 /**
  * Formats a date string for database storage
- * Creates a date that represents the correct day in the user's timezone
+ * Stores as YYYY-MM-DD string to avoid timezone issues
  */
 export function formatDateForDatabase(dateString: string): string {
   if (!dateString) return ''
   
   try {
+    // If already in YYYY-MM-DD format, return as-is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString
+    }
+    
     // Parse the date components to avoid timezone issues
-    const [year, month, day] = dateString.split('-').map(Number)
+    // If it's a date-only string, parse directly
+    if (!dateString.includes('T')) {
+      // Already in YYYY-MM-DD format or similar
+      const parts = dateString.split('-').map(Number)
+      if (parts.length === 3) {
+        const year = parts[0]
+        const month = String(parts[1]).padStart(2, '0')
+        const day = String(parts[2]).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+    }
     
-    // Create a date object in local timezone that represents the correct day
-    // We'll store it as noon UTC to avoid midnight timezone shifts
-    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+    // Parse ISO string and extract date components in local timezone
+    const date = new Date(dateString)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
     
-    return date.toISOString()
+    // Return as YYYY-MM-DD (date-only, no time component)
+    // This avoids timezone shift issues
+    return `${year}-${month}-${day}`
   } catch (error) {
     console.error('Error formatting date for database:', error)
     return ''
