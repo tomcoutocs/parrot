@@ -76,6 +76,12 @@ export function ModernDashboardLayout({
     // Ensure we have session before determining viewMode
     if (!session || !userRole) return
     
+    // user-dashboard tab should always be in client mode (it's the personal dashboard)
+    if (activeTab === "user-dashboard") {
+      setViewMode("client")
+      return
+    }
+    
     // If we have a space selected, always stay in client mode
     // This ensures space-specific tabs (like users) show space users, not admin team
     if (currentSpaceId) {
@@ -102,12 +108,16 @@ export function ModernDashboardLayout({
     
     // On initial load, determine viewMode from URL
     // Reports can be accessed without a space - use client mode
-    // Otherwise, start in admin mode (for admins)
+    // Otherwise, start in admin mode (for admins only)
     if (activeTab === "reports" && !currentSpaceId) {
       // Reports can be accessed without a space - use client mode
       setViewMode("client")
     } else if (!currentSpaceId && userRole === "admin") {
+      // Only admins can use admin mode when no space is selected
       setViewMode("admin")
+    } else if (!currentSpaceId && userRole !== "admin") {
+      // Non-admin users without a space should be in client mode
+      setViewMode("client")
     }
   }, [currentSpaceId, activeTab, userRole, session]) // Update when space or tab changes
 

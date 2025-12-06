@@ -15,9 +15,9 @@ function DashboardContent() {
   const isChangingTabRef = useRef(false)
   const isChangingSpaceRef = useRef(false)
   const isSwitchingToAdminRef = useRef(false)
-  // Initialize tab based on user role - non-admin users go straight to dashboard
+  // Initialize tab based on user role - non-admin users go straight to user-dashboard
   const [activeTab, setActiveTab] = useState<TabType>(() => {
-    // Default to spaces for admin, dashboard for non-admin (will be set properly once session loads)
+    // Default to spaces for admin, user-dashboard for non-admin (will be set properly once session loads)
     return 'spaces'
   })
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null)
@@ -53,15 +53,43 @@ function DashboardContent() {
     if (session && session.user.role !== 'admin') {
       const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
       if (tabParam && adminOnlyTabs.includes(tabParam)) {
-        // Redirect non-admin users to dashboard in their space
-        if (session.user.company_id) {
-          router.push(`/dashboard?tab=dashboard&space=${session.user.company_id}`)
-          return
-        }
+        // Redirect non-admin users to user-dashboard (personal dashboard, no space)
+        isChangingTabRef.current = true
+        router.push(`/dashboard?tab=user-dashboard`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
+        return
+      }
+      
+      // If non-admin user tries to access dashboard tab without a space, redirect to user-dashboard
+      if (tabParam === 'dashboard' && !spaceParam) {
+        isChangingTabRef.current = true
+        router.push(`/dashboard?tab=user-dashboard`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
+        return
       }
     }
     
     const validTabs: TabType[] = ['spaces', 'dashboard', 'user-dashboard', 'projects', 'forms', 'services', 'documents', 'admin', 'companies', 'company-calendars', 'project-overview', 'debug', 'reports', 'settings']
+    
+    // For non-admin users, if no tab is specified OR if there's a space param, default to user-dashboard (without space)
+    // This MUST run BEFORE any space syncing logic
+    if (session && session.user.role !== 'admin' && !isChangingTabRef.current && !isChangingSpaceRef.current) {
+      if (!tabParam || (tabParam === 'dashboard' && spaceParam) || (tabParam === 'user-dashboard' && spaceParam)) {
+        // Redirect to user-dashboard without space
+        isChangingTabRef.current = true
+        isChangingSpaceRef.current = true // Prevent space syncing during redirect
+        setActiveTab('user-dashboard')
+        setCurrentSpaceId(null) // Clear any space
+        setSelectedCompany(null) // Clear selected company
+        router.replace(`/dashboard?tab=user-dashboard`)
+        setTimeout(() => { 
+          isChangingTabRef.current = false
+          isChangingSpaceRef.current = false
+        }, 200)
+        return
+      }
+    }
+    
     // Only update activeTab if it's different to prevent unnecessary re-renders
     // Only sync from URL if we're not already in the process of changing tabs or spaces
     // IMPORTANT: If we have a space param, don't show the spaces tab - switch to dashboard instead
@@ -87,6 +115,17 @@ function DashboardContent() {
     
     if (spaceParam) {
       console.log('Setting current space to:', spaceParam)
+      // For non-admin users on user-dashboard, never sync space - remove it from URL
+      if (session && session.user.role !== 'admin' && tabParam === 'user-dashboard') {
+        if (spaceParam) {
+          // Remove space from URL for user-dashboard
+          router.replace(`/dashboard?tab=user-dashboard`)
+          setCurrentSpaceId(null)
+          setSelectedCompany(null)
+        }
+        return
+      }
+      
       // Only sync from URL if space actually changed and we're not manually changing it
       // IMPORTANT: Don't sync space if we're on an admin-only tab (admin tabs don't have spaces)
       // EXCEPTION: "admin" tab can have a space to show space users
@@ -99,9 +138,16 @@ function DashboardContent() {
           setSelectedCompany(null)
         }
       } else if (currentSpaceId !== spaceParam) {
-        console.log('Syncing space from URL:', spaceParam)
-        setCurrentSpaceId(spaceParam)
-        setSelectedCompany(spaceParam) // Space ID is the company ID
+        // Don't sync space if we're on a tab that doesn't use spaces
+        const noSpaceTabs: TabType[] = ['user-dashboard', 'reports']
+        if (!noSpaceTabs.includes(tabParam as TabType)) {
+          console.log('Syncing space from URL:', spaceParam)
+          setCurrentSpaceId(spaceParam)
+          setSelectedCompany(spaceParam) // Space ID is the company ID
+        } else if (spaceParam) {
+          // If URL has space but tab doesn't need it, remove space from URL
+          router.replace(`/dashboard?tab=${tabParam}`)
+        }
       }
     } else if (!spaceParam && currentSpaceId !== null) {
       // URL has no space param but we have a space - clear it
@@ -110,12 +156,19 @@ function DashboardContent() {
       // The tab change handler should have included the space in the URL
       const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'forms', 'services', 'company-calendars', 'documents', 'settings', 'admin']
       const adminOnlyTabs: TabType[] = ['spaces', 'companies', 'project-overview', 'debug']
+      const noSpaceTabs: TabType[] = ['user-dashboard', 'reports'] // These tabs don't use spaces
       
       // Always clear space for admin tabs (except admin/users tab which can have space)
       if (adminOnlyTabs.includes(tabParam as TabType)) {
         console.log('Clearing space for admin tab:', tabParam)
         setCurrentSpaceId(null)
         setSelectedCompany(null)
+      } else if (noSpaceTabs.includes(tabParam as TabType)) {
+        // Clear space for tabs that don't use spaces (like user-dashboard)
+        if (currentSpaceId !== null) {
+          setCurrentSpaceId(null)
+          setSelectedCompany(null)
+        }
       } else if (!spaceRequiredTabs.includes(tabParam as TabType)) {
         setCurrentSpaceId(null)
         setSelectedCompany(null)
@@ -123,30 +176,28 @@ function DashboardContent() {
     }
   }, [searchParams, session, router, currentSpaceId]) // Removed activeTab from dependencies to prevent loop
   
-  // Initialize space for non-admin users - they should go straight to their space
-  // IMPORTANT: Only run this for non-admin users, and don't interfere if admin is switching spaces
+  // Initialize dashboard for non-admin users - redirect to user-dashboard on login
+  // This runs once when session loads for non-admin users
   useEffect(() => {
-    if (session && session.user.role !== 'admin' && session.user.company_id && !isChangingSpaceRef.current) {
-      const userSpaceId = session.user.company_id
-      
-      // Always set their space immediately
-      if (currentSpaceId !== userSpaceId) {
-        setCurrentSpaceId(userSpaceId)
-        setSelectedCompany(userSpaceId)
-      }
-      
-      // Force redirect to dashboard tab if they're on spaces tab or any admin-only tab
-      const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
-      if (adminOnlyTabs.includes(activeTab)) {
-        setActiveTab('dashboard')
-        // Update URL to reflect their space
-        router.push(`/dashboard?tab=dashboard&space=${userSpaceId}`)
-      } else if (!currentSpaceId) {
-        // If no space is set and they're not on an admin tab, redirect
-        router.push(`/dashboard?tab=dashboard&space=${userSpaceId}`)
+    if (!session || session.user.role === 'admin' || isChangingTabRef.current || isChangingSpaceRef.current) {
+      return
+    }
+    
+    const tabParam = searchParams.get('tab') as TabType
+    const spaceParam = searchParams.get('space')
+    const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
+    
+    // If URL has admin-only tab or dashboard with space (which non-admin shouldn't see), redirect to user-dashboard
+    if (adminOnlyTabs.includes(tabParam) || (tabParam === 'dashboard' && spaceParam)) {
+      // Only redirect if we're not already on user-dashboard
+      if (activeTab !== 'user-dashboard' && tabParam !== 'user-dashboard') {
+        isChangingTabRef.current = true
+        setActiveTab('user-dashboard')
+        router.replace(`/dashboard?tab=user-dashboard`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
       }
     }
-  }, [session, currentSpaceId, activeTab, router])
+  }, [session?.user?.id, searchParams, activeTab, router]) // Run when session loads or URL changes
 
   // Initialize dashboard data and preload critical tabs
   useEffect(() => {

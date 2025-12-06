@@ -38,7 +38,12 @@ export default function SignInPage() {
         setError(result.error)
       } else if (result.user) {
         auth.signIn(result.user)
-        router.push('/dashboard')
+        // Redirect non-admin users to user-dashboard, admin users to dashboard
+        if (result.user.role === 'admin') {
+          router.push('/dashboard')
+        } else {
+          router.push('/dashboard?tab=user-dashboard')
+        }
       }
     } catch {
       setError('An error occurred. Please try again.')

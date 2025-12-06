@@ -1,15 +1,23 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useSession } from "@/components/providers/session-provider"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { fetchCompanyEvents } from "@/lib/simplified-database-functions"
 import { fetchTasksOptimized, fetchProjectsOptimized } from "@/lib/simplified-database-functions"
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
-import { Calendar, CheckSquare, Clock, Building2, AlertCircle } from "lucide-react"
+import { Calendar, CheckSquare, Clock, Building2, AlertCircle, ArrowRight, Circle, Users, FolderKanban } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { format, isAfter, parseISO, addDays } from "date-fns"
+import { Company } from "@/lib/supabase"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface DashboardEvent {
   id: string
@@ -42,12 +50,22 @@ interface ModernDashboardTabProps {
   activeSpace: string | null
 }
 
+interface SpaceInfo extends Company {
+  activeProjects?: number
+  upcomingTasksCount?: number
+  upcomingEventsCount?: number
+}
+
 export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
   const { data: session } = useSession()
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [upcomingEvents, setUpcomingEvents] = useState<DashboardEvent[]>([])
   const [upcomingTasks, setUpcomingTasks] = useState<DashboardTask[]>([])
   const [userSpaces, setUserSpaces] = useState<string[]>([])
+  const [spacesInfo, setSpacesInfo] = useState<SpaceInfo[]>([])
+  const hasLoadedRef = useRef(false)
+  const lastUserIdRef = useRef<string | null>(null)
 
   const getUserSpaces = useCallback(async (): Promise<string[]> => {
     if (!session?.user || !supabase) return []
@@ -118,7 +136,76 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
     try {
       // Get all spaces the user/manager is part of
       const spaces = await getUserSpaces()
-      setUserSpaces(spaces)
+      
+      // Only update if spaces actually changed to prevent infinite loops
+      setUserSpaces(prev => {
+        const spacesStr = spaces.sort().join(',')
+        const prevStr = prev.sort().join(',')
+        if (spacesStr === prevStr) return prev
+        return spaces
+      })
+
+      // Fetch company details for spaces
+      const allCompanies = await fetchCompaniesOptimized()
+      const userCompanies = allCompanies.filter(c => spaces.includes(c.id))
+      
+      // Enrich spaces with project and task counts
+      const enrichedSpaces: SpaceInfo[] = await Promise.all(
+        userCompanies.map(async (company) => {
+          const projects = await fetchProjectsOptimized(company.id)
+          const activeProjects = projects.length
+          
+          // Count upcoming tasks for this space
+          let upcomingTasksCount = 0
+          const userId = session.user.id
+          const userRole = session.user.role
+          const now = new Date()
+          const thirtyDaysFromNow = addDays(now, 30)
+          
+          for (const project of projects) {
+            const tasks = await fetchTasksOptimized(project.id)
+            tasks.forEach(task => {
+              if (task.due_date) {
+                const dueDate = parseISO(task.due_date)
+                const isUpcoming = isAfter(dueDate, now) && dueDate <= thirtyDaysFromNow && task.status !== 'done'
+                
+                if (userRole === 'user') {
+                  // For client users, only count tasks assigned to them
+                  const isAssignedViaLegacy = task.assigned_to === userId
+                  const isAssignedViaTable = (task as any).task_assignments?.some(
+                    (assignment: any) => assignment.user_id === userId
+                  )
+                  const isAssigned = isAssignedViaLegacy || isAssignedViaTable
+                  if (isUpcoming && isAssigned) {
+                    upcomingTasksCount++
+                  }
+                } else {
+                  // For managers/internal, count all upcoming tasks
+                  if (isUpcoming) {
+                    upcomingTasksCount++
+                  }
+                }
+              }
+            })
+          }
+          
+          // Count upcoming events for this space
+          const events = await fetchCompanyEvents(company.id)
+          const upcomingEventsCount = events.filter(event => {
+            const startDate = parseISO(event.start_date)
+            return isAfter(startDate, now) && startDate <= thirtyDaysFromNow
+          }).length
+          
+          return {
+            ...company,
+            activeProjects,
+            upcomingTasksCount,
+            upcomingEventsCount
+          }
+        })
+      )
+      
+      setSpacesInfo(enrichedSpaces)
 
       // Fetch upcoming events from all spaces
       const events = await fetchUpcomingEvents(spaces)
@@ -132,11 +219,27 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
     } finally {
       setLoading(false)
     }
-  }, [session?.user, getUserSpaces])
+  }, [session?.user?.id, session?.user?.role, session?.user?.company_id, getUserSpaces])
 
   useEffect(() => {
-    loadDashboardData()
-  }, [loadDashboardData])
+    // Only load if we have a session and user ID changed (login/logout) or haven't loaded yet
+    if (!session?.user) {
+      hasLoadedRef.current = false
+      lastUserIdRef.current = null
+      setLoading(false)
+      return
+    }
+
+    const currentUserId = session.user.id
+    const userIdChanged = lastUserIdRef.current !== currentUserId
+    
+    if (userIdChanged || !hasLoadedRef.current) {
+      hasLoadedRef.current = true
+      lastUserIdRef.current = currentUserId
+      loadDashboardData()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]) // Only reload when user ID changes (i.e., on login/logout)
 
   const fetchUpcomingEvents = useCallback(async (spaces: string[]): Promise<DashboardEvent[]> => {
     if (spaces.length === 0 || !supabase) return []
@@ -216,8 +319,12 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
             for (const projectId of projectIds) {
               const tasks = await fetchTasksOptimized(projectId)
               tasks.forEach(task => {
-                // Check if user is assigned via assigned_to field
-                const isAssigned = task.assigned_to === userId
+                // Check if user is assigned via assigned_to field (legacy) or task_assignments (new)
+                const isAssignedViaLegacy = task.assigned_to === userId
+                const isAssignedViaTable = (task as any).task_assignments?.some(
+                  (assignment: any) => assignment.user_id === userId
+                )
+                const isAssigned = isAssignedViaLegacy || isAssignedViaTable
                 
                 if (isAssigned && task.due_date) {
                   const dueDate = parseISO(task.due_date)
@@ -318,6 +425,28 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
     }
   }
 
+  const handleSpaceClick = (spaceId: string) => {
+    router.push(`/dashboard?tab=dashboard&space=${spaceId}`)
+  }
+
+  const summaryMetrics = [
+    {
+      label: "My Spaces",
+      value: spacesInfo.length.toString(),
+      icon: Building2,
+    },
+    {
+      label: "Upcoming Tasks",
+      value: upcomingTasks.length.toString(),
+      icon: CheckSquare,
+    },
+    {
+      label: "Upcoming Events",
+      value: upcomingEvents.length.toString(),
+      icon: Calendar,
+    },
+  ]
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -327,15 +456,71 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
   }
 
   return (
-    <div className="space-y-6 -m-8 p-8">
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold">Dashboard</h2>
-        <p className="text-muted-foreground">
-          Upcoming events and tasks across all your spaces
-        </p>
-      </div>
+    <TooltipProvider>
+      <div className="space-y-3 -m-8 p-8">
+        {/* Summary Metrics */}
+        <div className="grid grid-cols-3 gap-3">
+          {summaryMetrics.map((metric) => {
+            const Icon = metric.icon
+            return (
+              <Card key={metric.label} className="p-3 border-border/60">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-0.5">{metric.label}</div>
+                    <div className="text-xl">{metric.value}</div>
+                  </div>
+                  <Icon className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </Card>
+            )
+          })}
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Spaces Table */}
+        {spacesInfo.length > 0 && (
+          <Card className="p-3 border-border/60">
+            <div className="grid grid-cols-12 gap-3 px-2 py-1.5 text-xs text-muted-foreground border-b border-border/40 mb-0.5">
+              <div className="col-span-5">Space</div>
+              <div className="col-span-2">Projects</div>
+              <div className="col-span-2">Tasks</div>
+              <div className="col-span-2">Events</div>
+              <div className="col-span-1"></div>
+            </div>
+            <div className="space-y-0">
+              {spacesInfo.map((space) => (
+                <div
+                  key={space.id}
+                  onClick={() => handleSpaceClick(space.id)}
+                  className="grid grid-cols-12 gap-3 px-2 py-2 hover:bg-muted/30 transition-colors items-center group rounded-md cursor-pointer"
+                >
+                  <div className="col-span-5 flex items-center gap-2">
+                    {space.is_active !== false && (
+                      <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] flex-shrink-0" />
+                    )}
+                    {space.is_active === false && (
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/30 flex-shrink-0" />
+                    )}
+                    <span className="text-sm truncate">{space.name || 'Unnamed Space'}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-sm">{space.activeProjects || 0}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-sm">{space.upcomingTasksCount || 0}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-sm">{space.upcomingEventsCount || 0}</span>
+                  </div>
+                  <div className="col-span-1 flex items-center justify-end">
+                    <ArrowRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events */}
         <Card>
           <CardHeader>
@@ -486,8 +671,9 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
 

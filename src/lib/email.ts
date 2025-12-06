@@ -118,22 +118,22 @@ The Parrot Portal Team`
                       <p style="font-size: 16px; margin: 0 0 20px 0; color: #333333;">Hello ${data.recipientName},</p>
                       <p style="font-size: 16px; margin: 0 0 30px 0; color: #666666;">
                         ${data.inviterName} has invited you to join <strong style="color: #333333;">${data.companyName}</strong> as a <strong style="color: #333333;">${data.role}</strong>.
-                      </p>
+            </p>
                       <table role="presentation" style="margin: 0 auto;">
                         <tr>
                           <td>
-                            <a href="${invitationUrl}" 
+            <a href="${invitationUrl}" 
                                style="background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 16px;">
-                              Accept Invitation
-                            </a>
+              Accept Invitation
+            </a>
                           </td>
                         </tr>
                       </table>
                       <p style="font-size: 14px; color: #666666; margin: 30px 0 0 0; line-height: 1.6;">
-                        This invitation will expire on ${expiresDate}.<br>
-                        If the button doesn't work, copy and paste this link into your browser:<br>
+              This invitation will expire on ${expiresDate}.<br>
+              If the button doesn't work, copy and paste this link into your browser:<br>
                         <a href="${invitationUrl}" style="color: #2563eb; word-break: break-all; text-decoration: underline;">${invitationUrl}</a>
-                      </p>
+            </p>
                     </td>
                   </tr>
                 </table>
