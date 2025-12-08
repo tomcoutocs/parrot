@@ -101,9 +101,16 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
 
     try {
       // Create the company
+      // Use spaceName as the name (this is what appears in the nav bar)
+      // Store companyName in description if different, or combine with description
+      const finalDescription = companyName !== spaceName 
+        ? `${companyName}${description ? ` - ${description}` : ''}`
+        : description || undefined
+      
       const result = await createCompany({
-        name: companyName,
-        description: description || undefined,
+        name: spaceName, // Use spaceName for the nav bar display
+        description: finalDescription,
+        manager_id: accountManager || null // Set manager during creation
       })
 
       if (!result.success || !result.data) {
@@ -142,14 +149,23 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         }
       }
 
-      // Assign Support Ticket form to the new space (default form)
+      // Assign default forms to the new space (Support Ticket and Onboarding)
       try {
         const allForms = await fetchForms()
+        
+        // Find Support Ticket form
         const supportTicketForm = allForms.find(form => 
           form.title.toLowerCase() === 'support ticket' || 
           form.title.toLowerCase().includes('support ticket')
         )
         
+        // Find Onboarding form
+        const onboardingForm = allForms.find(form => 
+          form.title.toLowerCase() === 'onboarding' || 
+          form.title.toLowerCase().includes('onboarding')
+        )
+        
+        // Assign Support Ticket form if found
         if (supportTicketForm) {
           const formAssignmentResult = await assignFormToSpace(supportTicketForm.id, companyId)
           if (!formAssignmentResult.success) {
@@ -159,8 +175,19 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         } else {
           console.warn("Support Ticket form not found. Skipping form assignment.")
         }
+        
+        // Assign Onboarding form if found
+        if (onboardingForm) {
+          const onboardingAssignmentResult = await assignFormToSpace(onboardingForm.id, companyId)
+          if (!onboardingAssignmentResult.success) {
+            console.error("Failed to assign Onboarding form to space:", onboardingAssignmentResult.error)
+            // Don't fail the whole operation, just log the error
+          }
+        } else {
+          console.warn("Onboarding form not found. Skipping form assignment.")
+        }
       } catch (formError) {
-        console.error('Error assigning Support Ticket form to space:', formError)
+        console.error('Error assigning default forms to space:', formError)
         // Don't fail the whole operation, just log the error
       }
 

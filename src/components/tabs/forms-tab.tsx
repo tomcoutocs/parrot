@@ -255,6 +255,35 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
     }
   }
 
+  // Parse settings from form description
+  const parseFormSettings = (description?: string): { saveAsDocument: boolean } => {
+    if (!description) {
+      return { saveAsDocument: true } // Default enabled
+    }
+    try {
+      const settingsMatch = description.match(/__SETTINGS__({[\s\S]*?})__SETTINGS__/)
+      if (settingsMatch) {
+        const parsed = JSON.parse(settingsMatch[1])
+        return {
+          saveAsDocument: parsed.saveAsDocument !== false // Default to true if not specified
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing form settings:', e)
+    }
+    return { saveAsDocument: true } // Default enabled
+  }
+
+  // Clean description by removing theme and settings JSON
+  const cleanFormDescription = (description?: string): string => {
+    if (!description) return 'No description available'
+    let clean = description
+      .replace(/__THEME__{[\s\S]*?}__THEME__/g, '')
+      .replace(/__SETTINGS__{[\s\S]*?}__SETTINGS__/g, '')
+      .trim()
+    return clean || 'No description available'
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -472,15 +501,14 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                       </div>
                     </div>
                     <CardDescription className="text-sm line-clamp-2">
-                      {(() => {
-                        // Remove theme information from description
-                        let cleanDescription = form.description || 'No description available'
-                        if (cleanDescription.includes('__THEME__')) {
-                          cleanDescription = cleanDescription.replace(/__THEME__.*?__THEME__/g, '').trim()
-                        }
-                        return cleanDescription || 'No description available'
-                      })()}
+                      {cleanFormDescription(form.description)}
                     </CardDescription>
+                    {parseFormSettings(form.description).saveAsDocument && (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-600">
+                        <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                        <span>Save to docs</span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )
@@ -501,15 +529,14 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                       <div className="flex-1 min-w-0">
                         <CardTitle className="text-base font-semibold">{form.title}</CardTitle>
                         <CardDescription className="text-sm line-clamp-2 mt-0.5">
-                          {(() => {
-                            // Remove theme information from description
-                            let cleanDescription = form.description || 'No description available'
-                            if (cleanDescription.includes('__THEME__')) {
-                              cleanDescription = cleanDescription.replace(/__THEME__.*?__THEME__/g, '').trim()
-                            }
-                            return cleanDescription || 'No description available'
-                          })()}
+                          {cleanFormDescription(form.description)}
                         </CardDescription>
+                        {parseFormSettings(form.description).saveAsDocument && (
+                          <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-600">
+                            <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                            <span>Save to docs</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <Badge className={getStatusColor(form.is_active)}>

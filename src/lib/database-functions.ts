@@ -1386,6 +1386,19 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
       .eq('id', userId)
       .single()
     
+    // Delete activity logs that reference this user first
+    // This prevents the foreign key constraint violation
+    const { error: activityLogsError } = await supabase
+      .from('activity_logs')
+      .delete()
+      .eq('user_id', userId)
+
+    if (activityLogsError) {
+      console.warn('Error deleting activity logs for user (continuing anyway):', activityLogsError)
+      // Don't fail the deletion if activity logs deletion fails
+    }
+    
+    // Now delete the user
     const { error } = await supabase
       .from('users')
       .delete()
@@ -1771,6 +1784,7 @@ export async function createCompany(companyData: {
   is_partner?: boolean
   retainer?: number
   revenue?: number
+  manager_id?: string | null
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
@@ -1793,7 +1807,8 @@ export async function createCompany(companyData: {
         is_partner: companyData.is_partner || false,
         is_active: true,
         retainer: companyData.retainer,
-        revenue: companyData.revenue
+        revenue: companyData.revenue,
+        manager_id: companyData.manager_id || null
       })
       .select()
       .single()
@@ -2553,6 +2568,40 @@ export async function submitForm(formId: string, submissionData: Record<string, 
   try {
     console.log('Submitting form:', formId, submissionData, 'from space:', spaceId)
     
+    // Fetch form to check if saveAsDocument is enabled
+    let shouldSaveAsDocument = false
+    if (spaceId) {
+      try {
+        const { data: formData } = await supabase
+          .from('forms')
+          .select('description')
+          .eq('id', formId)
+          .single()
+        
+        if (formData?.description) {
+          const settingsMatch = formData.description.match(/__SETTINGS__({[\s\S]*?})__SETTINGS__/)
+          if (settingsMatch) {
+            try {
+              const settings = JSON.parse(settingsMatch[1])
+              shouldSaveAsDocument = settings.saveAsDocument !== false // Default to true
+            } catch (e) {
+              console.error('Error parsing form settings:', e)
+            }
+          } else {
+            // No settings found, default to true
+            shouldSaveAsDocument = true
+          }
+        } else {
+          // No description, default to true
+          shouldSaveAsDocument = true
+        }
+      } catch (e) {
+        console.error('Error fetching form settings:', e)
+        // Default to true if we can't fetch
+        shouldSaveAsDocument = true
+      }
+    }
+    
     // Use database function to bypass PostgREST checks that might reference forms.company_id
     const { data, error: rpcError } = await supabase.rpc('submit_form_submission', {
       p_form_id: formId,
@@ -2606,6 +2655,53 @@ export async function submitForm(formId: string, submissionData: Record<string, 
       }
 
       console.log('Form submitted successfully (direct insert fallback)')
+      
+      // Save as document if enabled and spaceId is provided
+      if (shouldSaveAsDocument && spaceId) {
+        try {
+          // Fetch form title for document name
+          const { data: formData } = await supabase
+            .from('forms')
+            .select('title')
+            .eq('id', formId)
+            .single()
+          
+          const formTitle = formData?.title || 'Form Submission'
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+          const documentTitle = `${formTitle} - ${timestamp}`
+          
+          // Format submission data as readable text
+          const documentContent = Object.entries(submissionData)
+            .map(([key, value]) => {
+              if (value && typeof value === 'object' && 'url' in value) {
+                // File upload
+                return `${key}: ${(value as any).name || 'File uploaded'} (${(value as any).url || 'N/A'})`
+              } else if (Array.isArray(value)) {
+                return `${key}: ${value.join(', ')}`
+              } else {
+                return `${key}: ${String(value)}`
+              }
+            })
+            .join('\n')
+          
+          // Create document in the space's internal documents folder
+          // spaceId is passed as companyId to ensure it's saved to the correct space
+          await saveRichDocument(
+            documentTitle,
+            documentContent,
+            spaceId, // This ensures the document is saved to the correct space
+            userId,
+            '/internal', // Internal documents folder path
+            undefined,
+            true // isInternal = true - marks it as an internal document
+          )
+          console.log(`Form response saved as document in space ${spaceId}'s internal folder`)
+        } catch (docError) {
+          console.error('Error saving form response as document:', docError)
+          // Don't fail the submission if document creation fails
+        }
+      }
+      
       return { success: true, data: submission }
     }
 
@@ -2622,6 +2718,53 @@ export async function submitForm(formId: string, submissionData: Record<string, 
         submitted_at: new Date().toISOString()
       }
       console.log('Form submitted successfully via function, ID:', submissionId)
+      
+      // Save as document if enabled and spaceId is provided
+      if (shouldSaveAsDocument && spaceId) {
+        try {
+          // Fetch form title for document name
+          const { data: formData } = await supabase
+            .from('forms')
+            .select('title')
+            .eq('id', formId)
+            .single()
+          
+          const formTitle = formData?.title || 'Form Submission'
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+          const documentTitle = `${formTitle} - ${timestamp}`
+          
+          // Format submission data as readable text
+          const documentContent = Object.entries(submissionData)
+            .map(([key, value]) => {
+              if (value && typeof value === 'object' && 'url' in value) {
+                // File upload
+                return `${key}: ${(value as any).name || 'File uploaded'} (${(value as any).url || 'N/A'})`
+              } else if (Array.isArray(value)) {
+                return `${key}: ${value.join(', ')}`
+              } else {
+                return `${key}: ${String(value)}`
+              }
+            })
+            .join('\n')
+          
+          // Create document in the space's internal documents folder
+          // spaceId is passed as companyId to ensure it's saved to the correct space
+          await saveRichDocument(
+            documentTitle,
+            documentContent,
+            spaceId, // This ensures the document is saved to the correct space
+            userId,
+            '/internal', // Internal documents folder path
+            undefined,
+            true // isInternal = true - marks it as an internal document
+          )
+          console.log(`Form response saved as document in space ${spaceId}'s internal folder`)
+        } catch (docError) {
+          console.error('Error saving form response as document:', docError)
+          // Don't fail the submission if document creation fails
+        }
+      }
+      
       return { success: true, data: submission }
     }
 
@@ -2635,6 +2778,52 @@ export async function submitForm(formId: string, submissionData: Record<string, 
       submission_data: submissionData,
       submitted_at: new Date().toISOString()
     }
+    
+    // Save as document if enabled and spaceId is provided
+    if (shouldSaveAsDocument && spaceId) {
+      try {
+        // Fetch form title for document name
+        const { data: formData } = await supabase
+          .from('forms')
+          .select('title')
+          .eq('id', formId)
+          .single()
+        
+        const formTitle = formData?.title || 'Form Submission'
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const documentTitle = `${formTitle} - ${timestamp}`
+        
+        // Format submission data as readable text
+        const documentContent = Object.entries(submissionData)
+          .map(([key, value]) => {
+            if (value && typeof value === 'object' && 'url' in value) {
+              // File upload
+              return `${key}: ${(value as any).name || 'File uploaded'} (${(value as any).url || 'N/A'})`
+            } else if (Array.isArray(value)) {
+              return `${key}: ${value.join(', ')}`
+            } else {
+              return `${key}: ${String(value)}`
+            }
+          })
+          .join('\n')
+        
+        // Create document in internal documents folder
+        await saveRichDocument(
+          documentTitle,
+          documentContent,
+          spaceId,
+          userId,
+          '/internal', // Internal documents folder
+          undefined,
+          true // isInternal = true
+        )
+        console.log('Form response saved as document in internal folder')
+      } catch (docError) {
+        console.error('Error saving form response as document:', docError)
+        // Don't fail the submission if document creation fails
+      }
+    }
+    
     return { success: true, data: submission }
   } catch (error) {
     console.error('Error submitting form (catch block):', {

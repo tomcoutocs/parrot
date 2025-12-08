@@ -94,6 +94,10 @@ interface FormTheme {
   conversational?: boolean
 }
 
+interface FormSettings {
+  saveAsDocument?: boolean
+}
+
 interface AdvancedFormBuilderProps {
   isOpen: boolean
   onClose: () => void
@@ -128,10 +132,10 @@ export default function AdvancedFormBuilder({
 }: AdvancedFormBuilderProps) {
   const { data: session } = useSession()
   
-  // Extract description without theme JSON
+  // Extract description without theme and settings JSON
   const extractDescription = (desc?: string): string => {
     if (!desc) return ''
-    return desc.replace(/__THEME__{.*?}__THEME__/g, '').trim()
+    return desc.replace(/__THEME__{[\s\S]*?}__THEME__/g, '').replace(/__SETTINGS__{[\s\S]*?}__SETTINGS__/g, '').trim()
   }
   
   const [title, setTitle] = useState(form?.title || '')
@@ -144,6 +148,25 @@ export default function AdvancedFormBuilder({
   const [activeTab, setActiveTab] = useState<'builder' | 'preview' | 'theme'>('builder')
   const [selectedField, setSelectedField] = useState<string | null>(null)
   const [draggedField, setDraggedField] = useState<string | null>(null)
+  // Parse settings from form description
+  const parseSettingsFromForm = (desc?: string): FormSettings => {
+    if (!desc) {
+      return { saveAsDocument: true } // Default enabled
+    }
+    try {
+      const settingsMatch = desc.match(/__SETTINGS__({[\s\S]*?})__SETTINGS__/)
+      if (settingsMatch) {
+        const parsed = JSON.parse(settingsMatch[1])
+        return {
+          saveAsDocument: parsed.saveAsDocument !== false // Default to true if not specified
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing settings from description:', e)
+    }
+    return { saveAsDocument: true } // Default enabled
+  }
+
   // Parse theme from form description
   const parseThemeFromForm = (desc?: string): FormTheme => {
     if (!desc) {
@@ -177,6 +200,7 @@ export default function AdvancedFormBuilder({
   }
 
   const [theme, setTheme] = useState<FormTheme>(parseThemeFromForm(form?.description))
+  const [settings, setSettings] = useState<FormSettings>(parseSettingsFromForm(form?.description))
 
   // Update state when form prop changes
   useEffect(() => {
@@ -221,6 +245,7 @@ export default function AdvancedFormBuilder({
         fontFamily: 'inherit',
         conversational: false
       })
+      setSettings({ saveAsDocument: true })
     }
   }, [form])
 
@@ -390,11 +415,22 @@ export default function AdvancedFormBuilder({
       console.log('Saving theme:', themeToSave)
       console.log('Theme JSON:', themeJson)
       
-      // Remove any existing theme from description before adding new one
-      const cleanDescription = description.trim().replace(/__THEME__{[\s\S]*?}__THEME__/g, '').trim()
-      const finalDescription = cleanDescription
-        ? `${cleanDescription}\n__THEME__${themeJson}__THEME__`
-        : `__THEME__${themeJson}__THEME__`
+      // Store settings in description as JSON
+      const settingsToSave: FormSettings = {
+        saveAsDocument: settings.saveAsDocument !== false // Default to true
+      }
+      const settingsJson = JSON.stringify(settingsToSave)
+      console.log('Saving settings:', settingsToSave)
+      
+      // Remove any existing theme and settings from description before adding new ones
+      let cleanDescription = description.trim()
+        .replace(/__THEME__{[\s\S]*?}__THEME__/g, '')
+        .replace(/__SETTINGS__{[\s\S]*?}__SETTINGS__/g, '')
+        .trim()
+      
+      // Add both theme and settings
+      const parts = [cleanDescription, `__THEME__${themeJson}__THEME__`, `__SETTINGS__${settingsJson}__SETTINGS__`].filter(Boolean)
+      const finalDescription = parts.join('\n')
       
       console.log('Final description:', finalDescription)
 
@@ -1391,7 +1427,7 @@ export default function AdvancedFormBuilder({
                     </p>
                   </div>
 
-                  <div className="space-y-4">
+                    <div className="space-y-4">
                     <div className="flex items-center space-x-2">
                       <input
                         type="checkbox"
@@ -1402,6 +1438,19 @@ export default function AdvancedFormBuilder({
                       />
                       <Label htmlFor="conversational" className="cursor-pointer">
                         Enable conversational mode (Typeform-style, one question at a time)
+                      </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="saveAsDocument"
+                        checked={settings.saveAsDocument !== false}
+                        onChange={(e) => setSettings({ ...settings, saveAsDocument: e.target.checked })}
+                        className="rounded"
+                      />
+                      <Label htmlFor="saveAsDocument" className="cursor-pointer">
+                        Save form responses as documents in the space&apos;s internal documents folder
                       </Label>
                     </div>
 
