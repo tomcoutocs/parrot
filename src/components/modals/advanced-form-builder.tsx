@@ -59,7 +59,7 @@ export interface SubQuestion {
 }
 
 // Extended FormField interface with conditional logic and new types
-export interface AdvancedFormField extends FormField {
+export interface AdvancedFormField extends Omit<FormField, 'type'> {
   type: 'text' | 'textarea' | 'email' | 'number' | 'select' | 'checkbox' | 'radio' | 'date' | 
         'rating' | 'scale' | 'matrix' | 'file' | 'image' | 'video' | 'url' | 'longtext' | 'group'
   conditionalLogic?: {
@@ -201,7 +201,7 @@ export default function AdvancedFormBuilder({
             conditionalLogic: undefined,
             helpText: undefined
           },
-          helpText: validation.helpText || f.helpText
+          helpText: (validation as any).helpText || f.helpText
         } as AdvancedFormField
       })
       setFields(parsedFields)
@@ -363,7 +363,7 @@ export default function AdvancedFormBuilder({
     try {
       // Convert AdvancedFormField back to FormField for storage
       // Store conditional logic and properties in validation object as metadata
-      const formFields: FormField[] = fields.map(({ order, conditionalLogic, properties, helpText, ...field }) => ({
+      const formFields = fields.map(({ order, conditionalLogic, properties, helpText, ...field }) => ({
         ...field,
         validation: {
           ...field.validation,
@@ -371,7 +371,7 @@ export default function AdvancedFormBuilder({
           conditionalLogic: conditionalLogic ? JSON.stringify(conditionalLogic) : undefined,
           helpText: helpText
         } as any
-      }))
+      })) as FormField[]
 
       // Store theme in description as JSON (temporary solution until schema update)
       const themeJson = JSON.stringify(theme)
@@ -388,7 +388,7 @@ export default function AdvancedFormBuilder({
 
       if (form) {
         // Update existing form
-        const result = await updateForm(form.id, formData)
+        const result = await updateForm(form.id, formData, session.user.id)
         if (result.success) {
           onFormCreated()
           onClose()

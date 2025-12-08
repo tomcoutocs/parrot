@@ -48,7 +48,9 @@ interface SubQuestion {
   order: number
 }
 
-interface ExtendedFormField extends FormField {
+interface ExtendedFormField extends Omit<FormField, 'type'> {
+  type: 'text' | 'textarea' | 'email' | 'number' | 'select' | 'checkbox' | 'radio' | 'date' | 
+        'rating' | 'scale' | 'matrix' | 'file' | 'image' | 'video' | 'url' | 'longtext' | 'group'
   conditionalLogic?: {
     showIf?: {
       fieldId: string
@@ -87,12 +89,12 @@ export default function ConversationalFormModal({
       const initialData: Record<string, unknown> = {}
       const extendedFields = form.fields as ExtendedFormField[]
       
-      form.fields.forEach(field => {
+      extendedFields.forEach(field => {
         if (field.type === 'checkbox') {
           initialData[field.id] = false
-        } else if (field.type === 'group' && (field as ExtendedFormField).properties?.subQuestions) {
+        } else if (field.type === 'group' && field.properties?.subQuestions) {
           // Initialize sub-questions
-          (field as ExtendedFormField).properties?.subQuestions.forEach(subQ => {
+          field.properties.subQuestions.forEach(subQ => {
             if (subQ.type === 'checkbox') {
               initialData[`${field.id}_${subQ.id}`] = []
             } else {
@@ -472,7 +474,7 @@ export default function ConversationalFormModal({
           <div className="space-y-4">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>{min}</span>
-              <span className="text-lg font-semibold">{value || min}</span>
+              <span className="text-lg font-semibold">{Number(value) || min}</span>
               <span>{max}</span>
             </div>
             <Input

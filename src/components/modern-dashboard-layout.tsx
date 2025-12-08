@@ -286,7 +286,7 @@ export function ModernDashboardLayout({
     if (directTabs.includes(view)) {
       // These are direct tabs, not admin views
       setViewMode("admin")
-      setAdminView(undefined) // Clear admin view for direct tabs
+      setAdminView("") // Clear admin view for direct tabs
       onTabChange(view)
       setCurrentSpace(null)
       onSpaceChange?.(null)

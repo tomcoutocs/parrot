@@ -25,6 +25,19 @@ import { Loader2, X, CheckCircle } from 'lucide-react'
 import { Form, FormField } from '@/lib/supabase'
 import { toastSuccess, toastError } from '@/lib/toast'
 
+interface ExtendedFormField extends Omit<FormField, 'type'> {
+  type: 'text' | 'textarea' | 'email' | 'number' | 'select' | 'checkbox' | 'radio' | 'date' | 
+        'rating' | 'scale' | 'matrix' | 'file' | 'image' | 'video' | 'url' | 'longtext' | 'group'
+  properties?: {
+    subQuestions?: Array<{
+      id: string
+      label: string
+      type: string
+      required: boolean
+    }>
+  }
+}
+
 interface FillFormModalProps {
   isOpen: boolean
   onClose: () => void
@@ -265,7 +278,8 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
   }
 
   const validateForm = () => {
-    for (const field of form.fields) {
+    const extendedFields = form.fields as ExtendedFormField[]
+    for (const field of extendedFields) {
       if (field.required) {
         // Handle group fields differently - check sub-questions instead
         if (field.type === 'group') {
@@ -369,7 +383,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
     }
   }
 
-  const renderField = (field: FormField & { helpText?: string }) => {
+  const renderField = (field: ExtendedFormField) => {
     const value = formData[field.id]
     const isRequired = field.required
 
@@ -963,7 +977,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
               {/* Form Fields */}
               {form.fields.map((field) => (
                 <div key={field.id}>
-                  {renderField(field as FormField & { helpText?: string })}
+                  {renderField(field as ExtendedFormField)}
                 </div>
               ))}
             </div>

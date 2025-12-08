@@ -229,6 +229,7 @@ export interface FormField {
   required: boolean
   placeholder?: string
   options?: string[] // For select, radio fields
+  helpText?: string
   validation?: {
     min?: number
     max?: number

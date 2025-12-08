@@ -49,6 +49,11 @@ export default function UserSettingsTab() {
       return
     }
 
+    if (!supabase) {
+      toastError('Database connection not available')
+      return
+    }
+
     setSendingResetLink(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(session.user.email, {
