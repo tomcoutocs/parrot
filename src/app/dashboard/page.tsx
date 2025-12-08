@@ -557,6 +557,7 @@ function DashboardContent() {
         'admin': 'users',
         'reports': 'reports',
         'settings': 'settings',
+        'user-settings': 'settings',
         'spaces': 'overview',
         'forms': 'overview',
         'services': 'overview',
