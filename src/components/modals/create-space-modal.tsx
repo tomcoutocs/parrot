@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { createCompany, updateCompanyServices, assignCompanyToInternalUser, updateUser, createDefaultOnboardingProject, createDefaultOnboardingDocument } from "@/lib/database-functions"
+import { createCompany, updateCompanyServices, assignCompanyToInternalUser, updateUser, createDefaultOnboardingProject, createDefaultOnboardingDocument, fetchForms, assignFormToSpace } from "@/lib/database-functions"
 import { useSession } from "@/components/providers/session-provider"
 import { fetchServicesOptimized } from "@/lib/simplified-database-functions"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
@@ -140,6 +140,28 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
           console.error('Error creating default onboarding document:', docError)
           // Don't fail the whole operation, just log the error
         }
+      }
+
+      // Assign onboarding form to the new space
+      try {
+        const allForms = await fetchForms()
+        const onboardingForm = allForms.find(form => 
+          form.title.toLowerCase() === 'onboarding' || 
+          form.title.toLowerCase().includes('onboarding')
+        )
+        
+        if (onboardingForm) {
+          const formAssignmentResult = await assignFormToSpace(onboardingForm.id, companyId)
+          if (!formAssignmentResult.success) {
+            console.error("Failed to assign onboarding form to space:", formAssignmentResult.error)
+            // Don't fail the whole operation, just log the error
+          }
+        } else {
+          console.warn("Onboarding form not found. Skipping form assignment.")
+        }
+      } catch (formError) {
+        console.error('Error assigning onboarding form to space:', formError)
+        // Don't fail the whole operation, just log the error
       }
 
       // Update company services if any are selected

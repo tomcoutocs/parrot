@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "@/components/providers/session-provider"
 import { useRouter } from "next/navigation"
-import { Bell, Settings, ChevronDown, Check, LayoutDashboard, LogOut, Moon, Sun, Monitor } from "lucide-react"
+import { Bell, Settings, ChevronDown, LayoutDashboard, LogOut, User, Check } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -29,12 +29,12 @@ import { ModernCalendarTab } from "./modern-calendar-tab"
 import { ModernReportsTab } from "./modern-reports-tab"
 import { ModernUsersTab } from "./modern-users-tab"
 import { ModernSettingsTab } from "./modern-settings-tab"
+import LazyTabComponent from "./lazy-tab-loader"
 import { fetchCompaniesOptimized, fetchProjectsOptimized } from "@/lib/simplified-database-functions"
 import { Company, Service } from "@/lib/supabase"
 import { getCompanyServices } from "@/lib/database-functions"
 import { useEffect } from "react"
 import { NotificationBell } from "@/components/notifications/notification-bell"
-import { useTheme } from "@/components/providers/theme-provider"
 import { useAuth } from "@/components/providers/session-provider"
 import { LogoutConfirmationDialog } from "@/components/ui/confirmation-dialog"
 
@@ -56,7 +56,6 @@ export function ModernDashboardLayout({
   const { data: session } = useSession()
   const auth = useAuth()
   const router = useRouter()
-  const { theme, setTheme } = useTheme()
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
   const [viewMode, setViewMode] = useState<"admin" | "client">("admin")
   const [adminView, setAdminView] = useState("dashboard")
@@ -76,9 +75,12 @@ export function ModernDashboardLayout({
     // Ensure we have session before determining viewMode
     if (!session || !userRole) return
     
-    // user-dashboard tab should always be in client mode (it's the personal dashboard)
-    if (activeTab === "user-dashboard") {
+    // user-dashboard and user-settings tabs should always be in client mode and clear space
+    if (activeTab === "user-dashboard" || activeTab === "user-settings") {
       setViewMode("client")
+      if (currentSpaceId) {
+        onSpaceChange?.(null)
+      }
       return
     }
     
@@ -90,9 +92,9 @@ export function ModernDashboardLayout({
     }
     
     // Admin-only tabs should be in admin mode only when no space is selected
-    // These tabs require admin mode: spaces, companies, project-overview, debug
+    // These tabs require admin mode: spaces, companies, forms, project-overview, debug
     // Note: "admin" tab is handled differently - it can be in client mode when in a space
-    const adminOnlyTabs = ['spaces', 'companies', 'project-overview', 'debug']
+    const adminOnlyTabs = ['spaces', 'companies', 'forms', 'project-overview', 'debug']
     if (adminOnlyTabs.includes(activeTab)) {
       setViewMode("admin")
       return
@@ -279,6 +281,22 @@ export function ModernDashboardLayout({
     console.log('ModernDashboardLayout: handleAdminViewChange called with view:', view)
     console.log('ModernDashboardLayout: Current currentSpaceId:', currentSpaceId)
     
+    // Direct tabs that don't need admin view mapping
+    const directTabs = ['forms', 'companies', 'project-overview', 'debug']
+    if (directTabs.includes(view)) {
+      // These are direct tabs, not admin views
+      setViewMode("admin")
+      setAdminView(undefined) // Clear admin view for direct tabs
+      onTabChange(view)
+      setCurrentSpace(null)
+      onSpaceChange?.(null)
+      if (router) {
+        console.log('ModernDashboardLayout: Navigating to direct tab:', view)
+        router.replace(`/dashboard?tab=${view}`)
+      }
+      return
+    }
+    
     // Map admin views to existing tabs for URL/routing
     // All admin views use "spaces" tab (which is the admin dashboard) except team which uses "admin" tab
     const tabMap: Record<string, string> = {
@@ -314,17 +332,44 @@ export function ModernDashboardLayout({
   }
 
   const handleClientTabChange = (tabId: string) => {
+    // Handle user-settings and user-dashboard directly - these are personal tabs
+    if (tabId === "user-settings" || tabId === "user-dashboard") {
+      setViewMode("client")
+      // Call onTabChange first to set the tab, then clear space
+      onTabChange(tabId)
+      // Clear space after tab change to avoid race conditions
+      if (currentSpaceId) {
+        // Use setTimeout to ensure tab change completes first
+        setTimeout(() => {
+          onSpaceChange?.(null)
+        }, 0)
+      }
+      return
+    }
+    
+    // Map display tab names back to internal tab names
+    const displayToInternalMap: Record<string, string> = {
+      "overview": "dashboard",
+      "tasks": "projects",
+      "forms": "forms",
+      "documents": "documents",
+      "calendar": "company-calendars",
+      "reports": "reports",
+      "users": "admin",
+      "settings": "settings",
+    }
+    const internalTabId = displayToInternalMap[tabId] || tabId
+    
     // If switching to reports and we're in admin mode without a space, switch to client mode
-    if (tabId === "reports" && viewMode === "admin" && !currentSpaceId) {
+    if (internalTabId === "reports" && viewMode === "admin" && !currentSpaceId) {
       setViewMode("client")
     }
     // If switching to settings or users and we have a space, ensure we're in client mode
-    if ((tabId === "settings" || tabId === "users") && currentSpaceId && viewMode === "admin") {
+    if ((internalTabId === "settings" || internalTabId === "admin") && currentSpaceId && viewMode === "admin") {
       setViewMode("client")
     }
-    // Pass through the display tab name to onTabChange
-    // onTabChange (handleModernTabChange) will handle the mapping to internal tab names
-    onTabChange(tabId)
+    // Pass through the internal tab name to onTabChange
+    onTabChange(internalTabId)
   }
 
   // Get space data for display
@@ -415,6 +460,11 @@ export function ModernDashboardLayout({
                   ))}
               </DropdownMenuContent>
             </DropdownMenu>
+          ) : activeTab === "user-settings" ? (
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-muted-foreground" />
+              <h2 className="text-lg font-medium">User Settings</h2>
+            </div>
           ) : (
             <h2 className="text-lg font-medium">Select a Space</h2>
           )}
@@ -428,35 +478,13 @@ export function ModernDashboardLayout({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <div className="px-2 py-1.5">
-                  <div className="text-xs font-medium text-muted-foreground mb-2">Theme</div>
-                  <div className="space-y-1">
-                    <DropdownMenuItem
-                      onClick={() => setTheme('light')}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Sun className="w-4 h-4" />
-                      <span>Light</span>
-                      {theme === 'light' && <Check className="w-4 h-4 ml-auto" />}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setTheme('dark')}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Moon className="w-4 h-4" />
-                      <span>Dark</span>
-                      {theme === 'dark' && <Check className="w-4 h-4 ml-auto" />}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setTheme('system')}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Monitor className="w-4 h-4" />
-                      <span>System</span>
-                      {theme === 'system' && <Check className="w-4 h-4 ml-auto" />}
-                    </DropdownMenuItem>
-                  </div>
-                </div>
+                <DropdownMenuItem
+                  onClick={() => onTabChange('user-settings')}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <User className="w-4 h-4" />
+                  <span>User Settings</span>
+                </DropdownMenuItem>
                 <div className="w-px h-px bg-border mx-2 my-1" />
                 <DropdownMenuItem
                   onClick={() => setShowLogoutDialog(true)}
@@ -501,8 +529,8 @@ export function ModernDashboardLayout({
               </>
             ) : (
               <>
-                {/* Space Overview - Hide for user-dashboard tab */}
-                {spaceData && activeTab !== "user-dashboard" && (
+                {/* Space Overview - Hide for user-dashboard and user-settings tabs */}
+                {spaceData && activeTab !== "user-dashboard" && activeTab !== "user-settings" && (
                   <SpaceOverview
                     companyId={currentSpaceId || undefined}
                     onManagerChange={() => {
@@ -585,8 +613,8 @@ export function ModernDashboardLayout({
                   />
                 )}
 
-                {/* Navigation - Hide for user-dashboard tab */}
-                {activeTab !== "user-dashboard" && (
+                {/* Navigation - Hide for user-dashboard and user-settings tabs */}
+                {activeTab !== "user-dashboard" && activeTab !== "user-settings" && (
                   <ModernNavigation
                     activeTab={(() => {
                       // Map internal tab names to display tab names
@@ -594,6 +622,7 @@ export function ModernDashboardLayout({
                         "dashboard": "overview",
                         "user-dashboard": "dashboard",
                         "projects": "tasks",
+                        "forms": "forms",
                         "documents": "documents",
                         "company-calendars": "calendar",
                         "reports": "reports",
@@ -639,7 +668,9 @@ export function ModernDashboardLayout({
                     }}
                   />
                 )}
-                {activeTab !== "dashboard" && activeTab !== "projects" && activeTab !== "documents" && activeTab !== "company-calendars" && activeTab !== "reports" && activeTab !== "admin" && activeTab !== "settings" && children}
+                {activeTab === "forms" && <LazyTabComponent tabName="forms" currentSpaceId={currentSpaceId} />}
+                {activeTab === "user-settings" && <LazyTabComponent tabName="user-settings" />}
+                {activeTab !== "dashboard" && activeTab !== "projects" && activeTab !== "forms" && activeTab !== "documents" && activeTab !== "company-calendars" && activeTab !== "reports" && activeTab !== "admin" && activeTab !== "settings" && activeTab !== "user-settings" && children}
               </>
             )}
           </div>

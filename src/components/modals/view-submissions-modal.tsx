@@ -38,6 +38,10 @@ interface SubmissionWithUser extends FormSubmission {
     full_name: string
     email: string
   }
+  company?: {
+    id: string
+    name: string
+  }
 }
 
 export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubmissionsModalProps) {
@@ -88,7 +92,7 @@ export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubm
   const exportToCSV = () => {
     if (filteredSubmissions.length === 0) return
 
-    const headers = ['User', 'Email', 'Submitted At']
+    const headers = ['User', 'Email', 'Space', 'Submitted At']
     form.fields.forEach(field => {
       headers.push(field.label)
     })
@@ -99,6 +103,7 @@ export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubm
         const row = [
           submission.user?.full_name || 'Unknown',
           submission.user?.email || 'Unknown',
+          submission.company?.name || 'Admin View',
           format(new Date(submission.submitted_at), 'yyyy-MM-dd HH:mm:ss')
         ]
         
@@ -120,13 +125,15 @@ export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubm
   }
 
   const exportSingleSubmission = (submission: SubmissionWithUser) => {
-    const headers = ['User', 'Email', 'Submitted At']
+    const headers = ['User', 'Email', 'Space', 'Submitted At']
     form.fields.forEach(field => {
       headers.push(field.label)
     })
 
     const row = [
       submission.user?.full_name || 'Unknown',
+      submission.user?.email || 'Unknown',
+      submission.company?.name || 'Admin View',
       submission.user?.email || 'Unknown',
       format(new Date(submission.submitted_at), 'yyyy-MM-dd HH:mm:ss')
     ]
@@ -209,6 +216,7 @@ export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubm
                   <TableHeader>
                     <TableRow>
                       <TableHead>User</TableHead>
+                      <TableHead>Space</TableHead>
                       <TableHead>Submitted</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -224,6 +232,15 @@ export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubm
                             <div className="text-sm text-gray-500">
                               {submission.user?.email || 'No email'}
                             </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {submission.company?.name ? (
+                              <Badge variant="outline">{submission.company.name}</Badge>
+                            ) : (
+                              <span className="text-gray-400">Admin View</span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -269,8 +286,9 @@ export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubm
                         <div>
                           <DialogTitle>Submission Details</DialogTitle>
                           <DialogDescription>
-                            Submitted by {selectedSubmission.user?.full_name} on{' '}
-                            {format(new Date(selectedSubmission.submitted_at), 'MMM d, yyyy HH:mm')}
+                            Submitted by {selectedSubmission.user?.full_name} 
+                            {selectedSubmission.company?.name && ` from ${selectedSubmission.company.name}`}
+                            {' '}on {format(new Date(selectedSubmission.submitted_at), 'MMM d, yyyy HH:mm')}
                           </DialogDescription>
                         </div>
                         <Button
@@ -305,6 +323,20 @@ export default function ViewSubmissionsModal({ isOpen, onClose, form }: ViewSubm
                               <Label className="text-sm font-medium">Email</Label>
                               <p className="text-sm text-gray-600">
                                 {selectedSubmission.user?.email || 'No email'}
+                              </p>
+                            </div>
+                            {selectedSubmission.company && (
+                              <div>
+                                <Label className="text-sm font-medium">Space</Label>
+                                <p className="text-sm text-gray-600">
+                                  {selectedSubmission.company.name}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <Label className="text-sm font-medium">Submitted At</Label>
+                              <p className="text-sm text-gray-600">
+                                {format(new Date(selectedSubmission.submitted_at), 'MMM d, yyyy HH:mm')}
                               </p>
                             </div>
                           </div>

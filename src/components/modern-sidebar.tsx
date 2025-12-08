@@ -16,11 +16,8 @@ import {
   ChevronRight,
   Building2,
   LogOut,
-  Moon,
-  Sun,
-  Monitor,
-  Check,
-  Home
+  Home,
+  User
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -39,7 +36,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useTheme } from "@/components/providers/theme-provider"
 import { LogoutConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { useRouter } from "next/navigation"
 import { CreateSpaceModal } from "@/components/modals/create-space-modal"
@@ -77,7 +73,6 @@ export function ModernSidebar({
   const { data: session } = useSession()
   const auth = useAuth()
   const router = useRouter()
-  const { theme, setTheme } = useTheme()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [spaces, setSpaces] = useState<Company[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -121,6 +116,7 @@ export function ModernSidebar({
     { id: "calendar", label: "Calendar", icon: Calendar },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "team", label: "Team", icon: Users },
+    { id: "forms", label: "Forms", icon: FileText },
   ]
 
   const bottomNavigation: NavItem[] = [
@@ -220,7 +216,12 @@ export function ModernSidebar({
             <div className="space-y-0.5">
               {adminNavigation.map((item) => {
                 const Icon = item.icon
-                const isActive = (viewMode === "admin" && adminView === item.id)
+                // For direct tabs (forms, companies, etc.), check activeTab instead of adminView
+                // But only highlight if we're in admin view (no active space)
+                const directTabs = ['forms', 'companies', 'project-overview', 'debug']
+                const isActive = directTabs.includes(item.id) 
+                  ? (activeTab === item.id && !activeSpace && viewMode === "admin")
+                  : (viewMode === "admin" && adminView === item.id)
                 const navButton = (
                   <button
                     key={item.id}
@@ -438,35 +439,13 @@ export function ModernSidebar({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align={isCollapsed ? "end" : "start"} side={isCollapsed ? "right" : "top"} className="w-56">
-                      <div className="px-2 py-1.5">
-                        <div className="text-xs font-medium text-muted-foreground mb-2">Theme</div>
-                        <div className="space-y-1">
-                          <DropdownMenuItem
-                            onClick={() => setTheme('light')}
-                            className="flex items-center gap-2 cursor-pointer"
-                          >
-                            <Sun className="w-4 h-4" />
-                            <span>Light</span>
-                            {theme === 'light' && <Check className="w-4 h-4 ml-auto" />}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setTheme('dark')}
-                            className="flex items-center gap-2 cursor-pointer"
-                          >
-                            <Moon className="w-4 h-4" />
-                            <span>Dark</span>
-                            {theme === 'dark' && <Check className="w-4 h-4 ml-auto" />}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setTheme('system')}
-                            className="flex items-center gap-2 cursor-pointer"
-                          >
-                            <Monitor className="w-4 h-4" />
-                            <span>System</span>
-                            {theme === 'system' && <Check className="w-4 h-4 ml-auto" />}
-                          </DropdownMenuItem>
-                        </div>
-                      </div>
+                      <DropdownMenuItem
+                        onClick={() => onTabChange?.('user-settings')}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
+                        <User className="w-4 h-4" />
+                        <span>User Settings</span>
+                      </DropdownMenuItem>
                       <div className="h-px bg-border my-1" />
                       <DropdownMenuItem
                         onClick={() => setShowLogoutDialog(true)}

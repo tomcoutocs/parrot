@@ -54,13 +54,14 @@ interface DashboardLayoutProps {
   onSpaceChange?: (spaceId: string | null) => void
 }
 
-export type TabType = 'spaces' | 'dashboard' | 'user-dashboard' | 'projects' | 'forms' | 'services' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug' | 'reports' | 'settings'
+export type TabType = 'spaces' | 'dashboard' | 'user-dashboard' | 'projects' | 'forms' | 'services' | 'company-calendars' | 'documents' | 'admin' | 'companies' | 'project-overview' | 'debug' | 'reports' | 'settings' | 'user-settings'
 
 // Admin-only navigation items (shown when not in a space)
 const adminNavItems = [
   { id: 'spaces' as TabType, label: 'Spaces', icon: Building2, roles: ['admin'] },
   { id: 'admin' as TabType, label: 'Users', icon: Users, roles: ['admin'] },
   { id: 'companies' as TabType, label: 'Companies', icon: Building2, roles: ['admin'] },
+  { id: 'forms' as TabType, label: 'Forms', icon: FileText, roles: ['admin'] },
   { id: 'project-overview' as TabType, label: 'Project Overview', icon: TrendingUp, roles: ['admin'] },
   { id: 'debug' as TabType, label: 'Debug', icon: Bug, roles: ['admin'] },
 ]

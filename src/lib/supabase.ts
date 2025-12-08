@@ -250,8 +250,18 @@ export interface FormSubmission {
   id: string
   form_id: string
   user_id: string
+  company_id?: string | null
   submission_data: Record<string, unknown>
   submitted_at: string
+  user?: {
+    id: string
+    full_name: string
+    email: string
+  }
+  company?: {
+    id: string
+    name: string
+  }
 }
 
 export interface FormWithDetails extends Form {

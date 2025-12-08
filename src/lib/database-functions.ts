@@ -2363,6 +2363,87 @@ export async function fetchForms(): Promise<Form[]> {
   }
 }
 
+export async function fetchFormsForSpace(spaceId: string): Promise<Form[]> {
+  if (!supabase) {
+    console.warn('Supabase not configured')
+    return []
+  }
+
+  try {
+    console.log('Fetching forms for space:', spaceId)
+    const { data, error } = await supabase
+      .from('form_spaces')
+      .select(`
+        form_id,
+        forms:form_id (*)
+      `)
+      .eq('company_id', spaceId)
+
+    if (error) {
+      console.error('Error fetching forms for space:', error)
+      return []
+    }
+
+    // Extract forms from the joined data
+    const forms = (data || []).map((item: any) => item.forms).filter(Boolean)
+    return forms || []
+  } catch (error) {
+    console.error('Error fetching forms for space:', error)
+    return []
+  }
+}
+
+export async function assignFormToSpace(formId: string, spaceId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    console.warn('Supabase not configured')
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    const { error } = await supabase
+      .from('form_spaces')
+      .insert({
+        form_id: formId,
+        company_id: spaceId
+      })
+
+    if (error) {
+      console.error('Error assigning form to space:', error)
+      return { success: false, error: error.message || 'Failed to assign form to space' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error assigning form to space:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+  }
+}
+
+export async function unassignFormFromSpace(formId: string, spaceId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    console.warn('Supabase not configured')
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    const { error } = await supabase
+      .from('form_spaces')
+      .delete()
+      .eq('form_id', formId)
+      .eq('company_id', spaceId)
+
+    if (error) {
+      console.error('Error unassigning form from space:', error)
+      return { success: false, error: error.message || 'Failed to unassign form from space' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error unassigning form from space:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+  }
+}
+
 export async function createForm(formData: {
   title: string
   description?: string
@@ -2463,35 +2544,140 @@ export async function deleteForm(formId: string): Promise<{ success: boolean; er
   }
 }
 
-export async function submitForm(formId: string, submissionData: Record<string, unknown>, userId: string): Promise<{ success: boolean; data?: FormSubmission; error?: string }> {
+export async function submitForm(formId: string, submissionData: Record<string, unknown>, userId: string, spaceId?: string | null): Promise<{ success: boolean; data?: FormSubmission; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Submitting form:', formId, submissionData)
+    console.log('Submitting form:', formId, submissionData, 'from space:', spaceId)
     
-    const { data, error } = await supabase
-      .from('form_submissions')
-      .insert({
+    // Use database function to bypass PostgREST checks that might reference forms.company_id
+    const { data, error: rpcError } = await supabase.rpc('submit_form_submission', {
+      p_form_id: formId,
+      p_user_id: userId,
+      p_submission_data: submissionData,
+      p_company_id: spaceId || null
+    })
+
+    if (rpcError) {
+      console.error('Error calling submit_form_submission function:', {
+        message: rpcError.message,
+        details: rpcError.details,
+        hint: rpcError.hint,
+        code: rpcError.code,
+        fullError: JSON.stringify(rpcError, null, 2)
+      })
+      
+      // Fallback to direct insert if function doesn't exist
+      console.log('Falling back to direct insert...')
+      const { error: insertError } = await supabase
+        .from('form_submissions')
+        .insert({
+          form_id: formId,
+          user_id: userId,
+          submission_data: submissionData,
+          company_id: spaceId || null
+        })
+
+      if (insertError) {
+        console.error('Error inserting form submission:', {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code,
+          fullError: JSON.stringify(insertError, null, 2)
+        })
+        return { 
+          success: false, 
+          error: insertError.message || insertError.details || insertError.hint || 'Failed to submit form' 
+        }
+      }
+
+      // Construct the submission data manually if direct insert succeeded
+      const submission: FormSubmission = {
+        id: '', // Will be generated by database
         form_id: formId,
         user_id: userId,
-        submission_data: submissionData
-      })
-      .select()
-      .single()
+        company_id: spaceId || null,
+        submission_data: submissionData,
+        submitted_at: new Date().toISOString()
+      }
 
-    if (error) {
-      console.error('Error submitting form:', error)
-      return { success: false, error: error.message || 'Failed to submit form' }
+      console.log('Form submitted successfully (direct insert fallback)')
+      return { success: true, data: submission }
     }
 
-    console.log('Form submitted successfully:', data)
-    return { success: true, data }
+    // Function call succeeded - data is now the UUID of the inserted row
+    if (data) {
+      const submissionId = typeof data === 'string' ? data : String(data)
+      // Construct submission object with the returned ID
+      const submission: FormSubmission = {
+        id: submissionId,
+        form_id: formId,
+        user_id: userId,
+        company_id: spaceId || null,
+        submission_data: submissionData,
+        submitted_at: new Date().toISOString()
+      }
+      console.log('Form submitted successfully via function, ID:', submissionId)
+      return { success: true, data: submission }
+    }
+
+    // Function returned no data (shouldn't happen)
+    console.warn('submit_form_submission returned no data')
+    const submission: FormSubmission = {
+      id: '',
+      form_id: formId,
+      user_id: userId,
+      company_id: spaceId || null,
+      submission_data: submissionData,
+      submitted_at: new Date().toISOString()
+    }
+    return { success: true, data: submission }
   } catch (error) {
-    console.error('Error submitting form:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+    console.error('Error submitting form (catch block):', {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'An unexpected error occurred' 
+    }
+  }
+}
+
+export async function fetchUserFormSubmissions(userId: string): Promise<FormSubmission[]> {
+  if (!supabase) {
+    console.warn('Supabase not configured')
+    return []
+  }
+
+  try {
+    console.log('Fetching user form submissions:', userId)
+    const { data, error } = await supabase
+      .from('form_submissions')
+      .select(`
+        *,
+        form:forms(id, title, description),
+        company:companies!form_submissions_company_id_fkey(id, name)
+      `)
+      .eq('user_id', userId)
+      .order('submitted_at', { ascending: false })
+
+    console.log('User form submissions query result:', { data, error })
+
+    if (error) {
+      console.error('Error fetching user form submissions:', error)
+      return []
+    }
+
+    return (data || []) as FormSubmission[]
+  } catch (error) {
+    console.error('Error fetching user form submissions:', error)
+    return []
   }
 }
 
@@ -2507,7 +2693,8 @@ export async function fetchFormSubmissions(formId: string): Promise<FormSubmissi
       .from('form_submissions')
       .select(`
         *,
-        user:users!form_submissions_user_id_fkey(id, full_name, email)
+        user:users!form_submissions_user_id_fkey(id, full_name, email),
+        company:companies!form_submissions_company_id_fkey(id, name)
       `)
       .eq('form_id', formId)
       .order('submitted_at', { ascending: false })

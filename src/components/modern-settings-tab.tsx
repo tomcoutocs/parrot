@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign, Trash2, AlertTriangle, User, Mail, X, CheckCircle } from "lucide-react"
+import { Save, Building2, Globe, Phone, MapPin, Briefcase, CheckCircle2, XCircle, Users, Key, Lock, DollarSign, Trash2, AlertTriangle, User, Mail, X, CheckCircle, FileText, Eye, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,7 +43,6 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState("")
   const [deleting, setDeleting] = useState(false)
-  const [sendingResetLink, setSendingResetLink] = useState(false)
   const [showGoogleAdsModal, setShowGoogleAdsModal] = useState(false)
   const [showMetaAdsModal, setShowMetaAdsModal] = useState(false)
   const [showShopifyModal, setShowShopifyModal] = useState(false)
@@ -93,6 +92,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
       })
     }
   }, [activeSpace])
+
 
   const loadData = async () => {
     if (!activeSpace) return
@@ -293,41 +293,6 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
     }))
   }
 
-  const handleSendPasswordReset = async () => {
-    if (!session?.user?.email) {
-      toastError('Unable to send reset link. Please log in again.')
-      return
-    }
-
-    setSendingResetLink(true)
-    try {
-      const response = await fetch('/api/password-reset', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: session.user.email
-        })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to send reset link')
-      }
-
-      toastSuccess('Password reset link sent!', {
-        description: 'Check your email for instructions to reset your password.'
-      })
-    } catch (error) {
-      toastError('Failed to send password reset link', {
-        description: error instanceof Error ? error.message : 'Please try again later.'
-      })
-    } finally {
-      setSendingResetLink(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -379,61 +344,6 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         </div>
       </div>
 
-      {/* User Account Settings */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <User className="w-4 h-4" />
-            Account Settings
-          </CardTitle>
-          <CardDescription>
-            Manage your account preferences and security
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-muted-foreground" />
-                <Label className="text-sm font-medium">Email Address</Label>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {session?.user?.email || 'Not available'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-muted-foreground" />
-                <Label className="text-sm font-medium">Password</Label>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Change your password to keep your account secure
-              </p>
-            </div>
-            <Button 
-              onClick={handleSendPasswordReset}
-              disabled={sendingResetLink}
-              variant="outline"
-              className="gap-2"
-            >
-              {sendingResetLink ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Key className="w-4 h-4" />
-                  Send Reset Link
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Basic Information */}

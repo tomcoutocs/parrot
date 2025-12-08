@@ -15,6 +15,7 @@ import DocumentsTab from '@/components/tabs/documents-tab'
 import ProjectOverviewTab from '@/components/tabs/project-overview-tab'
 import DebugTab from '@/components/tabs/debug-tab'
 import SpacesTab from '@/components/tabs/spaces-tab'
+import UserSettingsTab from '@/components/tabs/user-settings-tab'
 
 
 // Error boundary for lazy loaded components
@@ -74,7 +75,8 @@ const tabComponents: Record<string, ComponentType<any>> = {
   admin: UsersTab,
   companies: CompaniesTab,
   'project-overview': ProjectOverviewTab,
-  debug: DebugTab
+  debug: DebugTab,
+  'user-settings': UserSettingsTab
 }
 
 // Lazy loaded tab wrapper
@@ -166,6 +168,18 @@ export function LazyTabComponent({
         <TabComponent 
           onBreadcrumbContextChange={onBreadcrumbContextChange}
           currentSpaceId={currentSpaceId}
+        />
+      </TabErrorBoundary>
+    )
+  }
+
+  // Handle forms tab with currentSpaceId prop
+  if (tabName === 'forms') {
+    return (
+      <TabErrorBoundary>
+        <TabComponent 
+          currentSpaceId={currentSpaceId}
+          onBreadcrumbContextChange={onBreadcrumbContextChange}
         />
       </TabErrorBoundary>
     )

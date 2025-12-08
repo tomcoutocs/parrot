@@ -26,6 +26,7 @@ interface ModernNavigationProps {
 const navigationItems: NavigationItem[] = [
   { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
   { id: "tasks", label: "Projects", icon: <CheckSquare className="w-4 h-4" /> },
+  { id: "forms", label: "Forms", icon: <FileText className="w-4 h-4" /> },
   { id: "documents", label: "Documents", icon: <FileText className="w-4 h-4" /> },
   { id: "calendar", label: "Calendar", icon: <Calendar className="w-4 h-4" /> },
   { id: "reports", label: "Reports", icon: <BarChart3 className="w-4 h-4" /> },

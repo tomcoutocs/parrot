@@ -18,7 +18,8 @@ import {
   Hash,
   List,
   CheckSquare,
-  MoreVertical
+  MoreVertical,
+  X
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -56,39 +57,67 @@ import {
   updateForm, 
   deleteForm,
   submitForm,
-  fetchFormSubmissions
+  fetchFormSubmissions,
+  fetchFormsForSpace,
+  assignFormToSpace,
+  unassignFormFromSpace
 } from '@/lib/database-functions'
-import CreateFormModal from '@/components/modals/create-form-modal'
-import EditFormModal from '@/components/modals/edit-form-modal'
+import AdvancedFormBuilder from '@/components/modals/advanced-form-builder'
 import ViewSubmissionsModal from '@/components/modals/view-submissions-modal'
 import FillFormModal from '@/components/modals/fill-form-modal'
+import ConversationalFormModal from '@/components/modals/conversational-form-modal'
 
-export default function FormsTab() {
+interface FormsTabProps {
+  currentSpaceId?: string | null
+}
+
+export default function FormsTab({ currentSpaceId }: FormsTabProps) {
   const { data: session } = useSession()
   const [forms, setForms] = useState<Form[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [allForms, setAllForms] = useState<Form[]>([]) // Store all forms for admin/manager view
+  const [assignedFormIds, setAssignedFormIds] = useState<Set<string>>(new Set())
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showSubmissionsModal, setShowSubmissionsModal] = useState(false)
   const [showFillModal, setShowFillModal] = useState(false)
+  const [showAssignModal, setShowAssignModal] = useState(false)
   const [selectedForm, setSelectedForm] = useState<Form | null>(null)
 
   const isAdmin = session?.user?.role === 'admin'
+  const isManager = session?.user?.role === 'manager'
+  const canManageForms = isAdmin || isManager
 
-  // Load forms on component mount
+  // Load forms on component mount and when space changes
   useEffect(() => {
     loadForms()
-  }, [])
+  }, [currentSpaceId])
 
   const loadForms = async () => {
     setLoading(true)
     try {
       const formsData = await fetchForms()
-      setForms(formsData)
+      setAllForms(formsData)
+      
+      // If in a space, load assigned forms for that space
+      if (currentSpaceId) {
+        const assigned = await fetchFormsForSpace(currentSpaceId)
+        setAssignedFormIds(new Set(assigned.map(f => f.id)))
+        // Show all forms to managers/admins (so they can assign/remove), only assigned to regular users
+        if (canManageForms) {
+          setForms(formsData) // Show all forms for managers/admins
+        } else {
+          setForms(formsData.filter(f => assigned.some(af => af.id === f.id)))
+        }
+      } else {
+        // Admin view (no space) - show all forms
+        setForms(formsData)
+        setAssignedFormIds(new Set())
+      }
     } catch (error) {
       console.error('Error loading forms:', error)
       toastError('Failed to load forms', {
@@ -143,12 +172,53 @@ export default function FormsTab() {
   }
 
   const handleFillForm = (form: Form) => {
+    console.log('handleFillForm called with form:', form.title)
     setSelectedForm(form)
     setShowFillModal(true)
+    console.log('Modal state set - selectedForm:', form.id, 'showFillModal: true')
   }
 
   const handleFormSubmitted = async () => {
     toastSuccess('Form submitted successfully')
+  }
+
+  const handleToggleFormAssignment = async (form: Form) => {
+    if (!currentSpaceId) return
+
+    const isAssigned = assignedFormIds.has(form.id)
+    
+    try {
+      if (isAssigned) {
+        const result = await unassignFormFromSpace(form.id, currentSpaceId)
+        if (result.success) {
+          setAssignedFormIds(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(form.id)
+            return newSet
+          })
+          // Reload forms to update the display
+          await loadForms()
+          toastSuccess('Form unassigned from space')
+        } else {
+          toastError(result.error || 'Failed to unassign form')
+        }
+      } else {
+        const result = await assignFormToSpace(form.id, currentSpaceId)
+        if (result.success) {
+          setAssignedFormIds(prev => new Set(prev).add(form.id))
+          // Reload forms to update the display
+          await loadForms()
+          toastSuccess('Form assigned to space')
+        } else {
+          toastError(result.error || 'Failed to assign form')
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling form assignment:', error)
+      toastError('An error occurred', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    }
   }
 
   const filteredForms = forms.filter(form => {
@@ -197,21 +267,54 @@ export default function FormsTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Show form builder full-page when creating or editing */}
+      {showCreateModal && (
+        <AdvancedFormBuilder
+          isOpen={true}
+          onClose={() => setShowCreateModal(false)}
+          onFormCreated={handleFormCreated}
+        />
+      )}
+
+      {showEditModal && selectedForm && (
+        <AdvancedFormBuilder
+          isOpen={true}
+          onClose={() => {
+            setShowEditModal(false)
+            setSelectedForm(null)
+          }}
+          onFormCreated={handleFormUpdated}
+          form={selectedForm}
+        />
+      )}
+
+      {/* Forms list - hidden when builder is open */}
+      {(showCreateModal || (showEditModal && selectedForm)) ? null : (
+        <>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Forms</h2>
           <p className="text-gray-600">
-            {isAdmin ? 'Create and manage forms for your clients' : 'Fill out forms from your company'}
+            {currentSpaceId 
+              ? (canManageForms 
+                  ? 'Assign or remove forms from this space' 
+                  : 'Fill out forms from your company')
+              : (isAdmin 
+                  ? 'Create and manage forms for your clients' 
+                  : 'Fill out forms from your company')
+            }
           </p>
         </div>
-        {isAdmin && (
-          <Button variant="orange" onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Form
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && !currentSpaceId && (
+            <Button variant="orange" onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Form
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -243,143 +346,291 @@ export default function FormsTab() {
 
       {/* Forms Grid */}
       {filteredForms.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title={isAdmin ? 'No forms created yet' : 'No forms available'}
-          description={isAdmin 
-            ? 'Create your first form to start collecting information from clients'
-            : 'Check back later for forms from your company'
+        (() => {
+          // Determine the appropriate empty state based on context
+          const isInSpace = currentSpaceId !== null && currentSpaceId !== undefined
+          const hasFormsInSystem = allForms.length > 0
+          const hasAssignedForms = assignedFormIds.size > 0
+          
+          // Case 1: Regular user in a space - no forms assigned to this space
+          if (isInSpace && !canManageForms) {
+            if (hasFormsInSystem && !hasAssignedForms) {
+              // Forms exist but none assigned to this space
+              return (
+                <EmptyState
+                  icon={FileText}
+                  title="No forms available for this space"
+                  description="There are no forms currently assigned to this space. Contact your manager or administrator to request forms."
+                />
+              )
+            } else {
+              // No forms in system at all
+              return (
+                <EmptyState
+                  icon={FileText}
+                  title="No forms available"
+                  description="Check back later for forms from your company"
+                />
+              )
+            }
           }
-          actionLabel={isAdmin ? 'Create Form' : undefined}
-          onAction={isAdmin ? () => {/* Add create form logic */} : undefined}
-        />
+          
+          // Case 2: Manager/Admin in a space - show all forms (they can assign/remove)
+          if (isInSpace && canManageForms) {
+            if (!hasFormsInSystem) {
+              // No forms in system at all
+              return (
+                <EmptyState
+                  icon={FileText}
+                  title="No forms available"
+                  description="There are no forms in the system. Forms must be created in the admin view before they can be assigned to spaces."
+                />
+              )
+            }
+            // If we have forms but none assigned, they'll still see them in the list with "Assign" buttons
+          }
+          
+          // Case 3: Admin view (no space) - no forms created yet
+          if (!isInSpace && isAdmin) {
+            return (
+              <EmptyState
+                icon={FileText}
+                title="No forms created yet"
+                description="Create your first form to start collecting information from clients"
+                actionLabel="Create Form"
+                onAction={() => setShowCreateModal(true)}
+              />
+            )
+          }
+          
+          // Case 4: Regular user, no space, no forms
+          if (!isInSpace && !isAdmin) {
+            return (
+              <EmptyState
+                icon={FileText}
+                title="No forms available"
+                description="Check back later for forms from your company"
+              />
+            )
+          }
+          
+          // Default case: No forms available
+          return (
+            <EmptyState
+              icon={FileText}
+              title="No forms available"
+              description="Check back later for forms from your company"
+            />
+          )
+        })()
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredForms.map((form) => (
-            <Card key={form.id} className="parrot-card-enhanced hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <FileText className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
+        <div className={currentSpaceId && canManageForms 
+          ? "space-y-2" 
+          : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"}>
+          {filteredForms.map((form) => {
+            // Simplified view for managers/admins in a space
+            if (currentSpaceId && canManageForms) {
+              return (
+                <Card key={form.id} className="parrot-card-enhanced hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
                       <CardTitle className="text-lg">{form.title}</CardTitle>
-                      <CardDescription className="line-clamp-2">
-                        {form.description || 'No description available'}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <Badge className={getStatusColor(form.is_active)}>
-                    {form.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {/* Form Fields Preview */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-700">Fields:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {form.fields.slice(0, 3).map((field, index) => (
-                        <Badge key={field.id} variant="outline" className="text-xs">
-                          {field.label}
-                        </Badge>
-                      ))}
-                      {form.fields.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{form.fields.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Form Actions */}
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-500">
-                      Created {format(new Date(form.created_at), 'MMM d, yyyy')}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isAdmin ? (
-                        <>
+                      <div className="flex items-center gap-2">
+                        {assignedFormIds.has(form.id) && (
+                          <Button
+                            size="sm"
+                            variant="orange"
+                            onClick={() => handleFillForm(form)}
+                          >
+                            <FileText className="h-4 w-4 mr-1" />
+                            Fill Form
+                          </Button>
+                        )}
+                        {assignedFormIds.has(form.id) ? (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleViewSubmissions(form)}
+                            onClick={() => handleToggleFormAssignment(form)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Submissions
+                            <X className="h-4 w-4 mr-1" />
+                            Remove
                           </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="outline" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditForm(form)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit Form
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDeleteForm(form)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Form
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="orange"
-                          onClick={() => handleFillForm(form)}
-                        >
-                          <FileText className="h-4 w-4 mr-1" />
-                          Fill Form
-                        </Button>
-                      )}
+                        ) : (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleToggleFormAssignment(form)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Assign
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            }
+
+            // Full view for other contexts
+            return (
+              <Card 
+                key={form.id}
+                className="parrot-card-enhanced hover:shadow-md transition-shadow"
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <FileText className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{form.title}</CardTitle>
+                        <CardDescription className="line-clamp-2">
+                          {form.description || 'No description available'}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge className={getStatusColor(form.is_active)}>
+                      {form.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {/* Form Fields Preview */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Fields:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {form.fields.slice(0, 3).map((field, index) => (
+                          <Badge key={field.id} variant="outline" className="text-xs">
+                            {field.label}
+                          </Badge>
+                        ))}
+                        {form.fields.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{form.fields.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Form Actions */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-500">
+                        Created {format(new Date(form.created_at), 'MMM d, yyyy')}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {currentSpaceId && assignedFormIds.has(form.id) ? (
+                          // Any user in a space - show fill form button if assigned
+                          <Button
+                            size="sm"
+                            variant="orange"
+                            onClick={() => handleFillForm(form)}
+                          >
+                            <FileText className="h-4 w-4 mr-1" />
+                            Fill Form
+                          </Button>
+                        ) : isAdmin && !currentSpaceId ? (
+                          // Admin view (no space) - show full management options
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewSubmissions(form)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Submissions
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEditForm(form)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit Form
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteForm(form)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Form
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
+        </>
+      )}
+
 
       {/* Modals */}
-      <CreateFormModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onFormCreated={handleFormCreated}
-      />
-
       {selectedForm && (
         <>
-          <EditFormModal
-            isOpen={showEditModal}
-            onClose={() => setShowEditModal(false)}
-            onFormUpdated={handleFormUpdated}
-            form={selectedForm}
-          />
-
           <ViewSubmissionsModal
             isOpen={showSubmissionsModal}
             onClose={() => setShowSubmissionsModal(false)}
             form={selectedForm}
           />
 
-          <FillFormModal
-            isOpen={showFillModal}
-            onClose={() => setShowFillModal(false)}
-            onFormSubmitted={handleFormSubmitted}
-            form={selectedForm}
-          />
+          {(() => {
+            // Parse theme from form description
+            let formTheme = {
+              primaryColor: '#f97316',
+              backgroundColor: '#ffffff',
+              textColor: '#000000',
+              fontFamily: 'inherit',
+              conversational: false
+            }
+            
+            if (selectedForm.description) {
+              try {
+                const themeMatch = selectedForm.description.match(/__THEME__({.*?})__THEME__/)
+                if (themeMatch) {
+                  formTheme = JSON.parse(themeMatch[1])
+                }
+              } catch (e) {
+                // Ignore parse errors, use defaults
+              }
+            }
+
+            return formTheme.conversational ? (
+              <ConversationalFormModal
+                isOpen={showFillModal}
+                onClose={() => setShowFillModal(false)}
+                onFormSubmitted={handleFormSubmitted}
+                form={selectedForm}
+                spaceId={currentSpaceId}
+                theme={formTheme}
+              />
+            ) : (
+              <FillFormModal
+                isOpen={showFillModal}
+                onClose={() => setShowFillModal(false)}
+                onFormSubmitted={handleFormSubmitted}
+                form={selectedForm}
+                spaceId={currentSpaceId}
+                theme={formTheme}
+              />
+            )
+          })()}
         </>
       )}
     </div>
