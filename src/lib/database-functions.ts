@@ -1379,37 +1379,102 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
   try {
     await setAppContext()
     
+    // Verify current user has admin permissions
+    const currentUser = getCurrentUser()
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Only admins can delete users' }
+    }
+    
     // Get user info before deleting for activity log
-    const { data: userToDelete } = await supabase
+    const { data: userToDelete, error: fetchError } = await supabase
       .from('users')
       .select('id, email, full_name, company_id')
       .eq('id', userId)
       .single()
     
-    // Delete activity logs that reference this user first
-    // This prevents the foreign key constraint violation
+    if (fetchError || !userToDelete) {
+      return { success: false, error: fetchError?.message || 'User not found' }
+    }
+    
+    // Prevent users from deleting themselves
+    if (userId === currentUser.id) {
+      return { success: false, error: 'You cannot delete your own account' }
+    }
+    
+    // Delete related data that references this user (in order of dependencies)
+    // 1. Delete activity logs that reference this user first
     const { error: activityLogsError } = await supabase
       .from('activity_logs')
       .delete()
       .eq('user_id', userId)
 
     if (activityLogsError) {
-      console.warn('Error deleting activity logs for user (continuing anyway):', activityLogsError)
-      // Don't fail the deletion if activity logs deletion fails
+      console.warn('Error deleting activity logs for user:', activityLogsError)
+      // Continue anyway - some activity logs might be protected by RLS
     }
     
-    // Now delete the user
-    const { error } = await supabase
+    // 2. Delete internal user company assignments
+    const { error: internalAssignmentsError } = await supabase
+      .from('internal_user_companies')
+      .delete()
+      .eq('user_id', userId)
+
+    if (internalAssignmentsError) {
+      console.warn('Error deleting internal user company assignments:', internalAssignmentsError)
+    }
+    
+    // 3. Delete user invitations (if they exist)
+    try {
+      const { error: invitationsError } = await supabase
+        .from('user_invitations')
+        .delete()
+        .eq('user_id', userId)
+      
+      if (invitationsError) {
+        console.warn('Error deleting user invitations:', invitationsError)
+      }
+    } catch (e) {
+      // Table might not exist, ignore
+    }
+    
+    // 4. Now delete the user
+    // Note: Supabase requires .select() on delete operations
+    const { data: deletedUser, error } = await supabase
       .from('users')
       .delete()
       .eq('id', userId)
+      .select()
+      .single()
 
     if (error) {
-      return { success: false, error: error.message || 'Failed to delete user' }
+      console.error('Error deleting user:', {
+        error,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      
+      // Provide more detailed error message
+      let errorMessage = error.message || 'Failed to delete user'
+      if (error.details) {
+        errorMessage += `: ${error.details}`
+      }
+      if (error.hint) {
+        errorMessage += ` (${error.hint})`
+      }
+      
+      return { 
+        success: false, 
+        error: errorMessage
+      }
+    }
+    
+    if (!deletedUser) {
+      return { success: false, error: 'User was not deleted (no data returned)' }
     }
 
     // Log activity to activity_logs
-    const currentUser = getCurrentUser()
     if (currentUser && userToDelete) {
       await logActivity({
         user_id: currentUser.id, // The user who performed the deletion
