@@ -370,9 +370,27 @@ function DashboardContent() {
       return
     }
     
+    // Forms tab - special handling: admin users can access without space, non-admin users need space
+    if (tab === 'forms' && !currentSpaceId) {
+      // For non-admin users, automatically use their company_id as space
+      if (session?.user?.role !== 'admin' && session?.user?.company_id) {
+        setCurrentSpaceId(session.user.company_id)
+        setSelectedCompany(session.user.company_id)
+        setActiveTab(tab)
+        router.push(`/dashboard?tab=${tab}&space=${session.user.company_id}`)
+        setTimeout(() => { isChangingTabRef.current = false }, 100)
+        return
+      }
+      // For admin users, allow access to forms without a space (admin view)
+      setActiveTab(tab)
+      router.push(`/dashboard?tab=${tab}`)
+      setTimeout(() => { isChangingTabRef.current = false }, 100)
+      return
+    }
+    
     // If switching to a space tab that requires being in a space, ensure we have a space
     // Reports and user-dashboard can be accessed without a space (shows all data or aggregates from all spaces)
-    const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'forms', 'services', 'company-calendars', 'documents']
+    const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'services', 'company-calendars', 'documents']
     if (spaceRequiredTabs.includes(tab) && !currentSpaceId) {
       // For non-admin users, automatically use their company_id as space
       if (session?.user?.role !== 'admin' && session?.user?.company_id) {

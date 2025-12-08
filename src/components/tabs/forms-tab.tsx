@@ -478,7 +478,7 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
             return (
               <Card 
                 key={form.id}
-                className="parrot-card-enhanced hover:shadow-md transition-shadow"
+                className="parrot-card-enhanced hover:shadow-md transition-shadow flex flex-col h-full"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -489,7 +489,14 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                       <div>
                         <CardTitle className="text-lg">{form.title}</CardTitle>
                         <CardDescription className="line-clamp-2">
-                          {form.description || 'No description available'}
+                          {(() => {
+                            // Remove theme information from description
+                            let cleanDescription = form.description || 'No description available'
+                            if (cleanDescription.includes('__THEME__')) {
+                              cleanDescription = cleanDescription.replace(/__THEME__.*?__THEME__/g, '').trim()
+                            }
+                            return cleanDescription || 'No description available'
+                          })()}
                         </CardDescription>
                       </div>
                     </div>
@@ -498,77 +505,57 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {/* Form Fields Preview */}
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-gray-700">Fields:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {form.fields.slice(0, 3).map((field, index) => (
-                          <Badge key={field.id} variant="outline" className="text-xs">
-                            {field.label}
-                          </Badge>
-                        ))}
-                        {form.fields.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{form.fields.length - 3} more
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Form Actions */}
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm text-gray-500">
-                        Created {format(new Date(form.created_at), 'MMM d, yyyy')}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {currentSpaceId && assignedFormIds.has(form.id) ? (
-                          // Any user in a space - show fill form button if assigned
+                <CardContent className="flex-1 flex flex-col">
+                  <div className="flex-1"></div>
+                  {/* Form Actions - Always at bottom */}
+                  <div className="flex flex-col gap-2 mt-auto">
+                    <div className="flex items-center justify-end gap-2">
+                      {currentSpaceId && assignedFormIds.has(form.id) ? (
+                        // Any user in a space - show fill form button if assigned
+                        <Button
+                          size="sm"
+                          variant="orange"
+                          onClick={() => handleFillForm(form)}
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          Fill Form
+                        </Button>
+                      ) : isAdmin && !currentSpaceId ? (
+                        // Admin view (no space) - show full management options
+                        <>
                           <Button
+                            variant="outline"
                             size="sm"
-                            variant="orange"
-                            onClick={() => handleFillForm(form)}
+                            onClick={() => handleViewSubmissions(form)}
                           >
-                            <FileText className="h-4 w-4 mr-1" />
-                            Fill Form
+                            <Eye className="h-4 w-4 mr-1" />
+                            Submissions
                           </Button>
-                        ) : isAdmin && !currentSpaceId ? (
-                          // Admin view (no space) - show full management options
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewSubmissions(form)}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              Submissions
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleEditForm(form)}>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit Form
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  onClick={() => handleDeleteForm(form)}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete Form
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </>
-                        ) : null}
-                      </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEditForm(form)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Form
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleDeleteForm(form)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete Form
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </>
+                      ) : null}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Created {format(new Date(form.created_at), 'MMM d, yyyy')}
                     </div>
                   </div>
                 </CardContent>
