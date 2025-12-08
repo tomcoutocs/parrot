@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { User, Mail, Lock, Key, FileText, Building2, Calendar, Loader2, Sun, Moon, Monitor, Palette, Check } from "lucide-react"
+import { User, Mail, Lock, Key, FileText, Building2, Calendar, Loader2, Sun, Moon, Monitor, Palette, Check, Camera, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { useSession } from "@/components/providers/session-provider"
 import { useTheme } from "@/components/providers/theme-provider"
-import { fetchUserFormSubmissions, fetchForms } from "@/lib/database-functions"
+import { fetchUserFormSubmissions, fetchForms, uploadProfilePicture } from "@/lib/database-functions"
 import { FormSubmission, Form } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
 import { toastSuccess, toastError } from "@/lib/toast"
@@ -19,6 +20,31 @@ export default function UserSettingsTab() {
   const [userSubmissions, setUserSubmissions] = useState<FormSubmission[]>([])
   const [loadingSubmissions, setLoadingSubmissions] = useState(false)
   const [forms, setForms] = useState<Form[]>([])
+  const [profilePicture, setProfilePicture] = useState<string | null>(null)
+  const [uploadingPicture, setUploadingPicture] = useState(false)
+
+  // Load user profile picture
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!session?.user?.id || !supabase) return
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('profile_picture')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (!error && data?.profile_picture) {
+          setProfilePicture(data.profile_picture)
+        }
+      } catch (error) {
+        console.error('Error loading user profile:', error)
+      }
+    }
+    
+    loadUserProfile()
+  }, [session?.user?.id])
 
   // Load user form submissions
   useEffect(() => {
@@ -77,6 +103,60 @@ export default function UserSettingsTab() {
     }
   }
 
+  const handleProfilePictureChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !session?.user?.id) return
+
+    setUploadingPicture(true)
+    try {
+      const result = await uploadProfilePicture(session.user.id, file)
+      
+      if (result.success && result.url) {
+        setProfilePicture(result.url)
+        toastSuccess('Profile picture updated successfully')
+      } else {
+        throw new Error(result.error || 'Failed to upload profile picture')
+      }
+    } catch (error) {
+      console.error('Error uploading profile picture:', error)
+      toastError('Failed to upload profile picture', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    } finally {
+      setUploadingPicture(false)
+      // Reset file input
+      if (event.target) {
+        event.target.value = ''
+      }
+    }
+  }
+
+  const handleRemoveProfilePicture = async () => {
+    if (!session?.user?.id || !supabase) return
+
+    setUploadingPicture(true)
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ profile_picture: null })
+        .eq('id', session.user.id)
+
+      if (error) {
+        throw error
+      }
+
+      setProfilePicture(null)
+      toastSuccess('Profile picture removed')
+    } catch (error) {
+      console.error('Error removing profile picture:', error)
+      toastError('Failed to remove profile picture', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    } finally {
+      setUploadingPicture(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -99,6 +179,63 @@ export default function UserSettingsTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Profile Picture Section */}
+          <div className="flex items-center gap-4 p-4 border rounded-lg">
+            <div className="relative">
+              <Avatar className="w-20 h-20">
+                <AvatarImage src={profilePicture || undefined} />
+                <AvatarFallback className="bg-muted text-lg">
+                  {session?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || "U"}
+                </AvatarFallback>
+              </Avatar>
+              {uploadingPicture && (
+                <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-full">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="text-sm font-medium">Profile Picture</Label>
+              <p className="text-xs text-muted-foreground">
+                Upload a JPEG, PNG, GIF, or WebP image (max 5MB)
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  onChange={handleProfilePictureChange}
+                  disabled={uploadingPicture}
+                  className="hidden"
+                  id="profile-picture-input"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById('profile-picture-input')?.click()}
+                  disabled={uploadingPicture}
+                  className="gap-2"
+                >
+                  <Camera className="w-4 h-4" />
+                  {profilePicture ? 'Change Picture' : 'Upload Picture'}
+                </Button>
+                {profilePicture && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveProfilePicture}
+                    disabled={uploadingPicture}
+                    className="gap-2 text-destructive hover:text-destructive"
+                  >
+                    <X className="w-4 h-4" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div className="space-y-1">
               <div className="flex items-center gap-2">

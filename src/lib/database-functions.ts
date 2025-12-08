@@ -471,6 +471,15 @@ export async function updateProject(projectId: string, projectData: Partial<Proj
   }
 
   try {
+    await setAppContext()
+    
+    // Get current project data for activity log
+    const { data: currentProject } = await supabase
+      .from('projects')
+      .select('name, company_id')
+      .eq('id', projectId)
+      .single()
+    
     const { data, error } = await supabase
       .from('projects')
       .update({
@@ -483,6 +492,24 @@ export async function updateProject(projectId: string, projectData: Partial<Proj
 
     if (error) {
       return { success: false, error: error.message || 'Failed to update project' }
+    }
+
+    // Log activity
+    const currentUser = getCurrentUser()
+    if (currentUser && data) {
+      await logActivity({
+        user_id: currentUser.id,
+        action_type: 'project_updated',
+        entity_type: 'project',
+        entity_id: projectId,
+        description: `Updated project "${data.name || currentProject?.name || projectId}"`,
+        metadata: { 
+          project_name: data.name || currentProject?.name,
+          updated_fields: Object.keys(projectData)
+        },
+        company_id: data.company_id || currentProject?.company_id,
+        project_id: projectId,
+      })
     }
 
     return { success: true, data }
@@ -499,6 +526,13 @@ export async function archiveProject(projectId: string): Promise<{ success: bool
   try {
     await setAppContext()
     
+    // Get project data for activity log
+    const { data: project } = await supabase
+      .from('projects')
+      .select('name, company_id')
+      .eq('id', projectId)
+      .single()
+    
     const { error } = await supabase
       .from('projects')
       .update({
@@ -509,6 +543,21 @@ export async function archiveProject(projectId: string): Promise<{ success: bool
 
     if (error) {
       return { success: false, error: error.message || 'Failed to archive project' }
+    }
+
+    // Log activity
+    const currentUser = getCurrentUser()
+    if (currentUser && project) {
+      await logActivity({
+        user_id: currentUser.id,
+        action_type: 'project_archived',
+        entity_type: 'project',
+        entity_id: projectId,
+        description: `Archived project "${project.name}"`,
+        metadata: { project_name: project.name },
+        company_id: project.company_id,
+        project_id: projectId,
+      })
     }
 
     return { success: true }
@@ -581,6 +630,13 @@ export async function deleteProject(projectId: string, currentUserId?: string): 
   try {
     await setAppContext()
     
+    // Get project data before deletion for activity log
+    const { data: project } = await supabase
+      .from('projects')
+      .select('name, company_id')
+      .eq('id', projectId)
+      .single()
+    
     // First, delete all tasks associated with the project
     const { error: tasksError } = await supabase
       .from('tasks')
@@ -600,6 +656,22 @@ export async function deleteProject(projectId: string, currentUserId?: string): 
 
     if (projectError) {
       return { success: false, error: `Failed to delete project: ${projectError.message}` }
+    }
+
+    // Log activity
+    const currentUser = getCurrentUser()
+    const userId = currentUserId || currentUser?.id
+    if (userId && project) {
+      await logActivity({
+        user_id: userId,
+        action_type: 'project_deleted',
+        entity_type: 'project',
+        entity_id: projectId,
+        description: `Deleted project "${project.name}"`,
+        metadata: { project_name: project.name },
+        company_id: project.company_id,
+        project_id: projectId,
+      })
     }
 
     return { success: true }
@@ -873,6 +945,15 @@ export async function deleteTask(taskId: string): Promise<{ success: boolean; er
   }
 
   try {
+    await setAppContext()
+    
+    // Get task data before deletion for activity log
+    const { data: task } = await supabase
+      .from('tasks')
+      .select('title, project_id')
+      .eq('id', taskId)
+      .single()
+    
     const { error } = await supabase
       .from('tasks')
       .delete()
@@ -880,6 +961,21 @@ export async function deleteTask(taskId: string): Promise<{ success: boolean; er
 
     if (error) {
       return { success: false, error: error.message || 'Failed to delete task' }
+    }
+
+    // Log activity
+    const currentUser = getCurrentUser()
+    if (currentUser && task) {
+      await logActivity({
+        user_id: currentUser.id,
+        action_type: 'task_deleted',
+        entity_type: 'task',
+        entity_id: taskId,
+        description: `Deleted task "${task.title}"`,
+        metadata: { task_title: task.title },
+        project_id: task.project_id,
+        task_id: taskId,
+      })
     }
 
     return { success: true }
@@ -1262,6 +1358,7 @@ export async function updateUser(userId: string, userData: {
   tab_permissions?: string[]
   company_ids?: string[] // For internal users
   primary_company_id?: string // For internal users
+  profile_picture?: string
 }): Promise<{ success: boolean; data?: User; error?: string }> {
   if (!supabase) {
     return { success: false, error: 'Supabase not configured' }
@@ -1280,6 +1377,7 @@ export async function updateUser(userId: string, userData: {
       company_id: string | null
       updated_at: string
       tab_permissions?: string[]
+      profile_picture?: string | null
     } = {
       email: userData.email,
       full_name: userData.full_name,
@@ -1293,6 +1391,11 @@ export async function updateUser(userId: string, userData: {
     // Include tab_permissions if provided
     if (userData.tab_permissions !== undefined) {
       updateData.tab_permissions = userData.tab_permissions
+    }
+
+    // Include profile_picture if provided
+    if (userData.profile_picture !== undefined) {
+      updateData.profile_picture = userData.profile_picture || null
     }
     
     const { data, error } = await supabase
@@ -1366,6 +1469,98 @@ export async function updateUser(userId: string, userData: {
     }
     
     return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+  }
+}
+
+// Upload profile picture for a user
+export async function uploadProfilePicture(userId: string, file: File): Promise<{ success: boolean; url?: string; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+
+    // Validate file type
+    const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validImageTypes.includes(file.type)) {
+      return { success: false, error: 'Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.' }
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      return { success: false, error: 'File size too large. Please upload an image smaller than 5MB.' }
+    }
+
+    // Get current user to check if they have an existing profile picture
+    const { data: currentUser } = await supabase
+      .from('users')
+      .select('profile_picture')
+      .eq('id', userId)
+      .single()
+
+    // Create a unique file name
+    const timestamp = Date.now()
+    const fileExtension = file.name.split('.').pop() || 'jpg'
+    const sanitizedUserId = userId.replace(/-/g, '')
+    const fileName = `profile-${sanitizedUserId}-${timestamp}.${fileExtension}`
+    const filePath = `profile-pictures/${fileName}`
+
+    // Upload to Supabase Storage (using documents bucket or create avatars bucket)
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(filePath, file, {
+        contentType: file.type,
+        upsert: true
+      })
+
+    if (uploadError) {
+      console.error('Error uploading profile picture:', uploadError)
+      return { success: false, error: uploadError.message || 'Failed to upload profile picture' }
+    }
+
+    // Get public URL for the file
+    const { data: urlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(filePath)
+
+    const profilePictureUrl = urlData.publicUrl
+
+    // Update user record with profile picture URL
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ profile_picture: profilePictureUrl })
+      .eq('id', userId)
+
+    if (updateError) {
+      // Try to clean up uploaded file if update fails
+      await supabase.storage
+        .from('documents')
+        .remove([filePath])
+      
+      return { success: false, error: updateError.message || 'Failed to update user profile' }
+    }
+
+    // Delete old profile picture if it exists and is different
+    if (currentUser?.profile_picture && currentUser.profile_picture !== profilePictureUrl) {
+      try {
+        // Extract path from URL
+        const oldPathMatch = currentUser.profile_picture.match(/profile-pictures\/[^?]+/)
+        if (oldPathMatch) {
+          await supabase.storage
+            .from('documents')
+            .remove([oldPathMatch[0]])
+        }
+      } catch (error) {
+        // Don't fail if old picture deletion fails
+        console.warn('Failed to delete old profile picture:', error)
+      }
+    }
+
+    return { success: true, url: profilePictureUrl }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
@@ -1510,12 +1705,12 @@ export async function fetchUsers(): Promise<User[]> {
       .order('full_name', { ascending: true })
     
     if (resultWithPermissions.error) {
-      // Fallback to fetch without tab_permissions if column doesn't exist
-      const resultWithoutPermissions = await supabase
-        .from('users')
-        .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id')
-        .eq('is_active', true)
-        .order('full_name', { ascending: true })
+        // Fallback to fetch without tab_permissions if column doesn't exist
+        const resultWithoutPermissions = await supabase
+          .from('users')
+          .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, profile_picture')
+          .eq('is_active', true)
+          .order('full_name', { ascending: true })
       
       if (resultWithoutPermissions.error) {
         return []
@@ -2178,6 +2373,23 @@ export async function updateCompany(companyId: string, companyData: {
       return { success: false, error: error.message || 'Failed to update company' }
     }
 
+    // Log activity
+    const currentUser = getCurrentUser()
+    if (currentUser && data) {
+      await logActivity({
+        user_id: currentUser.id,
+        action_type: 'company_updated',
+        entity_type: 'company',
+        entity_id: companyId,
+        description: `Updated company "${data.name}"`,
+        metadata: { 
+          company_name: data.name,
+          updated_fields: Object.keys(updateData).filter(k => k !== 'updated_at')
+        },
+        company_id: companyId,
+      })
+    }
+
     console.log('Company updated successfully:', data)
     return { success: true, data }
   } catch (error) {
@@ -2386,6 +2598,20 @@ export async function deleteCompany(companyId: string): Promise<{ success: boole
       return { success: false, error: errorMessage }
     }
 
+    // Log activity
+    const currentUser = getCurrentUser()
+    if (currentUser && company) {
+      await logActivity({
+        user_id: currentUser.id,
+        action_type: 'company_deleted',
+        entity_type: 'company',
+        entity_id: companyId,
+        description: `Deleted company "${company.name}"`,
+        metadata: { company_name: company.name },
+        company_id: companyId,
+      })
+    }
+
     console.log('Company deleted successfully')
     return { success: true }
   } catch (error) {
@@ -2588,6 +2814,19 @@ export async function updateForm(formId: string, formData: {
       console.error('Error updating form:', error)
       return { success: false, error: error.message || 'Failed to update form' }
     }
+
+    // Log activity
+    await logActivity({
+      user_id: userId,
+      action_type: 'form_updated',
+      entity_type: 'form',
+      entity_id: formId,
+      description: `Updated form "${data.title}"`,
+      metadata: { 
+        form_title: data.title,
+        updated_fields: Object.keys(formData)
+      },
+    })
 
     console.log('Form updated successfully:', data)
     return { success: true, data }

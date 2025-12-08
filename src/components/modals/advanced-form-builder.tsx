@@ -1427,7 +1427,7 @@ export default function AdvancedFormBuilder({
                     </p>
                   </div>
 
-                    <div className="space-y-4">
+                  <div className="space-y-4">
                     <div className="flex items-center space-x-2">
                       <input
                         type="checkbox"

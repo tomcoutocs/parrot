@@ -158,14 +158,14 @@ export async function fetchUsersOptimized(): Promise<User[]> {
       try {
         const resultWithPermissions = await supabase
           .from('users')
-          .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, tab_permissions')
+          .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, tab_permissions, profile_picture')
           .eq('is_active', true)
           .order('full_name', { ascending: true })
         
         if (resultWithPermissions.error) {
           const resultWithoutPermissions = await supabase
             .from('users')
-            .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id')
+            .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, profile_picture')
             .eq('is_active', true)
             .order('full_name', { ascending: true })
           

@@ -91,6 +91,7 @@ export interface User {
   assigned_manager_id?: string
   company_id?: string
   tab_permissions?: string[]
+  profile_picture?: string
 }
 
 // New interface for internal user company assignments

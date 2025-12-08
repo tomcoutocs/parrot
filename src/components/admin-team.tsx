@@ -398,7 +398,22 @@ export function AdminTeam() {
                       </>
                     )
                   default:
-                    return null
+                    // Fallback to description field if available, otherwise show user name and activity type
+                    if (activity.description) {
+                      return (
+                        <>
+                          <span className="font-medium">{activity.user_name}</span>
+                          <span className="text-muted-foreground"> {activity.description}</span>
+                        </>
+                      )
+                    }
+                    // If no description, show user name and formatted activity type
+                    return (
+                      <>
+                        <span className="font-medium">{activity.user_name}</span>
+                        <span className="text-muted-foreground"> performed {activity.type.replace(/_/g, ' ')}</span>
+                      </>
+                    )
                 }
               }
 

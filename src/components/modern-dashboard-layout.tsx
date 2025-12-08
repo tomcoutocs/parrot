@@ -33,6 +33,7 @@ import LazyTabComponent from "./lazy-tab-loader"
 import { fetchCompaniesOptimized, fetchProjectsOptimized } from "@/lib/simplified-database-functions"
 import { Company, Service, Form } from "@/lib/supabase"
 import { getCompanyServices, fetchForms } from "@/lib/database-functions"
+import { supabase } from "@/lib/supabase"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { useAuth } from "@/components/providers/session-provider"
 import { LogoutConfirmationDialog } from "@/components/ui/confirmation-dialog"
@@ -67,6 +68,7 @@ export function ModernDashboardLayout({
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0)
   const [supportForm, setSupportForm] = useState<Form | null>(null)
   const [showSupportModal, setShowSupportModal] = useState(false)
+  const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
   const isAdmin = session?.user?.role === "admin"
   
@@ -558,7 +560,7 @@ export function ModernDashboardLayout({
             </DropdownMenu>
             <div className="w-px h-5 bg-border mx-1" />
             <Avatar className="w-7 h-7">
-              <AvatarImage src="" />
+              <AvatarImage src={userProfilePicture || undefined} />
               <AvatarFallback className="bg-muted text-xs">
                 {session?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || "U"}
               </AvatarFallback>

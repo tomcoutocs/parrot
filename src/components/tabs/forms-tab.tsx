@@ -461,10 +461,13 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
             if (currentSpaceId && canManageForms) {
               return (
                 <Card key={form.id} className="parrot-card-enhanced hover:shadow-md transition-shadow">
-                  <CardContent className="p-3">
-                    <div className="flex items-start justify-between gap-3 mb-1.5">
+                  <CardContent className="px-4 py-2">
+                    <div className="flex items-start justify-between gap-3 mb-2">
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base font-semibold">{form.title}</CardTitle>
+                        <CardTitle className="text-base font-semibold mb-1.5">{form.title}</CardTitle>
+                        <CardDescription className="text-sm line-clamp-2 text-muted-foreground">
+                          {cleanFormDescription(form.description)}
+                        </CardDescription>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {assignedFormIds.has(form.id) && (
@@ -500,11 +503,8 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                         )}
                       </div>
                     </div>
-                    <CardDescription className="text-sm line-clamp-2">
-                      {cleanFormDescription(form.description)}
-                    </CardDescription>
                     {parseFormSettings(form.description).saveAsDocument && (
-                      <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-600">
+                      <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
                         <CheckCircle className="h-3.5 w-3.5 text-green-600" />
                         <span>Save to docs</span>
                       </div>
@@ -520,80 +520,75 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                 key={form.id}
                 className="parrot-card-enhanced hover:shadow-md transition-shadow flex flex-col h-full"
               >
-                <CardHeader className="pb-2 px-3 pt-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-blue-100 rounded-lg">
-                        <FileText className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base font-semibold">{form.title}</CardTitle>
-                        <CardDescription className="text-sm line-clamp-2 mt-0.5">
-                          {cleanFormDescription(form.description)}
-                        </CardDescription>
-                        {parseFormSettings(form.description).saveAsDocument && (
-                          <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-600">
-                            <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-                            <span>Save to docs</span>
-                          </div>
-                        )}
-                      </div>
+                <CardHeader className="pb-2 px-4 pt-2">
+                  <div className="flex items-start justify-between gap-3 mb-1.5">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-base font-semibold mb-1.5">{form.title}</CardTitle>
+                      <CardDescription className="text-sm line-clamp-2 text-muted-foreground">
+                        {cleanFormDescription(form.description)}
+                      </CardDescription>
                     </div>
                     <Badge className={getStatusColor(form.is_active)}>
                       {form.is_active ? 'Active' : 'Inactive'}
                     </Badge>
                   </div>
+                  {parseFormSettings(form.description).saveAsDocument && (
+                    <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                      <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                      <span>Save to docs</span>
+                    </div>
+                  )}
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col px-3 pb-3">
+                <CardContent className="flex-1 flex flex-col px-4 pb-2">
                   <div className="flex-1"></div>
                   {/* Form Actions - Always at bottom */}
-                  <div className="flex flex-col gap-1.5 mt-auto pt-2">
+                  <div className="flex flex-col gap-2 mt-auto pt-2 border-t">
                     <div className="flex items-center justify-end gap-2">
-                      {currentSpaceId && assignedFormIds.has(form.id) ? (
-                        // Any user in a space - show fill form button if assigned
-                        <Button
-                          size="sm"
-                          variant="orange"
-                          onClick={() => handleFillForm(form)}
-                        >
-                          <FileText className="h-4 w-4 mr-1" />
-                          Fill Form
-                        </Button>
-                      ) : isAdmin && !currentSpaceId ? (
-                        // Admin view (no space) - show full management options
-                        <>
+                        {currentSpaceId && assignedFormIds.has(form.id) ? (
+                          // Any user in a space - show fill form button if assigned
                           <Button
-                            variant="outline"
                             size="sm"
-                            onClick={() => handleViewSubmissions(form)}
+                            variant="orange"
+                            onClick={() => handleFillForm(form)}
                           >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Submissions
+                            <FileText className="h-4 w-4 mr-1" />
+                            Fill Form
                           </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="outline" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditForm(form)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit Form
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDeleteForm(form)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete Form
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </>
-                      ) : null}
-                    </div>
-                    <div className="text-xs text-gray-500">
+                        ) : isAdmin && !currentSpaceId ? (
+                          // Admin view (no space) - show full management options
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewSubmissions(form)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Submissions
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEditForm(form)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit Form
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteForm(form)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Form
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        ) : null}
+                      </div>
+                    <div className="text-xs text-muted-foreground">
                       Created {format(new Date(form.created_at), 'MMM d, yyyy')}
                     </div>
                   </div>
