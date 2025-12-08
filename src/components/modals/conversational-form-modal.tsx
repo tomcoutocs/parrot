@@ -184,10 +184,34 @@ export default function ConversationalFormModal({
 
   const handleNext = () => {
     if (currentField?.required) {
-      const value = formData[currentField.id]
-      if (value === '' || value === null || value === undefined) {
-        toastError(`Please answer this question before continuing`)
-        return
+      // Handle group fields with sub-questions
+      if (currentField.type === 'group' && currentField.properties?.subQuestions) {
+        const subQuestions = currentField.properties.subQuestions
+        for (const subQ of subQuestions) {
+          if (subQ.required) {
+            const subValue = formData[`${currentField.id}_${subQ.id}`]
+            if (subQ.type === 'checkbox') {
+              // For checkboxes, check if array is empty
+              if (!Array.isArray(subValue) || subValue.length === 0) {
+                toastError(`Please answer "${subQ.label}" before continuing`)
+                return
+              }
+            } else {
+              // For other types, check if value is empty
+              if (subValue === '' || subValue === null || subValue === undefined) {
+                toastError(`Please answer "${subQ.label}" before continuing`)
+                return
+              }
+            }
+          }
+        }
+      } else {
+        // Handle regular fields
+        const value = formData[currentField.id]
+        if (value === '' || value === null || value === undefined) {
+          toastError(`Please answer this question before continuing`)
+          return
+        }
       }
     }
 
@@ -208,11 +232,37 @@ export default function ConversationalFormModal({
     // Validate all required fields
     for (const field of visibleFields) {
       if (field.required) {
-        const value = formData[field.id]
-        if (value === '' || value === null || value === undefined) {
-          toastError(`Field "${field.label}" is required`)
-          setCurrentIndex(visibleFields.findIndex(f => f.id === field.id))
-          return
+        // Handle group fields with sub-questions
+        if (field.type === 'group' && field.properties?.subQuestions) {
+          const subQuestions = field.properties.subQuestions
+          for (const subQ of subQuestions) {
+            if (subQ.required) {
+              const subValue = formData[`${field.id}_${subQ.id}`]
+              if (subQ.type === 'checkbox') {
+                // For checkboxes, check if array is empty
+                if (!Array.isArray(subValue) || subValue.length === 0) {
+                  toastError(`Field "${subQ.label}" is required`)
+                  setCurrentIndex(visibleFields.findIndex(f => f.id === field.id))
+                  return
+                }
+              } else {
+                // For other types, check if value is empty
+                if (subValue === '' || subValue === null || subValue === undefined) {
+                  toastError(`Field "${subQ.label}" is required`)
+                  setCurrentIndex(visibleFields.findIndex(f => f.id === field.id))
+                  return
+                }
+              }
+            }
+          }
+        } else {
+          // Handle regular fields
+          const value = formData[field.id]
+          if (value === '' || value === null || value === undefined) {
+            toastError(`Field "${field.label}" is required`)
+            setCurrentIndex(visibleFields.findIndex(f => f.id === field.id))
+            return
+          }
         }
       }
     }
