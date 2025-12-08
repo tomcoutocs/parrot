@@ -83,6 +83,41 @@ export default function ConversationalFormModal({
   const [success, setSuccess] = useState(false)
   const [visibleFields, setVisibleFields] = useState<ExtendedFormField[]>([])
 
+  // Parse theme from form description if not provided
+  const formTheme = (() => {
+    // First try to parse from form description (most reliable)
+    let parsedTheme: any = null
+    if (form.description) {
+      try {
+        // Use a more robust regex that handles multiline JSON
+        const themeMatch = form.description.match(/__THEME__({[\s\S]*?})__THEME__/)
+        if (themeMatch) {
+          parsedTheme = JSON.parse(themeMatch[1])
+          console.log('Parsed theme from form description:', parsedTheme)
+        }
+      } catch (e) {
+        console.error('Error parsing theme from description:', e)
+        // Ignore parse errors
+      }
+    }
+    
+    // If theme prop is provided and has valid values, use it (but merge with parsed theme)
+    if (theme && theme.primaryColor) {
+      parsedTheme = { ...parsedTheme, ...theme }
+      console.log('Using theme prop:', theme)
+    }
+    
+    // Ensure all theme properties have defaults
+    const finalTheme = {
+      primaryColor: parsedTheme?.primaryColor || '#f97316',
+      backgroundColor: parsedTheme?.backgroundColor || '#ffffff',
+      textColor: parsedTheme?.textColor || '#000000',
+      fontFamily: parsedTheme?.fontFamily || 'inherit'
+    }
+    console.log('Final form theme:', finalTheme)
+    return finalTheme
+  })()
+
   // Initialize form and calculate visible fields based on conditional logic
   useEffect(() => {
     if (isOpen && form) {
@@ -669,9 +704,9 @@ export default function ConversationalFormModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[700px] p-0 border-0 overflow-hidden" style={{
-        backgroundColor: theme?.backgroundColor || 'white',
-        color: theme?.textColor || 'inherit',
-        fontFamily: theme?.fontFamily || 'inherit'
+        backgroundColor: formTheme.backgroundColor,
+        color: formTheme.textColor,
+        fontFamily: formTheme.fontFamily
       }}>
         {/* Progress Bar */}
         <div className="h-1 bg-gray-200">
@@ -679,7 +714,7 @@ export default function ConversationalFormModal({
             className="h-full transition-all duration-300"
             style={{ 
               width: `${progress}%`,
-              backgroundColor: theme?.primaryColor || '#f97316'
+              backgroundColor: formTheme.primaryColor
             }}
           />
         </div>
@@ -724,7 +759,7 @@ export default function ConversationalFormModal({
               onClick={handleNext}
               disabled={loading}
               className="flex items-center gap-2"
-              style={{ backgroundColor: theme?.primaryColor || '#f97316' }}
+              style={{ backgroundColor: formTheme.primaryColor }}
             >
               {loading ? (
                 <>

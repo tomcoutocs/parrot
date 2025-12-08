@@ -156,11 +156,15 @@ export default function AdvancedFormBuilder({
       }
     }
     try {
-      const themeMatch = desc.match(/__THEME__({.*?})__THEME__/)
+      // Use a more robust regex that handles multiline JSON
+      const themeMatch = desc.match(/__THEME__({[\s\S]*?})__THEME__/)
       if (themeMatch) {
-        return JSON.parse(themeMatch[1])
+        const parsed = JSON.parse(themeMatch[1])
+        console.log('Parsed theme from form:', parsed)
+        return parsed
       }
     } catch (e) {
+      console.error('Error parsing theme:', e)
       // Ignore parse errors
     }
     return {
@@ -374,10 +378,25 @@ export default function AdvancedFormBuilder({
       })) as FormField[]
 
       // Store theme in description as JSON (temporary solution until schema update)
-      const themeJson = JSON.stringify(theme)
-      const finalDescription = description.trim() 
-        ? `${description.trim()}\n__THEME__${themeJson}__THEME__`
+      // Ensure theme has all required properties with defaults
+      const themeToSave: FormTheme = {
+        primaryColor: theme.primaryColor || '#f97316',
+        backgroundColor: theme.backgroundColor || '#ffffff',
+        textColor: theme.textColor || '#000000',
+        fontFamily: theme.fontFamily || 'inherit',
+        conversational: theme.conversational || false
+      }
+      const themeJson = JSON.stringify(themeToSave)
+      console.log('Saving theme:', themeToSave)
+      console.log('Theme JSON:', themeJson)
+      
+      // Remove any existing theme from description before adding new one
+      const cleanDescription = description.trim().replace(/__THEME__{[\s\S]*?}__THEME__/g, '').trim()
+      const finalDescription = cleanDescription
+        ? `${cleanDescription}\n__THEME__${themeJson}__THEME__`
         : `__THEME__${themeJson}__THEME__`
+      
+      console.log('Final description:', finalDescription)
 
       const formData = {
         title: title.trim(),
@@ -1392,12 +1411,12 @@ export default function AdvancedFormBuilder({
                         <div className="flex gap-2">
                           <Input
                             type="color"
-                            value={theme.primaryColor}
+                            value={theme.primaryColor || '#f97316'}
                             onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })}
                             className="w-20 h-10"
                           />
                           <Input
-                            value={theme.primaryColor}
+                            value={theme.primaryColor || '#f97316'}
                             onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })}
                             placeholder="#f97316"
                           />
@@ -1409,12 +1428,12 @@ export default function AdvancedFormBuilder({
                         <div className="flex gap-2">
                           <Input
                             type="color"
-                            value={theme.backgroundColor}
+                            value={theme.backgroundColor || '#ffffff'}
                             onChange={(e) => setTheme({ ...theme, backgroundColor: e.target.value })}
                             className="w-20 h-10"
                           />
                           <Input
-                            value={theme.backgroundColor}
+                            value={theme.backgroundColor || '#ffffff'}
                             onChange={(e) => setTheme({ ...theme, backgroundColor: e.target.value })}
                             placeholder="#ffffff"
                           />
@@ -1426,12 +1445,12 @@ export default function AdvancedFormBuilder({
                         <div className="flex gap-2">
                           <Input
                             type="color"
-                            value={theme.textColor}
+                            value={theme.textColor || '#000000'}
                             onChange={(e) => setTheme({ ...theme, textColor: e.target.value })}
                             className="w-20 h-10"
                           />
                           <Input
-                            value={theme.textColor}
+                            value={theme.textColor || '#000000'}
                             onChange={(e) => setTheme({ ...theme, textColor: e.target.value })}
                             placeholder="#000000"
                           />
@@ -1466,9 +1485,9 @@ export default function AdvancedFormBuilder({
                       <Card 
                         className="p-6"
                         style={{
-                          backgroundColor: theme.backgroundColor,
-                          color: theme.textColor,
-                          fontFamily: theme.fontFamily
+                          backgroundColor: theme.backgroundColor || '#ffffff',
+                          color: theme.textColor || '#000000',
+                          fontFamily: theme.fontFamily || 'inherit'
                         }}
                       >
                         <h4 className="text-xl font-bold mb-2">Sample Question</h4>
@@ -1476,10 +1495,10 @@ export default function AdvancedFormBuilder({
                         <Input 
                           placeholder="Your answer here..." 
                           className="mb-4"
-                          style={{ borderColor: theme.primaryColor }}
+                          style={{ borderColor: theme.primaryColor || '#f97316' }}
                         />
                         <Button 
-                          style={{ backgroundColor: theme.primaryColor }}
+                          style={{ backgroundColor: theme.primaryColor || '#f97316' }}
                           className="w-full"
                         >
                           Next

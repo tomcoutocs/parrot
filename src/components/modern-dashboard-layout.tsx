@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useSession } from "@/components/providers/session-provider"
 import { useRouter } from "next/navigation"
-import { Bell, Settings, ChevronDown, LayoutDashboard, LogOut, User, Check } from "lucide-react"
+import { Bell, Settings, ChevronDown, LayoutDashboard, LogOut, User, Check, HelpCircle } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -31,12 +31,13 @@ import { ModernUsersTab } from "./modern-users-tab"
 import { ModernSettingsTab } from "./modern-settings-tab"
 import LazyTabComponent from "./lazy-tab-loader"
 import { fetchCompaniesOptimized, fetchProjectsOptimized } from "@/lib/simplified-database-functions"
-import { Company, Service } from "@/lib/supabase"
-import { getCompanyServices } from "@/lib/database-functions"
-import { useEffect } from "react"
+import { Company, Service, Form } from "@/lib/supabase"
+import { getCompanyServices, fetchForms } from "@/lib/database-functions"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { useAuth } from "@/components/providers/session-provider"
 import { LogoutConfirmationDialog } from "@/components/ui/confirmation-dialog"
+import FillFormModal from "@/components/modals/fill-form-modal"
+import ConversationalFormModal from "@/components/modals/conversational-form-modal"
 
 interface ModernDashboardLayoutProps {
   children: React.ReactNode
@@ -64,6 +65,8 @@ export function ModernDashboardLayout({
   const [spaceManager, setSpaceManager] = useState<{ id?: string; name: string; avatar?: string } | null>(null)
   const [spaceServices, setSpaceServices] = useState<string[]>([])
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0)
+  const [supportForm, setSupportForm] = useState<Form | null>(null)
+  const [showSupportModal, setShowSupportModal] = useState(false)
 
   const isAdmin = session?.user?.role === "admin"
   
@@ -244,6 +247,33 @@ export function ModernDashboardLayout({
 
     loadSpaces()
   }, [currentSpaceId])
+
+  // Load support form
+  useEffect(() => {
+    const loadSupportForm = async () => {
+      try {
+        const forms = await fetchForms()
+        // Try multiple variations to find support form
+        const supportTicketForm = forms.find(form => {
+          const title = form.title.toLowerCase().trim()
+          return title === 'support ticket' || 
+                 title === 'support' ||
+                 title.includes('support ticket') ||
+                 title.includes('support')
+        })
+        if (supportTicketForm) {
+          console.log('Support form found:', supportTicketForm.title)
+          setSupportForm(supportTicketForm)
+        } else {
+          console.log('Support form not found. Available forms:', forms.map(f => f.title))
+        }
+      } catch (error) {
+        console.error("Error loading support form:", error)
+      }
+    }
+
+    loadSupportForm()
+  }, [])
 
   // Removed this useEffect - it was forcing viewMode changes
   // Let user actions (clicks) control viewMode instead
@@ -471,6 +501,37 @@ export function ModernDashboardLayout({
           
           <div className="flex items-center gap-2">
             <NotificationBell />
+            <button
+              onClick={async () => {
+                // If support form not loaded yet, try to load it
+                if (!supportForm) {
+                  try {
+                    const forms = await fetchForms()
+                    const supportTicketForm = forms.find(form => {
+                      const title = form.title.toLowerCase().trim()
+                      return title === 'support ticket' || 
+                             title === 'support' ||
+                             title.includes('support ticket') ||
+                             title.includes('support')
+                    })
+                    if (supportTicketForm) {
+                      setSupportForm(supportTicketForm)
+                      setShowSupportModal(true)
+                    } else {
+                      console.warn('Support form not found')
+                    }
+                  } catch (error) {
+                    console.error('Error loading support form:', error)
+                  }
+                } else {
+                  setShowSupportModal(true)
+                }
+              }}
+              className="p-2 hover:bg-muted rounded-md transition-colors"
+              title="Support"
+            >
+              <HelpCircle className="w-4 h-4 text-muted-foreground" />
+            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="p-2 hover:bg-muted rounded-md transition-colors">
@@ -686,6 +747,56 @@ export function ModernDashboardLayout({
           router.push('/auth/signin')
         }}
       />
+
+      {/* Support Form Modal */}
+      {showSupportModal && supportForm && (() => {
+        // Parse theme from form description
+        let formTheme = {
+          primaryColor: '#f97316',
+          backgroundColor: '#ffffff',
+          textColor: '#000000',
+          fontFamily: 'inherit',
+          conversational: false
+        }
+        
+        if (supportForm.description) {
+          try {
+            // Use a more robust regex that handles multiline JSON
+            const themeMatch = supportForm.description.match(/__THEME__({[\s\S]*?})__THEME__/)
+            if (themeMatch) {
+              formTheme = JSON.parse(themeMatch[1])
+              console.log('Parsed theme in dashboard layout:', formTheme)
+            }
+          } catch (e) {
+            console.error('Error parsing theme in dashboard layout:', e)
+            // Ignore parse errors, use defaults
+          }
+        }
+
+        return formTheme.conversational ? (
+          <ConversationalFormModal
+            isOpen={showSupportModal}
+            onClose={() => setShowSupportModal(false)}
+            onFormSubmitted={() => {
+              setShowSupportModal(false)
+            }}
+            form={supportForm}
+            spaceId={currentSpaceId}
+            theme={formTheme}
+          />
+        ) : (
+          <FillFormModal
+            isOpen={showSupportModal}
+            onClose={() => setShowSupportModal(false)}
+            onFormSubmitted={() => {
+              setShowSupportModal(false)
+            }}
+            form={supportForm}
+            spaceId={currentSpaceId}
+            theme={formTheme}
+          />
+        )
+      })()}
     </div>
   )
 }

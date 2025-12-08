@@ -142,25 +142,25 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         }
       }
 
-      // Assign onboarding form to the new space
+      // Assign Support Ticket form to the new space (default form)
       try {
         const allForms = await fetchForms()
-        const onboardingForm = allForms.find(form => 
-          form.title.toLowerCase() === 'onboarding' || 
-          form.title.toLowerCase().includes('onboarding')
+        const supportTicketForm = allForms.find(form => 
+          form.title.toLowerCase() === 'support ticket' || 
+          form.title.toLowerCase().includes('support ticket')
         )
         
-        if (onboardingForm) {
-          const formAssignmentResult = await assignFormToSpace(onboardingForm.id, companyId)
+        if (supportTicketForm) {
+          const formAssignmentResult = await assignFormToSpace(supportTicketForm.id, companyId)
           if (!formAssignmentResult.success) {
-            console.error("Failed to assign onboarding form to space:", formAssignmentResult.error)
+            console.error("Failed to assign Support Ticket form to space:", formAssignmentResult.error)
             // Don't fail the whole operation, just log the error
           }
         } else {
-          console.warn("Onboarding form not found. Skipping form assignment.")
+          console.warn("Support Ticket form not found. Skipping form assignment.")
         }
       } catch (formError) {
-        console.error('Error assigning onboarding form to space:', formError)
+        console.error('Error assigning Support Ticket form to space:', formError)
         // Don't fail the whole operation, just log the error
       }
 

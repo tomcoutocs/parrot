@@ -21,9 +21,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Loader2, X, CheckCircle } from 'lucide-react'
+import { Loader2, X, CheckCircle, Upload, Image as ImageIcon, Video, FileText as FileTextIcon } from 'lucide-react'
 import { Form, FormField } from '@/lib/supabase'
 import { toastSuccess, toastError } from '@/lib/toast'
+import { supabase } from '@/lib/supabase'
 
 interface ExtendedFormField extends Omit<FormField, 'type'> {
   type: 'text' | 'textarea' | 'email' | 'number' | 'select' | 'checkbox' | 'radio' | 'date' | 
@@ -57,30 +58,46 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
   const [formData, setFormData] = useState<Record<string, unknown>>({})
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({})
 
   // Parse theme from form description if not provided
-  const formTheme = theme || (() => {
+  const formTheme = (() => {
+    // First try to parse from form description (most reliable)
+    let parsedTheme: any = null
     if (form.description) {
       try {
-        const themeMatch = form.description.match(/__THEME__({.*?})__THEME__/)
+        // Use a more robust regex that handles multiline JSON
+        const themeMatch = form.description.match(/__THEME__({[\s\S]*?})__THEME__/)
         if (themeMatch) {
-          return JSON.parse(themeMatch[1])
+          parsedTheme = JSON.parse(themeMatch[1])
+          console.log('Parsed theme from form description:', parsedTheme)
         }
       } catch (e) {
+        console.error('Error parsing theme from description:', e)
         // Ignore parse errors
       }
     }
-    return {
-      primaryColor: '#f97316',
-      backgroundColor: '#1a1a1a',
-      textColor: '#e5e5e5',
-      fontFamily: 'inherit'
+    
+    // If theme prop is provided and has valid values, use it (but merge with parsed theme)
+    if (theme && theme.primaryColor) {
+      parsedTheme = { ...parsedTheme, ...theme }
+      console.log('Using theme prop:', theme)
     }
+    
+    // Ensure all theme properties have defaults
+    const finalTheme = {
+      primaryColor: parsedTheme?.primaryColor || '#f97316',
+      backgroundColor: parsedTheme?.backgroundColor || '#ffffff',
+      textColor: parsedTheme?.textColor || '#000000',
+      fontFamily: parsedTheme?.fontFamily || 'inherit'
+    }
+    console.log('Final form theme:', finalTheme)
+    return finalTheme
   })()
 
   // Calculate field background color based on modal background
   const getFieldBackgroundColor = (): string => {
-    const bgColor = formTheme.backgroundColor || '#1a1a1a'
+    const bgColor = formTheme.backgroundColor
     
     // Helper to convert hex to RGB
     const hexToRgb = (hex: string): [number, number, number] | null => {
@@ -131,6 +148,23 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
   }
 
   const fieldBackgroundColor = getFieldBackgroundColor()
+
+  // Calculate border color based on background (lighter or darker)
+  const getBorderColor = () => {
+    const bg = formTheme.backgroundColor
+    // Simple check: if background is light, use light border; if dark, use dark border
+    const isLight = bg === '#ffffff' || bg === '#fff' || bg.toLowerCase().includes('white') || 
+                    (bg.startsWith('#') && parseInt(bg.slice(1, 3), 16) > 200)
+    return isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'
+  }
+
+  // Calculate input border color
+  const getInputBorderColor = () => {
+    const bg = formTheme.backgroundColor
+    const isLight = bg === '#ffffff' || bg === '#fff' || bg.toLowerCase().includes('white') || 
+                    (bg.startsWith('#') && parseInt(bg.slice(1, 3), 16) > 200)
+    return isLight ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.2)'
+  }
 
   // Calculate text color that contrasts with the field background
   const getContrastingTextColor = (bgColor: string): string => {
@@ -277,6 +311,63 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
     }))
   }
 
+  const handleFileUpload = async (fieldId: string, file: File, fieldType: 'file' | 'image' | 'video') => {
+    if (!supabase || !session?.user?.id) {
+      toastError('Unable to upload file. Please try again.')
+      return
+    }
+
+    setUploadingFiles(prev => ({ ...prev, [fieldId]: true }))
+
+    try {
+      // Create a unique file name
+      const timestamp = Date.now()
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+      const fileName = `${timestamp}-${sanitizedName}`
+      
+      // Upload to form-submissions bucket (or documents bucket with form-submissions folder)
+      const folderPath = spaceId ? `form-submissions/${spaceId}/${form.id}` : `form-submissions/${form.id}`
+      const filePath = `${folderPath}/${fileName}`
+
+      // Upload file to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file, {
+          contentType: file.type,
+          upsert: false
+        })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      // Get public URL for the file
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath)
+
+      const fileData = {
+        url: urlData.publicUrl,
+        path: filePath,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        uploadedAt: new Date().toISOString()
+      }
+
+      // Update form data with file information
+      updateFieldValue(fieldId, fileData)
+      toastSuccess('File uploaded successfully')
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      toastError('Failed to upload file', {
+        description: error instanceof Error ? error.message : 'Please try again'
+      })
+    } finally {
+      setUploadingFiles(prev => ({ ...prev, [fieldId]: false }))
+    }
+  }
+
   const validateForm = () => {
     const extendedFields = form.fields as ExtendedFormField[]
     for (const field of extendedFields) {
@@ -320,7 +411,12 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
         } else {
           // Regular field validation
           const value = formData[field.id]
-          if (value === '' || value === null || value === undefined || 
+          // For file/image/video fields, check if it's an object with a url property
+          if (field.type === 'file' || field.type === 'image' || field.type === 'video') {
+            if (!value || (typeof value === 'object' && !('url' in value))) {
+              return `Field "${field.label}" is required`
+            }
+          } else if (value === '' || value === null || value === undefined || 
               (Array.isArray(value) && value.length === 0)) {
             return `Field "${field.label}" is required`
           }
@@ -412,12 +508,14 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
               placeholder={field.placeholder || 'Enter your answer'}
               required={isRequired}
               disabled={loading}
-              className="border border-gray-600 text-[#e5e5e5] placeholder:text-gray-500 focus:border-gray-500 rounded-md"
+              className="rounded-md"
               style={{ 
                 backgroundColor: fieldBackgroundColor,
-                borderColor: value === '' && isRequired ? formTheme.primaryColor : undefined,
+                borderColor: value === '' && isRequired ? formTheme.primaryColor : getInputBorderColor(),
                 fontFamily: formTheme.fontFamily,
-                color: formTheme.textColor
+                color: formTheme.textColor,
+                borderWidth: '1px',
+                borderStyle: 'solid'
               }}
             />
           </div>
@@ -445,12 +543,14 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
               required={isRequired}
               disabled={loading}
               rows={4}
-              className="border border-gray-600 text-[#e5e5e5] placeholder:text-gray-500 focus:border-gray-500 rounded-md"
+              className="rounded-md"
               style={{ 
                 backgroundColor: fieldBackgroundColor,
-                borderColor: value === '' && isRequired ? formTheme.primaryColor : undefined,
+                borderColor: value === '' && isRequired ? formTheme.primaryColor : getInputBorderColor(),
                 fontFamily: formTheme.fontFamily,
-                color: formTheme.textColor
+                color: formTheme.textColor,
+                borderWidth: '1px',
+                borderStyle: 'solid'
               }}
             />
           </div>
@@ -476,12 +576,18 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
               disabled={loading}
             >
               <SelectTrigger 
-                className="border border-gray-600 text-[#e5e5e5] focus:border-gray-500 rounded-md"
-                style={{ backgroundColor: fieldBackgroundColor, color: formTheme.textColor }}
+                className="rounded-md"
+                style={{ 
+                  backgroundColor: fieldBackgroundColor, 
+                  color: formTheme.textColor,
+                  borderColor: getInputBorderColor(),
+                  borderWidth: '1px',
+                  borderStyle: 'solid'
+                }}
               >
                 <SelectValue placeholder="Select an option" />
               </SelectTrigger>
-              <SelectContent className="border-gray-600" style={{ backgroundColor: fieldBackgroundColor, color: selectTextColor }}>
+              <SelectContent style={{ backgroundColor: fieldBackgroundColor, color: selectTextColor, borderColor: getInputBorderColor() }}>
                 {field.options?.map((option, index) => (
                   <SelectItem 
                     key={index} 
@@ -675,7 +781,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
                 </p>
               )}
             </div>
-            <div className="space-y-6 pl-4 border-l-2 border-gray-600">
+            <div className="space-y-6 pl-4 border-l-2" style={{ borderColor: getInputBorderColor() }}>
               {subQuestions.map((subQ: any) => {
                 const subValue = formData[`${field.id}_${subQ.id}`]
                 const subRequired = subQ.required
@@ -700,7 +806,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
                         placeholder={subQ.placeholder || 'Enter your answer'}
                         required={subRequired}
                         disabled={loading}
-                        className="border border-gray-600 text-[#e5e5e5] placeholder:text-gray-500 focus:border-gray-500 rounded-md"
+                        className="rounded-md"
                         style={{ 
                           backgroundColor: fieldBackgroundColor,
                           borderColor: subValue === '' && subRequired ? formTheme.primaryColor : undefined,
@@ -718,7 +824,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
                         required={subRequired}
                         disabled={loading}
                         rows={4}
-                        className="border border-gray-600 text-[#e5e5e5] placeholder:text-gray-500 focus:border-gray-500 rounded-md"
+                        className="rounded-md"
                         style={{ 
                           backgroundColor: fieldBackgroundColor,
                           borderColor: subValue === '' && subRequired ? formTheme.primaryColor : undefined,
@@ -736,7 +842,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
                         placeholder={subQ.placeholder || 'Enter your answer'}
                         required={subRequired}
                         disabled={loading}
-                        className="border border-gray-600 text-[#e5e5e5] placeholder:text-gray-500 focus:border-gray-500 rounded-md"
+                        className="rounded-md"
                         style={{ 
                           backgroundColor: fieldBackgroundColor,
                           borderColor: subValue === '' && subRequired ? formTheme.primaryColor : undefined,
@@ -754,7 +860,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
                         placeholder={subQ.placeholder || 'Enter your answer'}
                         required={subRequired}
                         disabled={loading}
-                        className="border border-gray-600 text-[#e5e5e5] placeholder:text-gray-500 focus:border-gray-500 rounded-md"
+                        className="rounded-md"
                         style={{ 
                           backgroundColor: fieldBackgroundColor,
                           borderColor: subValue === '' && subRequired ? formTheme.primaryColor : undefined,
@@ -771,12 +877,14 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
                         onChange={(e) => updateFieldValue(`${field.id}_${subQ.id}`, e.target.value)}
                         required={subRequired}
                         disabled={loading}
-                        className="border border-gray-600 text-[#e5e5e5] focus:border-gray-500 rounded-md"
+                        className="rounded-md"
                         style={{ 
                           backgroundColor: fieldBackgroundColor,
-                          borderColor: subValue === '' && subRequired ? formTheme.primaryColor : undefined,
+                          borderColor: subValue === '' && subRequired ? formTheme.primaryColor : getInputBorderColor(),
                           fontFamily: formTheme.fontFamily,
-                          color: formTheme.textColor
+                          color: formTheme.textColor,
+                          borderWidth: '1px',
+                          borderStyle: 'solid'
                         }}
                       />
                     )}
@@ -787,12 +895,18 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
                         disabled={loading}
                       >
                         <SelectTrigger 
-                          className="border border-gray-600 text-[#e5e5e5] focus:border-gray-500 rounded-md"
-                          style={{ backgroundColor: fieldBackgroundColor, color: formTheme.textColor }}
+                          className="rounded-md"
+                          style={{ 
+                            backgroundColor: fieldBackgroundColor, 
+                            color: formTheme.textColor,
+                            borderColor: getInputBorderColor(),
+                            borderWidth: '1px',
+                            borderStyle: 'solid'
+                          }}
                         >
                           <SelectValue placeholder="Select an option" />
                         </SelectTrigger>
-                        <SelectContent className="border-gray-600" style={{ backgroundColor: fieldBackgroundColor, color: selectTextColor }}>
+                        <SelectContent style={{ backgroundColor: fieldBackgroundColor, color: selectTextColor, borderColor: getInputBorderColor() }}>
                           {subQ.options?.map((option: string, optIdx: number) => (
                             <SelectItem 
                               key={optIdx} 
@@ -873,6 +987,139 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
           </div>
         )
 
+      case 'file':
+      case 'image':
+      case 'video':
+        const fileValue = value as { url?: string; name?: string; type?: string } | null
+        const isUploading = uploadingFiles[field.id]
+        const acceptedTypes = field.type === 'image' 
+          ? 'image/*' 
+          : field.type === 'video' 
+          ? 'video/*' 
+          : '*/*'
+        
+        return (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor={field.id} className="text-base font-semibold block" style={{ color: formTheme.textColor }}>
+                {field.label}
+                {isRequired && <span className="text-red-500 ml-1">*</span>}
+              </Label>
+              {field.helpText && (
+                <p className="text-sm" style={{ color: formTheme.textColor + 'aa' }}>
+                  {field.helpText}
+                </p>
+              )}
+            </div>
+            {fileValue?.url ? (
+              <div className="border rounded-md p-4" style={{ backgroundColor: fieldBackgroundColor, borderColor: getInputBorderColor() }}>
+                <div className="flex items-start gap-3">
+                  {field.type === 'image' && fileValue.url ? (
+                    <div className="flex-1">
+                      <img 
+                        src={fileValue.url} 
+                        alt={fileValue.name || 'Uploaded image'} 
+                        className="w-full max-h-64 rounded-md object-contain mb-2"
+                      />
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <ImageIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <p className="text-sm font-medium truncate" style={{ color: formTheme.textColor }}>
+                            {fileValue.name || 'Uploaded image'}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => updateFieldValue(field.id, '')}
+                          disabled={loading || isUploading}
+                          className="ml-2"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {field.type === 'video' && <Video className="h-5 w-5 text-muted-foreground flex-shrink-0" />}
+                        {field.type === 'file' && <FileTextIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate" style={{ color: formTheme.textColor }}>
+                            {fileValue.name || 'Uploaded file'}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => updateFieldValue(field.id, '')}
+                        disabled={loading || isUploading}
+                        className="ml-2"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="w-full">
+                <label
+                  htmlFor={`file-${field.id}`}
+                  className="block w-full cursor-pointer"
+                >
+                  <input
+                    id={`file-${field.id}`}
+                    type="file"
+                    accept={acceptedTypes}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file && (field.type === 'file' || field.type === 'image' || field.type === 'video')) {
+                        handleFileUpload(field.id, file, field.type as 'file' | 'image' | 'video')
+                      }
+                    }}
+                    disabled={loading || isUploading}
+                    className="hidden"
+                  />
+                  <div
+                    className="border-2 border-dashed rounded-lg p-8 text-center transition-all hover:bg-opacity-50"
+                    style={{ 
+                      borderColor: (value === '' || value === null || value === undefined) && isRequired 
+                        ? formTheme.primaryColor 
+                        : 'rgba(156, 163, 175, 0.4)',
+                      backgroundColor: fieldBackgroundColor
+                    }}
+                  >
+                    {isUploading ? (
+                      <div className="flex flex-col items-center justify-center">
+                        <Loader2 className="h-10 w-10 mb-3 animate-spin" style={{ color: formTheme.primaryColor }} />
+                        <p className="text-sm font-medium" style={{ color: formTheme.textColor }}>
+                          Uploading...
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center">
+                        <Upload className="h-10 w-10 mb-3" style={{ color: formTheme.textColor + 'cc' }} />
+                        <p className="text-sm font-medium mb-1" style={{ color: formTheme.textColor }}>
+                          Click to upload or drag and drop
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: formTheme.textColor + '88' }}>
+                          {field.type === 'image' && 'PNG, JPG, GIF up to 10MB'}
+                          {field.type === 'video' && 'MP4, MOV, AVI up to 100MB'}
+                          {field.type === 'file' && 'Any file type up to 50MB'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </label>
+              </div>
+            )}
+          </div>
+        )
+
       default:
         return (
           <div className="space-y-3">
@@ -894,7 +1141,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
               placeholder={field.placeholder || 'Enter your answer'}
               required={isRequired}
               disabled={loading}
-              className="border border-gray-600 text-[#e5e5e5] placeholder:text-gray-500 focus:border-gray-500 rounded-md"
+              className="rounded-md"
               style={{ 
                 backgroundColor: fieldBackgroundColor,
                 borderColor: value === '' && isRequired ? formTheme.primaryColor : undefined,
@@ -913,9 +1160,9 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
       <DialogContent 
         className="sm:max-w-[500px]"
         style={{
-          backgroundColor: formTheme.backgroundColor || '#1a1a1a',
-          color: formTheme.textColor || '#e5e5e5',
-          fontFamily: formTheme.fontFamily || 'inherit'
+          backgroundColor: formTheme.backgroundColor,
+          color: formTheme.textColor,
+          fontFamily: formTheme.fontFamily
         }}
       >
           <DialogHeader>
@@ -947,13 +1194,17 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent 
         className="sm:max-w-[600px] max-h-[90vh] p-0 border-0 overflow-hidden"
+        style={{
+          backgroundColor: formTheme.backgroundColor,
+          color: formTheme.textColor
+        }}
       >
         <div 
           className="flex flex-col h-full max-h-[90vh] rounded-xl"
           style={{
-            backgroundColor: formTheme.backgroundColor || '#1a1a1a',
-            color: formTheme.textColor || '#e5e5e5',
-            fontFamily: formTheme.fontFamily || 'inherit'
+            backgroundColor: formTheme.backgroundColor,
+            color: formTheme.textColor,
+            fontFamily: formTheme.fontFamily
           }}
         >
         <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[90vh]">
@@ -984,21 +1235,29 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
           </div>
 
           {/* Footer - Fixed */}
-          <div className="p-6 sm:p-8 pt-4 border-t border-[#3a3a3a] flex-shrink-0">
+          <div 
+            className="p-6 sm:p-8 pt-4 border-t flex-shrink-0"
+            style={{ borderColor: getBorderColor() }}
+          >
             <div className="flex items-center justify-end gap-3">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
                 disabled={loading}
-                className="bg-transparent border-[#3a3a3a] text-[#e5e5e5] hover:bg-[#3a3a3a]"
+                style={{
+                  backgroundColor: 'transparent',
+                  borderColor: getBorderColor(),
+                  color: formTheme.textColor
+                }}
+                className="hover:opacity-70"
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 disabled={loading}
-                style={{ backgroundColor: formTheme.primaryColor || '#f97316' }}
+                style={{ backgroundColor: formTheme.primaryColor }}
                 className="text-white hover:opacity-90"
               >
                 {loading ? (

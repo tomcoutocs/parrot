@@ -426,16 +426,18 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
       ) : (
         <div className={currentSpaceId && canManageForms 
           ? "space-y-2" 
-          : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"}>
+          : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"}>
           {filteredForms.map((form) => {
             // Simplified view for managers/admins in a space
             if (currentSpaceId && canManageForms) {
               return (
                 <Card key={form.id} className="parrot-card-enhanced hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{form.title}</CardTitle>
-                      <div className="flex items-center gap-2">
+                  <CardContent className="p-3">
+                    <div className="flex items-start justify-between gap-3 mb-1.5">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base font-semibold">{form.title}</CardTitle>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         {assignedFormIds.has(form.id) && (
                           <Button
                             size="sm"
@@ -469,6 +471,16 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                         )}
                       </div>
                     </div>
+                    <CardDescription className="text-sm line-clamp-2">
+                      {(() => {
+                        // Remove theme information from description
+                        let cleanDescription = form.description || 'No description available'
+                        if (cleanDescription.includes('__THEME__')) {
+                          cleanDescription = cleanDescription.replace(/__THEME__.*?__THEME__/g, '').trim()
+                        }
+                        return cleanDescription || 'No description available'
+                      })()}
+                    </CardDescription>
                   </CardContent>
                 </Card>
               )
@@ -480,15 +492,15 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                 key={form.id}
                 className="parrot-card-enhanced hover:shadow-md transition-shadow flex flex-col h-full"
               >
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 px-3 pt-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <FileText className="h-6 w-6 text-blue-600" />
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-blue-100 rounded-lg">
+                        <FileText className="h-4 w-4 text-blue-600" />
                       </div>
-                      <div>
-                        <CardTitle className="text-lg">{form.title}</CardTitle>
-                        <CardDescription className="line-clamp-2">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base font-semibold">{form.title}</CardTitle>
+                        <CardDescription className="text-sm line-clamp-2 mt-0.5">
                           {(() => {
                             // Remove theme information from description
                             let cleanDescription = form.description || 'No description available'
@@ -505,10 +517,10 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
+                <CardContent className="flex-1 flex flex-col px-3 pb-3">
                   <div className="flex-1"></div>
                   {/* Form Actions - Always at bottom */}
-                  <div className="flex flex-col gap-2 mt-auto">
+                  <div className="flex flex-col gap-1.5 mt-auto pt-2">
                     <div className="flex items-center justify-end gap-2">
                       {currentSpaceId && assignedFormIds.has(form.id) ? (
                         // Any user in a space - show fill form button if assigned
@@ -554,7 +566,7 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
                         </>
                       ) : null}
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-xs text-gray-500">
                       Created {format(new Date(form.created_at), 'MMM d, yyyy')}
                     </div>
                   </div>
@@ -589,11 +601,14 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
             
             if (selectedForm.description) {
               try {
-                const themeMatch = selectedForm.description.match(/__THEME__({.*?})__THEME__/)
+                // Use a more robust regex that handles multiline JSON
+                const themeMatch = selectedForm.description.match(/__THEME__({[\s\S]*?})__THEME__/)
                 if (themeMatch) {
                   formTheme = JSON.parse(themeMatch[1])
+                  console.log('Parsed theme in forms-tab:', formTheme)
                 }
               } catch (e) {
+                console.error('Error parsing theme in forms-tab:', e)
                 // Ignore parse errors, use defaults
               }
             }
