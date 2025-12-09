@@ -121,7 +121,6 @@ export function ModernSidebar({
 
   const bottomNavigation: NavItem[] = [
     { id: "dashboard", label: "Dashboard", icon: Home },
-    { id: "settings", label: "Settings", icon: Settings },
   ]
 
   const filteredSpaces = spaces.filter(space =>

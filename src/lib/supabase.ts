@@ -37,7 +37,9 @@ export function isSupabaseInitialized() {
 }
 
 // Types for our database tables
-export interface Company {
+// Note: The database table is called "companies" but we use "space" terminology throughout the codebase
+// to avoid confusion. A "space" represents a client workspace/company.
+export interface Space {
   id: string
   name: string
   description?: string
@@ -80,6 +82,10 @@ export interface Company {
   services?: Service[]
 }
 
+// Legacy alias for backward compatibility - use Space instead
+/** @deprecated Use Space instead. This alias exists for backward compatibility. */
+export type Company = Space
+
 export interface User {
   id: string
   email: string
@@ -94,21 +100,36 @@ export interface User {
   profile_picture?: string
 }
 
-// New interface for internal user company assignments
-export interface InternalUserCompany {
+// New interface for internal user space assignments
+// Note: Database table is "internal_user_companies" but we use "space" terminology
+export interface InternalUserSpace {
   id: string
   user_id: string
-  company_id: string
+  space_id: string // Maps to company_id in database
   is_primary: boolean
   assigned_at: string
   assigned_by?: string
-  company?: Company
+  space?: Space
+}
+
+// Legacy alias for backward compatibility
+/** @deprecated Use InternalUserSpace instead. This alias exists for backward compatibility. */
+export type InternalUserCompany = Omit<InternalUserSpace, 'space_id' | 'space'> & {
+  company_id: string
+  company?: Space
 }
 
 // Extended user interface for internal users
-export interface UserWithCompanies extends User {
+export interface UserWithSpaces extends User {
+  spaces?: InternalUserSpace[]
+  primary_space?: Space
+}
+
+// Legacy alias for backward compatibility
+/** @deprecated Use UserWithSpaces instead. This alias exists for backward compatibility. */
+export type UserWithCompanies = Omit<UserWithSpaces, 'spaces' | 'primary_space'> & {
   companies?: InternalUserCompany[]
-  primary_company?: Company
+  primary_company?: Space
 }
 
 export interface Message {
@@ -283,15 +304,28 @@ export interface Service {
   updated_at: string
 }
 
-export interface CompanyService {
+// Space Service junction table (database table is "company_services" but we use "space" terminology)
+export interface SpaceService {
   id: string
-  company_id: string
+  space_id: string // Maps to company_id in database
   service_id: string
   is_active: boolean
   created_at: string
 }
 
-export interface ServiceWithCompanyStatus extends Service {
+// Legacy alias for backward compatibility
+/** @deprecated Use SpaceService instead. This alias exists for backward compatibility. */
+export type CompanyService = Omit<SpaceService, 'space_id'> & {
+  company_id: string
+}
+
+export interface ServiceWithSpaceStatus extends Service {
+  is_space_active?: boolean
+}
+
+// Legacy alias for backward compatibility
+/** @deprecated Use ServiceWithSpaceStatus instead. This alias exists for backward compatibility. */
+export type ServiceWithCompanyStatus = Omit<ServiceWithSpaceStatus, 'is_space_active'> & {
   is_company_active?: boolean
 }
 

@@ -1,7 +1,8 @@
 import { supabase } from './supabase'
-import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Company, Form, FormField, FormSubmission, Service, ServiceWithCompanyStatus, InternalUserCompany, UserWithCompanies, UserInvitation } from './supabase'
+import type { Project, Task, TaskWithDetails, ProjectWithDetails, User, Space, Company, Form, FormField, FormSubmission, Service, ServiceWithSpaceStatus, ServiceWithCompanyStatus, InternalUserSpace, InternalUserCompany, UserWithSpaces, UserWithCompanies, UserInvitation } from './supabase'
 import { getCurrentUser } from './auth'
 import { encrypt, decrypt } from './encryption'
+import { createSpaceWideNotification } from './notification-functions'
 
 // Historical Metrics Types
 export interface SystemMetrics {
@@ -458,6 +459,37 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
       company_id: data.company_id,
       project_id: data.id,
     })
+    
+    // Send notifications to all users, internal users, and managers in the space
+    try {
+      // Get creator's name for the notification message
+      const { data: creator } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', insertData.created_by)
+        .single()
+
+      const creatorName = creator?.full_name || 'Someone'
+      
+      // Create space-wide notification
+      await createSpaceWideNotification(
+        data.company_id,
+        {
+          title: 'New Project Created',
+          message: `${creatorName} created a new project "${data.name}"${data.description ? `: ${data.description}` : ''}`,
+          created_by_user_id: insertData.created_by,
+          related_project_id: data.id,
+          metadata: {
+            project_name: data.name,
+            project_description: data.description,
+            project_status: data.status
+          }
+        }
+      )
+    } catch (notificationError) {
+      // Don't fail project creation if notification fails
+      console.error('Error sending project creation notifications:', notificationError)
+    }
     
     return { success: true, data }
   } catch (error) {
@@ -1894,7 +1926,11 @@ export async function checkMultipleUsersTables(): Promise<{ projectManagers: boo
 } 
 
 // Company management functions
-export async function fetchCompanies(): Promise<Company[]> {
+/**
+ * Fetch all spaces (client workspaces)
+ * Note: Database table is "companies" but we use "space" terminology throughout the codebase
+ */
+export async function fetchSpaces(): Promise<Space[]> {
   if (!supabase) {
     return []
   }
@@ -1926,32 +1962,37 @@ export async function fetchCompanies(): Promise<Company[]> {
     }
 
     // Decrypt API keys and credentials after fetching
-    const decryptedData = await Promise.all((data || []).map(async (company) => ({
-      ...company,
+    const decryptedData = await Promise.all((data || []).map(async (space) => ({
+      ...space,
       // Legacy API keys
-      meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
-      google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
-      shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
-      klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+      meta_api_key: space.meta_api_key ? await decrypt(space.meta_api_key) : undefined,
+      google_api_key: space.google_api_key ? await decrypt(space.google_api_key) : undefined,
+      shopify_api_key: space.shopify_api_key ? await decrypt(space.shopify_api_key) : undefined,
+      klaviyo_api_key: space.klaviyo_api_key ? await decrypt(space.klaviyo_api_key) : undefined,
       // Google Ads API credentials (decrypt sensitive fields)
-      google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
-      google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
-      google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+      google_ads_developer_token: space.google_ads_developer_token ? await decrypt(space.google_ads_developer_token) : undefined,
+      google_ads_client_secret: space.google_ads_client_secret ? await decrypt(space.google_ads_client_secret) : undefined,
+      google_ads_refresh_token: space.google_ads_refresh_token ? await decrypt(space.google_ads_refresh_token) : undefined,
       // Meta Ads API credentials (decrypt sensitive fields)
-      meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
-      meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
-      meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+      meta_ads_app_secret: space.meta_ads_app_secret ? await decrypt(space.meta_ads_app_secret) : undefined,
+      meta_ads_access_token: space.meta_ads_access_token ? await decrypt(space.meta_ads_access_token) : undefined,
+      meta_ads_system_user_token: space.meta_ads_system_user_token ? await decrypt(space.meta_ads_system_user_token) : undefined,
       // Shopify API credentials (decrypt sensitive fields)
-      shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
-      shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+      shopify_api_secret_key: space.shopify_api_secret_key ? await decrypt(space.shopify_api_secret_key) : undefined,
+      shopify_access_token: space.shopify_access_token ? await decrypt(space.shopify_access_token) : undefined,
       // Klaviyo API credentials (decrypt sensitive fields)
-      klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
+      klaviyo_private_api_key: space.klaviyo_private_api_key ? await decrypt(space.klaviyo_private_api_key) : undefined,
     })))
 
     return decryptedData
   } catch (error) {
     return []
   }
+}
+
+/** @deprecated Use fetchSpaces instead. This function exists for backward compatibility. */
+export async function fetchCompanies(): Promise<Company[]> {
+  return fetchSpaces() as Promise<Company[]>
 }
 
 export async function fetchCompaniesWithServices(): Promise<Company[]> {
@@ -2045,6 +2086,63 @@ export async function fetchCompaniesWithServices(): Promise<Company[]> {
   }
 }
 
+/**
+ * Create a new space (client workspace)
+ * Note: Database table is "companies" but we use "space" terminology throughout the codebase
+ */
+export async function createSpace(spaceData: {
+  name: string
+  description?: string
+  industry?: string
+  website?: string
+  phone?: string
+  address?: string
+  is_partner?: boolean
+  retainer?: number
+  revenue?: number
+  manager_id?: string | null
+}): Promise<{ success: boolean; data?: Space; error?: string }> {
+  if (!supabase) {
+    console.warn('Supabase not configured')
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    console.log('Creating space:', spaceData)
+    await setAppContext()
+    
+    const { data, error } = await supabase
+      .from('companies')
+      .insert({
+        name: spaceData.name,
+        description: spaceData.description,
+        industry: spaceData.industry,
+        website: spaceData.website,
+        phone: spaceData.phone,
+        address: spaceData.address,
+        is_partner: spaceData.is_partner || false,
+        is_active: true,
+        retainer: spaceData.retainer,
+        revenue: spaceData.revenue,
+        manager_id: spaceData.manager_id || null
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating space:', error)
+      return { success: false, error: error.message || 'Failed to create space' }
+    }
+
+    console.log('Space created successfully:', data)
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error creating space:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
+  }
+}
+
+/** @deprecated Use createSpace instead. This function exists for backward compatibility. */
 export async function createCompany(companyData: {
   name: string
   description?: string
@@ -2057,44 +2155,8 @@ export async function createCompany(companyData: {
   revenue?: number
   manager_id?: string | null
 }): Promise<{ success: boolean; data?: Company; error?: string }> {
-  if (!supabase) {
-    console.warn('Supabase not configured')
-    return { success: false, error: 'Supabase not configured' }
-  }
-
-  try {
-    console.log('Creating company:', companyData)
-    await setAppContext()
-    
-    const { data, error } = await supabase
-      .from('companies')
-      .insert({
-        name: companyData.name,
-        description: companyData.description,
-        industry: companyData.industry,
-        website: companyData.website,
-        phone: companyData.phone,
-        address: companyData.address,
-        is_partner: companyData.is_partner || false,
-        is_active: true,
-        retainer: companyData.retainer,
-        revenue: companyData.revenue,
-        manager_id: companyData.manager_id || null
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating company:', error)
-      return { success: false, error: error.message || 'Failed to create company' }
-    }
-
-    console.log('Company created successfully:', data)
-    return { success: true, data }
-  } catch (error) {
-    console.error('Error creating company:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
-  }
+  const result = await createSpace(companyData)
+  return { ...result, data: result.data as Company | undefined }
 }
 
 /**

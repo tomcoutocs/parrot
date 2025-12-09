@@ -552,6 +552,7 @@ export async function createTaskUpdateNotification(
  * This includes:
  * - Users directly assigned to the company (company_id)
  * - Internal users assigned to the company via internal_user_companies
+ * - Managers assigned to the company via companies.manager_id
  */
 async function getUsersInSpace(companyId: string): Promise<string[]> {
   if (!supabase || !companyId) {
@@ -594,10 +595,33 @@ async function getUsersInSpace(companyId: string): Promise<string[]> {
       activeInternalUserIds = (activeInternalUsers || []).map(u => u.id)
     }
 
+    // Get managers assigned to the company via companies.manager_id
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('manager_id')
+      .eq('id', companyId)
+      .single()
+
+    let managerIds: string[] = []
+    if (!companyError && company?.manager_id) {
+      // Verify the manager is active
+      const { data: manager } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', company.manager_id)
+        .eq('is_active', true)
+        .single()
+
+      if (manager) {
+        managerIds = [manager.id]
+      }
+    }
+
     // Combine and deduplicate
     const allUserIds = [
       ...(directUsers || []).map(u => u.id),
-      ...activeInternalUserIds
+      ...activeInternalUserIds,
+      ...managerIds
     ]
 
     return [...new Set(allUserIds)]
