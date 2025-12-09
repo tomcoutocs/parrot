@@ -8,11 +8,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
-import { User } from "@/lib/supabase"
-import { updateCompany } from "@/lib/database-functions"
+import { User, Form } from "@/lib/supabase"
+import { updateCompany, fetchFormsForSpace, hasUserSubmittedForm } from "@/lib/database-functions"
+import { useSession } from "@/components/providers/session-provider"
 import { toastSuccess, toastError } from "@/lib/toast"
-import { Loader2, ChevronDown } from "lucide-react"
+import { Loader2, ChevronDown, FileText, X } from "lucide-react"
 
 interface SpaceOverviewProps {
   manager?: {
@@ -24,6 +27,7 @@ interface SpaceOverviewProps {
   services?: string[]
   companyId?: string
   onManagerChange?: () => void
+  onNavigateToTab?: (tab: string) => void
 }
 
 export function SpaceOverview({ 
@@ -31,12 +35,17 @@ export function SpaceOverview({
   startDate, 
   services = [],
   companyId,
-  onManagerChange
+  onManagerChange,
+  onNavigateToTab
 }: SpaceOverviewProps) {
+  const { data: session } = useSession()
   const [managers, setManagers] = useState<User[]>([])
   const [loadingManagers, setLoadingManagers] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [selectedManagerId, setSelectedManagerId] = useState<string>(manager?.id || "")
+  const [onboardingForm, setOnboardingForm] = useState<Form | null>(null)
+  const [hasSubmittedOnboarding, setHasSubmittedOnboarding] = useState(false)
+  const [checkingSubmission, setCheckingSubmission] = useState(false)
 
   const currentManager = manager || {
     name: "No Manager",
@@ -70,6 +79,63 @@ export function SpaceOverview({
   useEffect(() => {
     setSelectedManagerId(manager?.id || "")
   }, [manager?.id])
+
+  // Check for onboarding form and submission status
+  const checkOnboardingForm = async () => {
+    if (!companyId || !session?.user?.id) {
+      setOnboardingForm(null)
+      setHasSubmittedOnboarding(false)
+      return
+    }
+
+    setCheckingSubmission(true)
+    try {
+      // Fetch forms assigned to this space
+      const assignedForms = await fetchFormsForSpace(companyId)
+      
+      // Find onboarding form
+      const onboarding = assignedForms.find(form => 
+        form.title.toLowerCase() === 'onboarding' || 
+        form.title.toLowerCase().includes('onboarding')
+      )
+
+      if (onboarding) {
+        setOnboardingForm(onboarding)
+        
+        // Check if user has submitted this form
+        const submitted = await hasUserSubmittedForm(session.user.id, onboarding.id, companyId)
+        setHasSubmittedOnboarding(submitted)
+      } else {
+        setOnboardingForm(null)
+        setHasSubmittedOnboarding(false)
+      }
+    } catch (error) {
+      console.error('Error checking onboarding form:', error)
+      setOnboardingForm(null)
+      setHasSubmittedOnboarding(false)
+    } finally {
+      setCheckingSubmission(false)
+    }
+  }
+
+  useEffect(() => {
+    checkOnboardingForm()
+  }, [companyId, session?.user?.id])
+
+  // Listen for form submission events to refresh onboarding status
+  useEffect(() => {
+    const handleFormSubmitted = () => {
+      // Refresh onboarding form status after submission
+      if (companyId && session?.user?.id) {
+        checkOnboardingForm()
+      }
+    }
+
+    window.addEventListener('formSubmitted', handleFormSubmitted)
+    return () => {
+      window.removeEventListener('formSubmitted', handleFormSubmitted)
+    }
+  }, [companyId, session?.user?.id])
 
   const handleManagerChange = async (newManagerId: string) => {
     if (!companyId) return
@@ -127,9 +193,20 @@ export function SpaceOverview({
   const selectedManager = managers.find(m => m.id === selectedManagerId) || 
     (selectedManagerId && manager ? { id: manager.id, full_name: manager.name } : null)
 
+  const handleFillOnboardingForm = () => {
+    if (onNavigateToTab && onboardingForm) {
+      onNavigateToTab('forms')
+      // Trigger form fill after a short delay to ensure forms tab is loaded
+      setTimeout(() => {
+        const event = new CustomEvent('fillOnboardingForm', { detail: { formId: onboardingForm.id } })
+        window.dispatchEvent(event)
+      }, 100)
+    }
+  }
+
   return (
     <div className="border-b border-border/50 pb-3">
-      <div className="flex items-center justify-between gap-8">
+        <div className="flex items-center justify-between gap-8">
         {/* Account Manager */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="text-xs text-muted-foreground flex-shrink-0">Manager</div>

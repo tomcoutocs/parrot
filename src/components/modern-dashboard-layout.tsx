@@ -596,6 +596,7 @@ export function ModernDashboardLayout({
                 {spaceData && activeTab !== "user-dashboard" && activeTab !== "user-settings" && (
                   <SpaceOverview
                     companyId={currentSpaceId || undefined}
+                    onNavigateToTab={onTabChange}
                     onManagerChange={() => {
                       // Trigger admin dashboard refresh
                       setDashboardRefreshKey(prev => prev + 1)
@@ -700,7 +701,7 @@ export function ModernDashboardLayout({
                 )}
 
                 {/* Content */}
-                {activeTab === "dashboard" && <ModernOverviewTab activeSpace={currentSpaceId ?? null} />}
+                {activeTab === "dashboard" && <ModernOverviewTab activeSpace={currentSpaceId ?? null} onNavigateToTab={onTabChange} />}
                 {activeTab === "user-dashboard" && <ModernDashboardTab activeSpace={currentSpaceId ?? null} />}
                 {activeTab === "projects" && <ModernTasksTab activeSpace={currentSpaceId ?? null} />}
                 {activeTab === "documents" && <ModernDocumentsTab activeSpace={currentSpaceId ?? null} />}

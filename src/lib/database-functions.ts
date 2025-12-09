@@ -3174,6 +3174,34 @@ export async function fetchUserFormSubmissions(userId: string): Promise<FormSubm
   }
 }
 
+// Check if a user has submitted a specific form for a space
+export async function hasUserSubmittedForm(userId: string, formId: string, companyId: string): Promise<boolean> {
+  if (!supabase) {
+    console.warn('Supabase not configured')
+    return false
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('form_submissions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('form_id', formId)
+      .eq('company_id', companyId)
+      .limit(1)
+
+    if (error) {
+      console.error('Error checking form submission:', error)
+      return false
+    }
+
+    return (data?.length || 0) > 0
+  } catch (error) {
+    console.error('Error checking form submission:', error)
+    return false
+  }
+}
+
 export async function fetchFormSubmissions(formId: string): Promise<FormSubmission[]> {
   if (!supabase) {
     console.warn('Supabase not configured')

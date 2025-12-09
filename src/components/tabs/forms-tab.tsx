@@ -60,7 +60,8 @@ import {
   fetchFormSubmissions,
   fetchFormsForSpace,
   assignFormToSpace,
-  unassignFormFromSpace
+  unassignFormFromSpace,
+  hasUserSubmittedForm
 } from '@/lib/database-functions'
 import AdvancedFormBuilder from '@/components/modals/advanced-form-builder'
 import ViewSubmissionsModal from '@/components/modals/view-submissions-modal'
@@ -79,6 +80,7 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [allForms, setAllForms] = useState<Form[]>([]) // Store all forms for admin/manager view
   const [assignedFormIds, setAssignedFormIds] = useState<Set<string>>(new Set())
+  const [submittedOnboardingFormId, setSubmittedOnboardingFormId] = useState<string | null>(null)
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -97,6 +99,25 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
     loadForms()
   }, [currentSpaceId])
 
+  // Listen for onboarding form fill event from space overview
+  useEffect(() => {
+    const handleFillOnboardingFormEvent = (event: CustomEvent) => {
+      const formId = event.detail?.formId
+      if (formId) {
+        const form = forms.find(f => f.id === formId)
+        if (form) {
+          setSelectedForm(form)
+          setShowFillModal(true)
+        }
+      }
+    }
+
+    window.addEventListener('fillOnboardingForm', handleFillOnboardingFormEvent as EventListener)
+    return () => {
+      window.removeEventListener('fillOnboardingForm', handleFillOnboardingFormEvent as EventListener)
+    }
+  }, [forms])
+
   const loadForms = async () => {
     setLoading(true)
     try {
@@ -104,19 +125,47 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
       setAllForms(formsData)
       
       // If in a space, load assigned forms for that space
-      if (currentSpaceId) {
+      if (currentSpaceId && session?.user?.id) {
         const assigned = await fetchFormsForSpace(currentSpaceId)
         setAssignedFormIds(new Set(assigned.map(f => f.id)))
+        
+        // Check if onboarding form has been submitted
+        const onboardingForm = assigned.find(f => 
+          f.title.toLowerCase() === 'onboarding' || 
+          f.title.toLowerCase().includes('onboarding')
+        )
+        
+        if (onboardingForm) {
+          const submitted = await hasUserSubmittedForm(session.user.id, onboardingForm.id, currentSpaceId)
+          if (submitted) {
+            setSubmittedOnboardingFormId(onboardingForm.id)
+          } else {
+            setSubmittedOnboardingFormId(null)
+          }
+        } else {
+          setSubmittedOnboardingFormId(null)
+        }
+        
         // Show all forms to managers/admins (so they can assign/remove), only assigned to regular users
+        // Filter out submitted onboarding form for regular users
         if (canManageForms) {
           setForms(formsData) // Show all forms for managers/admins
         } else {
-          setForms(formsData.filter(f => assigned.some(af => af.id === f.id)))
+          const filteredForms = formsData.filter(f => {
+            const isAssigned = assigned.some(af => af.id === f.id)
+            // Hide onboarding form if it's been submitted
+            if (f.id === submittedOnboardingFormId) {
+              return false
+            }
+            return isAssigned
+          })
+          setForms(filteredForms)
         }
       } else {
         // Admin view (no space) - show all forms
         setForms(formsData)
         setAssignedFormIds(new Set())
+        setSubmittedOnboardingFormId(null)
       }
     } catch (error) {
       console.error('Error loading forms:', error)
@@ -180,6 +229,10 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
 
   const handleFormSubmitted = async () => {
     toastSuccess('Form submitted successfully')
+    // Reload forms to update the list (this will hide onboarding form if it was submitted)
+    await loadForms()
+    // Notify space overview to refresh onboarding card status
+    window.dispatchEvent(new CustomEvent('formSubmitted'))
   }
 
   const handleToggleFormAssignment = async (form: Form) => {
