@@ -32,6 +32,7 @@ interface ConversationalFormModalProps {
   spaceId?: string | null
   theme?: {
     primaryColor?: string
+    buttonColor?: string
     backgroundColor?: string
     textColor?: string
     fontFamily?: string
@@ -112,7 +113,8 @@ export default function ConversationalFormModal({
       primaryColor: parsedTheme?.primaryColor || '#f97316',
       backgroundColor: parsedTheme?.backgroundColor || '#ffffff',
       textColor: parsedTheme?.textColor || '#000000',
-      fontFamily: parsedTheme?.fontFamily || 'inherit'
+      fontFamily: parsedTheme?.fontFamily || 'inherit',
+      buttonColor: parsedTheme?.buttonColor || parsedTheme?.primaryColor || '#f97316'
     }
     console.log('Final form theme:', finalTheme)
     return finalTheme
@@ -759,7 +761,7 @@ export default function ConversationalFormModal({
               onClick={handleNext}
               disabled={loading}
               className="flex items-center gap-2"
-              style={{ backgroundColor: formTheme.primaryColor }}
+              style={{ backgroundColor: formTheme.buttonColor || formTheme.primaryColor }}
             >
               {loading ? (
                 <>

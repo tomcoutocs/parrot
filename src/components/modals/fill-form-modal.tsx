@@ -89,7 +89,8 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
       primaryColor: parsedTheme?.primaryColor || '#f97316',
       backgroundColor: parsedTheme?.backgroundColor || '#ffffff',
       textColor: parsedTheme?.textColor || '#000000',
-      fontFamily: parsedTheme?.fontFamily || 'inherit'
+      fontFamily: parsedTheme?.fontFamily || 'inherit',
+      buttonColor: parsedTheme?.buttonColor || parsedTheme?.primaryColor || '#f97316'
     }
     console.log('Final form theme:', finalTheme)
     return finalTheme
@@ -1184,10 +1185,13 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
     )
   }
 
-  // Extract description without theme JSON
+  // Extract description without theme JSON and settings
   const extractDescription = (desc?: string): string => {
     if (!desc) return ''
-    return desc.replace(/__THEME__{.*?}__THEME__/g, '').trim()
+    return desc
+      .replace(/__THEME__{[\s\S]*?}__THEME__/g, '')
+      .replace(/__SETTINGS__{[\s\S]*?}__SETTINGS__/g, '')
+      .trim()
   }
 
   return (
@@ -1257,7 +1261,7 @@ export default function FillFormModal({ isOpen, onClose, onFormSubmitted, form, 
               <Button 
                 type="submit" 
                 disabled={loading}
-                style={{ backgroundColor: formTheme.primaryColor }}
+                style={{ backgroundColor: formTheme.buttonColor || formTheme.primaryColor }}
                 className="text-white hover:opacity-90"
               >
                 {loading ? (

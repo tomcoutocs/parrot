@@ -91,6 +91,7 @@ interface FormTheme {
   backgroundColor?: string
   textColor?: string
   fontFamily?: string
+  buttonColor?: string
   conversational?: boolean
 }
 
@@ -175,6 +176,7 @@ export default function AdvancedFormBuilder({
         backgroundColor: '#ffffff',
         textColor: '#000000',
         fontFamily: 'inherit',
+        buttonColor: '#f97316',
         conversational: false
       }
     }
@@ -184,7 +186,11 @@ export default function AdvancedFormBuilder({
       if (themeMatch) {
         const parsed = JSON.parse(themeMatch[1])
         console.log('Parsed theme from form:', parsed)
-        return parsed
+        // Ensure buttonColor defaults to primaryColor if not set
+        return {
+          ...parsed,
+          buttonColor: parsed.buttonColor || parsed.primaryColor || '#f97316'
+        }
       }
     } catch (e) {
       console.error('Error parsing theme:', e)
@@ -195,6 +201,7 @@ export default function AdvancedFormBuilder({
       backgroundColor: '#ffffff',
       textColor: '#000000',
       fontFamily: 'inherit',
+      buttonColor: '#f97316',
       conversational: false
     }
   }
@@ -243,6 +250,7 @@ export default function AdvancedFormBuilder({
         backgroundColor: '#ffffff',
         textColor: '#000000',
         fontFamily: 'inherit',
+        buttonColor: '#f97316',
         conversational: false
       })
       setSettings({ saveAsDocument: true })
@@ -409,6 +417,7 @@ export default function AdvancedFormBuilder({
         backgroundColor: theme.backgroundColor || '#ffffff',
         textColor: theme.textColor || '#000000',
         fontFamily: theme.fontFamily || 'inherit',
+        buttonColor: theme.buttonColor || theme.primaryColor || '#f97316',
         conversational: theme.conversational || false
       }
       const themeJson = JSON.stringify(themeToSave)
@@ -1242,22 +1251,34 @@ export default function AdvancedFormBuilder({
 
           <TabsContent value="preview" className="flex-1 overflow-y-auto px-2 sm:px-4 md:px-6 pb-4 sm:pb-6 mt-2 sm:mt-4 min-h-0">
             <div className="max-w-2xl mx-auto space-y-4 sm:space-y-6">
-              <Card>
+              <Card 
+                style={{
+                  backgroundColor: theme.backgroundColor || '#ffffff',
+                  color: theme.textColor || '#000000',
+                  fontFamily: theme.fontFamily || 'inherit'
+                }}
+              >
                 <CardContent className="p-4 sm:p-6 md:p-8">
-                  <h2 className="text-2xl font-bold mb-2">{title || 'Form Preview'}</h2>
+                  <h2 className="text-2xl font-bold mb-2" style={{ color: theme.textColor || '#000000' }}>
+                    {title || 'Form Preview'}
+                  </h2>
                   {description && (
-                    <p className="text-muted-foreground mb-6">{description}</p>
+                    <p className="mb-6" style={{ color: (theme.textColor || '#000000') + 'aa' }}>
+                      {description}
+                    </p>
                   )}
                   
                   <div className="space-y-6">
                     {fields.map((field, index) => (
                       <div key={field.id} className="space-y-2">
-                        <Label className="text-lg">
+                        <Label className="text-lg" style={{ color: theme.textColor || '#000000' }}>
                           {field.label || `Question ${index + 1}`}
                           {field.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
                         {field.helpText && (
-                          <p className="text-sm text-muted-foreground">{field.helpText}</p>
+                          <p className="text-sm" style={{ color: (theme.textColor || '#000000') + 'aa' }}>
+                            {field.helpText}
+                          </p>
                         )}
                         <div className="mt-2">
                           {/* Render preview based on field type */}
@@ -1292,8 +1313,13 @@ export default function AdvancedFormBuilder({
                             <div className="space-y-2">
                               {(field.options || []).map((opt, idx) => (
                                 <div key={idx} className="flex items-center space-x-2">
-                                  <input type="radio" disabled className="rounded" />
-                                  <Label>{opt}</Label>
+                                  <input 
+                                    type="radio" 
+                                    disabled 
+                                    className="rounded" 
+                                    style={{ accentColor: theme.primaryColor || '#f97316' }}
+                                  />
+                                  <Label style={{ color: theme.textColor || '#000000' }}>{opt}</Label>
                                 </div>
                               ))}
                             </div>
@@ -1302,8 +1328,13 @@ export default function AdvancedFormBuilder({
                             <div className="space-y-2">
                               {(field.options || []).map((opt, idx) => (
                                 <div key={idx} className="flex items-center space-x-2">
-                                  <input type="checkbox" disabled className="rounded" />
-                                  <Label>{opt}</Label>
+                                  <input 
+                                    type="checkbox" 
+                                    disabled 
+                                    className="rounded" 
+                                    style={{ accentColor: theme.primaryColor || '#f97316' }}
+                                  />
+                                  <Label style={{ color: theme.textColor || '#000000' }}>{opt}</Label>
                                 </div>
                               ))}
                             </div>
@@ -1311,59 +1342,122 @@ export default function AdvancedFormBuilder({
                           {field.type === 'rating' && (
                             <div className="flex gap-2">
                               {Array.from({ length: field.properties?.ratingMax || 5 }).map((_, idx) => (
-                                <Star key={idx} className="h-6 w-6 text-muted fill-muted" />
+                                <Star 
+                                  key={idx} 
+                                  className="h-6 w-6" 
+                                  style={{ 
+                                    color: (theme.textColor || '#000000') + '60',
+                                    fill: (theme.textColor || '#000000') + '60'
+                                  }} 
+                                />
                               ))}
                             </div>
                           )}
                           {field.type === 'scale' && (
                             <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">
+                              <span className="text-sm" style={{ color: (theme.textColor || '#000000') + '80' }}>
                                 {field.properties?.min || 1}
                               </span>
                               <div className="flex-1 mx-4">
-                                <Input type="range" 
+                                <Input 
+                                  type="range" 
                                   min={field.properties?.min || 1} 
                                   max={field.properties?.max || 10}
                                   disabled
                                   className="w-full"
+                                  style={{ accentColor: theme.primaryColor || '#f97316' }}
                                 />
                               </div>
-                              <span className="text-sm text-muted-foreground">
+                              <span className="text-sm" style={{ color: (theme.textColor || '#000000') + '80' }}>
                                 {field.properties?.max || 10}
                               </span>
                             </div>
                           )}
                           {field.type === 'file' && (
-                            <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                              <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                              <p className="text-sm text-muted-foreground">Click to upload or drag and drop</p>
+                            <div 
+                              className="border-2 border-dashed rounded-lg p-8 text-center"
+                              style={{ borderColor: (theme.textColor || '#000000') + '40' }}
+                            >
+                              <Upload className="h-8 w-8 mx-auto mb-2" style={{ color: (theme.textColor || '#000000') + '80' }} />
+                              <p className="text-sm" style={{ color: (theme.textColor || '#000000') + '80' }}>
+                                Click to upload or drag and drop
+                              </p>
                             </div>
                           )}
                           {field.type === 'url' && (
-                            <Input type="url" placeholder={field.placeholder || 'https://example.com'} disabled />
+                            <Input 
+                              type="url" 
+                              placeholder={field.placeholder || 'https://example.com'} 
+                              disabled 
+                              style={{
+                                borderColor: theme.primaryColor || '#f97316',
+                                color: theme.textColor || '#000000'
+                              }}
+                            />
                           )}
                           {field.type === 'group' && field.properties?.subQuestions && (
-                            <div className="space-y-4 mt-4 pl-4 border-l-2 border-muted">
+                            <div 
+                              className="space-y-4 mt-4 pl-4 border-l-2" 
+                              style={{ borderColor: (theme.textColor || '#000000') + '20' }}
+                            >
                               {field.properties.subQuestions.map((subQ, subIdx) => (
                                 <div key={subQ.id} className="space-y-2">
-                                  <Label className="text-base">
+                                  <Label className="text-base" style={{ color: theme.textColor || '#000000' }}>
                                     {subQ.label || `Sub-question ${subIdx + 1}`}
                                     {subQ.required && <span className="text-red-500 ml-1">*</span>}
                                   </Label>
                                   {subQ.type === 'text' && (
-                                    <Input placeholder="Enter your answer" disabled />
+                                    <Input 
+                                      placeholder="Enter your answer" 
+                                      disabled 
+                                      style={{
+                                        borderColor: theme.primaryColor || '#f97316',
+                                        color: theme.textColor || '#000000'
+                                      }}
+                                    />
                                   )}
                                   {subQ.type === 'textarea' && (
-                                    <Textarea placeholder="Enter your answer" rows={3} disabled />
+                                    <Textarea 
+                                      placeholder="Enter your answer" 
+                                      rows={3} 
+                                      disabled 
+                                      style={{
+                                        borderColor: theme.primaryColor || '#f97316',
+                                        color: theme.textColor || '#000000'
+                                      }}
+                                    />
                                   )}
                                   {subQ.type === 'email' && (
-                                    <Input type="email" placeholder="email@example.com" disabled />
+                                    <Input 
+                                      type="email" 
+                                      placeholder="email@example.com" 
+                                      disabled 
+                                      style={{
+                                        borderColor: theme.primaryColor || '#f97316',
+                                        color: theme.textColor || '#000000'
+                                      }}
+                                    />
                                   )}
                                   {subQ.type === 'number' && (
-                                    <Input type="number" placeholder="Enter a number" disabled />
+                                    <Input 
+                                      type="number" 
+                                      placeholder="Enter a number" 
+                                      disabled 
+                                      style={{
+                                        borderColor: theme.primaryColor || '#f97316',
+                                        color: theme.textColor || '#000000'
+                                      }}
+                                    />
                                   )}
                                   {subQ.type === 'date' && (
-                                    <Input type="date" disabled />
+                                    <Input 
+                                      type="date" 
+                                      disabled 
+                                      style={{
+                                        borderColor: theme.primaryColor || '#f97316',
+                                        color: theme.textColor || '#000000'
+                                      }}
+                                    />
                                   )}
                                   {subQ.type === 'select' && (
                                     <Select disabled>
@@ -1381,8 +1475,15 @@ export default function AdvancedFormBuilder({
                                     <div className="space-y-2">
                                       {(subQ.options || []).filter(opt => opt && opt.trim() !== '').map((opt, optIdx) => (
                                         <div key={optIdx} className="flex items-center space-x-2">
-                                          <input type="radio" disabled className="rounded-full" />
-                                          <Label className="font-normal">{opt}</Label>
+                                          <input 
+                                            type="radio" 
+                                            disabled 
+                                            className="rounded-full" 
+                                            style={{ accentColor: theme.primaryColor || '#f97316' }}
+                                          />
+                                          <Label className="font-normal" style={{ color: theme.textColor || '#000000' }}>
+                                            {opt}
+                                          </Label>
                                         </div>
                                       ))}
                                     </div>
@@ -1391,8 +1492,15 @@ export default function AdvancedFormBuilder({
                                     <div className="space-y-2">
                                       {(subQ.options || []).filter(opt => opt && opt.trim() !== '').map((opt, optIdx) => (
                                         <div key={optIdx} className="flex items-center space-x-2">
-                                          <input type="checkbox" disabled className="rounded" />
-                                          <Label className="font-normal">{opt}</Label>
+                                          <input 
+                                            type="checkbox" 
+                                            disabled 
+                                            className="rounded" 
+                                            style={{ accentColor: theme.primaryColor || '#f97316' }}
+                                          />
+                                          <Label className="font-normal" style={{ color: theme.textColor || '#000000' }}>
+                                            {opt}
+                                          </Label>
                                         </div>
                                       ))}
                                     </div>
@@ -1507,6 +1615,23 @@ export default function AdvancedFormBuilder({
                       </div>
 
                       <div className="space-y-2">
+                        <Label>Button Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={theme.buttonColor || theme.primaryColor || '#f97316'}
+                            onChange={(e) => setTheme({ ...theme, buttonColor: e.target.value })}
+                            className="w-20 h-10"
+                          />
+                          <Input
+                            value={theme.buttonColor || theme.primaryColor || '#f97316'}
+                            onChange={(e) => setTheme({ ...theme, buttonColor: e.target.value })}
+                            placeholder={theme.primaryColor || '#f97316'}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label>Font Family</Label>
                         <Select
                           value={theme.fontFamily || 'inherit'}
@@ -1547,8 +1672,8 @@ export default function AdvancedFormBuilder({
                           style={{ borderColor: theme.primaryColor || '#f97316' }}
                         />
                         <Button 
-                          style={{ backgroundColor: theme.primaryColor || '#f97316' }}
-                          className="w-full"
+                          style={{ backgroundColor: theme.buttonColor || theme.primaryColor || '#f97316' }}
+                          className="w-full text-white"
                         >
                           Next
                         </Button>
