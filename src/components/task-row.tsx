@@ -28,7 +28,7 @@ interface TaskRowProps {
   showMultiSelect: boolean
   selectedTasks: string[]
   onTaskClick?: (taskId: string) => void
-  users?: Array<{ id: string; full_name: string; email: string }>
+  users?: Array<{ id: string; full_name: string; email: string; profile_picture?: string | null }>
 }
 
 // Helper function to get initials from name
@@ -252,12 +252,17 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
           <DropdownMenuTrigger asChild>
             {task.assignee ? (
               <button className="hover:opacity-80 transition-opacity">
-                <Avatar className="w-6 h-6 border border-border">
-                  <AvatarImage src="" />
-                  <AvatarFallback className="bg-muted text-xs">
-                    {task.assignee}
-                  </AvatarFallback>
-                </Avatar>
+                {(() => {
+                  const assignedUser = users.find(u => u.id === task.assignee)
+                  return (
+                    <Avatar className="w-6 h-6 border border-border">
+                      <AvatarImage src={assignedUser?.profile_picture || undefined} />
+                      <AvatarFallback className="bg-muted text-xs">
+                        {assignedUser ? getInitials(assignedUser.full_name) : task.assignee}
+                      </AvatarFallback>
+                    </Avatar>
+                  )
+                })()}
               </button>
             ) : (
               <button className="w-6 h-6 rounded-full border border-dashed border-border hover:border-muted-foreground opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
@@ -277,7 +282,7 @@ export function TaskRow({ task, isSelected, onToggleSelect, onUpdate, onDelete, 
               >
                 <div className="flex items-center gap-2">
                   <Avatar className="w-5 h-5">
-                    <AvatarImage src="" />
+                    <AvatarImage src={user.profile_picture || undefined} />
                     <AvatarFallback className="text-xs">{getInitials(user.full_name)}</AvatarFallback>
                   </Avatar>
                   <span>{user.full_name}</span>

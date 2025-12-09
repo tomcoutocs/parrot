@@ -1502,7 +1502,7 @@ export async function uploadProfilePicture(userId: string, file: File): Promise<
       .eq('id', userId)
       .single()
 
-    // Create a unique file name
+    // Create a unique file name with timestamp for cache busting
     const timestamp = Date.now()
     const fileExtension = file.name.split('.').pop() || 'jpg'
     const sanitizedUserId = userId.replace(/-/g, '')
@@ -1522,12 +1522,13 @@ export async function uploadProfilePicture(userId: string, file: File): Promise<
       return { success: false, error: uploadError.message || 'Failed to upload profile picture' }
     }
 
-    // Get public URL for the file
+    // Get public URL for the file with cache-busting query parameter
     const { data: urlData } = supabase.storage
       .from('documents')
       .getPublicUrl(filePath)
 
-    const profilePictureUrl = urlData.publicUrl
+    // Add timestamp to URL for cache busting
+    const profilePictureUrl = `${urlData.publicUrl}?t=${timestamp}`
 
     // Update user record with profile picture URL
     const { error: updateError } = await supabase
@@ -1547,8 +1548,9 @@ export async function uploadProfilePicture(userId: string, file: File): Promise<
     // Delete old profile picture if it exists and is different
     if (currentUser?.profile_picture && currentUser.profile_picture !== profilePictureUrl) {
       try {
-        // Extract path from URL
-        const oldPathMatch = currentUser.profile_picture.match(/profile-pictures\/[^?]+/)
+        // Extract path from URL (remove query parameters)
+        const oldUrlWithoutQuery = currentUser.profile_picture.split('?')[0]
+        const oldPathMatch = oldUrlWithoutQuery.match(/profile-pictures\/[^?]+/)
         if (oldPathMatch) {
           await supabase.storage
             .from('documents')
@@ -1558,6 +1560,15 @@ export async function uploadProfilePicture(userId: string, file: File): Promise<
         // Don't fail if old picture deletion fails
         console.warn('Failed to delete old profile picture:', error)
       }
+    }
+
+    // Invalidate user cache to ensure all components refresh
+    try {
+      const { invalidateUserCache } = await import('./optimized-database-functions')
+      invalidateUserCache()
+    } catch (error) {
+      // Cache invalidation is optional, don't fail if it doesn't work
+      console.warn('Failed to invalidate user cache:', error)
     }
 
     return { success: true, url: profilePictureUrl }

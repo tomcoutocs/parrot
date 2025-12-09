@@ -12,6 +12,7 @@ import { fetchUserFormSubmissions, fetchForms, uploadProfilePicture } from "@/li
 import { FormSubmission, Form } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
 import { toastSuccess, toastError } from "@/lib/toast"
+import { ProfilePictureCropModal } from "@/components/modals/profile-picture-crop-modal"
 
 export default function UserSettingsTab() {
   const { data: session } = useSession()
@@ -22,6 +23,8 @@ export default function UserSettingsTab() {
   const [forms, setForms] = useState<Form[]>([])
   const [profilePicture, setProfilePicture] = useState<string | null>(null)
   const [uploadingPicture, setUploadingPicture] = useState(false)
+  const [showCropModal, setShowCropModal] = useState(false)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
 
   // Load user profile picture
   useEffect(() => {
@@ -103,17 +106,55 @@ export default function UserSettingsTab() {
     }
   }
 
-  const handleProfilePictureChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfilePictureChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file || !session?.user?.id) return
 
+    // Validate file type
+    const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validImageTypes.includes(file.type)) {
+      toastError('Invalid file type', {
+        description: 'Please upload a JPEG, PNG, GIF, or WebP image.'
+      })
+      return
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      toastError('File too large', {
+        description: 'Please upload an image smaller than 5MB.'
+      })
+      return
+    }
+
+    // Show crop modal with the selected file
+    setSelectedImageFile(file)
+    setShowCropModal(true)
+    
+    // Reset file input
+    if (event.target) {
+      event.target.value = ''
+    }
+  }
+
+  const handleCropComplete = async (croppedFile: File) => {
+    if (!session?.user?.id) return
+
     setUploadingPicture(true)
     try {
-      const result = await uploadProfilePicture(session.user.id, file)
+      const result = await uploadProfilePicture(session.user.id, croppedFile)
       
       if (result.success && result.url) {
-        setProfilePicture(result.url)
+        // Add cache-busting parameter to ensure fresh image
+        const urlWithCacheBust = `${result.url}${result.url.includes('?') ? '&' : '?'}t=${Date.now()}`
+        setProfilePicture(urlWithCacheBust)
         toastSuccess('Profile picture updated successfully')
+        
+        // Dispatch custom event to notify other components to refresh profile picture
+        window.dispatchEvent(new CustomEvent('profilePictureUpdated', { 
+          detail: { userId: session.user.id, url: urlWithCacheBust } 
+        }))
       } else {
         throw new Error(result.error || 'Failed to upload profile picture')
       }
@@ -124,10 +165,7 @@ export default function UserSettingsTab() {
       })
     } finally {
       setUploadingPicture(false)
-      // Reset file input
-      if (event.target) {
-        event.target.value = ''
-      }
+      setSelectedImageFile(null)
     }
   }
 
@@ -420,6 +458,14 @@ export default function UserSettingsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Profile Picture Crop Modal */}
+      <ProfilePictureCropModal
+        open={showCropModal}
+        onOpenChange={setShowCropModal}
+        imageFile={selectedImageFile}
+        onCropComplete={handleCropComplete}
+      />
     </div>
   )
 }

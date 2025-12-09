@@ -46,6 +46,7 @@ export function SpaceOverview({
   const [onboardingForm, setOnboardingForm] = useState<Form | null>(null)
   const [hasSubmittedOnboarding, setHasSubmittedOnboarding] = useState(false)
   const [checkingSubmission, setCheckingSubmission] = useState(false)
+  const [profilePictureRefreshKey, setProfilePictureRefreshKey] = useState(0)
 
   const currentManager = manager || {
     name: "No Manager",
@@ -73,6 +74,18 @@ export function SpaceOverview({
     }
 
     loadManagers()
+
+    // Listen for profile picture updates to refresh managers list
+    const handleProfilePictureUpdate = () => {
+      loadManagers()
+      setProfilePictureRefreshKey(prev => prev + 1)
+    }
+
+    window.addEventListener('profilePictureUpdated', handleProfilePictureUpdate)
+    
+    return () => {
+      window.removeEventListener('profilePictureUpdated', handleProfilePictureUpdate)
+    }
   }, [companyId])
 
   // Update selected manager when prop changes
@@ -191,7 +204,7 @@ export function SpaceOverview({
   }
 
   const selectedManager = managers.find(m => m.id === selectedManagerId) || 
-    (selectedManagerId && manager ? { id: manager.id, full_name: manager.name } : null)
+    (selectedManagerId && manager ? { id: manager.id, full_name: manager.name, profile_picture: manager.avatar || null } : null)
 
   const handleFillOnboardingForm = () => {
     if (onNavigateToTab && onboardingForm) {
@@ -224,7 +237,8 @@ export function SpaceOverview({
                     </>
                   ) : selectedManager ? (
                     <>
-                      <Avatar className="w-6 h-6 flex-shrink-0">
+                      <Avatar className="w-6 h-6 flex-shrink-0" key={`manager-${selectedManager.id}-${profilePictureRefreshKey}`}>
+                        <AvatarImage src={('profile_picture' in selectedManager ? selectedManager.profile_picture : null) || undefined} />
                         <AvatarFallback className="bg-muted text-xs">
                           {selectedManager.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || "?"}
                         </AvatarFallback>
@@ -258,7 +272,8 @@ export function SpaceOverview({
                     onClick={() => handleManagerChange(mgr.id)}
                   >
                     <div className="flex items-center gap-2 w-full">
-                      <Avatar className="w-5 h-5 flex-shrink-0">
+                      <Avatar className="w-5 h-5 flex-shrink-0" key={`mgr-${mgr.id}-${profilePictureRefreshKey}`}>
+                        <AvatarImage src={mgr.profile_picture || undefined} />
                         <AvatarFallback className="bg-muted text-xs">
                           {mgr.full_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || "?"}
                         </AvatarFallback>
@@ -272,8 +287,8 @@ export function SpaceOverview({
             </DropdownMenu>
           ) : (
             <div className="flex items-center gap-2">
-              <Avatar className="w-6 h-6 flex-shrink-0">
-                <AvatarImage src={currentManager.avatar} />
+              <Avatar className="w-6 h-6 flex-shrink-0" key={`current-manager-${currentManager.id || 'none'}-${profilePictureRefreshKey}`}>
+                <AvatarImage src={currentManager.avatar || undefined} />
                 <AvatarFallback className="bg-muted text-xs">
                   {currentManager.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                 </AvatarFallback>

@@ -166,10 +166,23 @@ export function ModernDashboardLayout({
         }
 
         if (selectedManager) {
+          // Fetch profile picture for the selected manager
+          const { supabase } = await import("@/lib/supabase")
+          let profilePicture = ""
+          if (supabase && selectedManager.id) {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('profile_picture')
+              .eq('id', selectedManager.id)
+              .single()
+            if (userData?.profile_picture) {
+              profilePicture = userData.profile_picture
+            }
+          }
           setSpaceManager({
             id: selectedManager.id,
             name: selectedManager.full_name || "Unknown Manager",
-            avatar: ""
+            avatar: profilePicture
           })
         } else {
           // Check if company has a manager_id
@@ -177,7 +190,7 @@ export function ModernDashboardLayout({
           if (supabase) {
             const { data: company } = await supabase
               .from('companies')
-              .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name)')
+              .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name, profile_picture)')
               .eq('id', currentSpaceId)
               .single()
             
@@ -187,7 +200,7 @@ export function ModernDashboardLayout({
                 setSpaceManager({
                   id: managerData.id,
                   name: managerData.full_name || "Unknown Manager",
-                  avatar: ""
+                  avatar: managerData.profile_picture || ""
                 })
               } else {
                 setSpaceManager({ name: "No Manager", avatar: "" })
@@ -206,6 +219,17 @@ export function ModernDashboardLayout({
     }
 
     fetchManager()
+
+    // Listen for profile picture updates to refresh manager
+    const handleProfilePictureUpdate = () => {
+      fetchManager()
+    }
+
+    window.addEventListener('profilePictureUpdated', handleProfilePictureUpdate)
+    
+    return () => {
+      window.removeEventListener('profilePictureUpdated', handleProfilePictureUpdate)
+    }
   }, [currentSpaceId])
 
   // Fetch services for the current space
@@ -276,6 +300,47 @@ export function ModernDashboardLayout({
 
     loadSupportForm()
   }, [])
+
+  // Load user profile picture
+  useEffect(() => {
+    const loadUserProfilePicture = async () => {
+      if (!session?.user?.id || !supabase) return
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('profile_picture')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (!error && data?.profile_picture) {
+          // Add cache-busting parameter to ensure fresh image
+          const url = data.profile_picture
+          const urlWithCacheBust = url.includes('?') 
+            ? `${url}&t=${Date.now()}` 
+            : `${url}?t=${Date.now()}`
+          setUserProfilePicture(urlWithCacheBust)
+        }
+      } catch (error) {
+        console.error('Error loading user profile picture:', error)
+      }
+    }
+    
+    loadUserProfilePicture()
+
+    // Listen for profile picture updates
+    const handleProfilePictureUpdate = (event: CustomEvent) => {
+      if (event.detail?.userId === session?.user?.id) {
+        setUserProfilePicture(event.detail.url)
+      }
+    }
+
+    window.addEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener)
+    
+    return () => {
+      window.removeEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener)
+    }
+  }, [session?.user?.id])
 
   // Removed this useEffect - it was forcing viewMode changes
   // Let user actions (clicks) control viewMode instead
@@ -534,10 +599,18 @@ export function ModernDashboardLayout({
             >
               <HelpCircle className="w-4 h-4 text-muted-foreground" />
             </button>
+            <div className="w-px h-5 bg-border mx-1" />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="p-2 hover:bg-muted rounded-md transition-colors">
-                  <Settings className="w-4 h-4 text-muted-foreground" />
+                <button className="flex items-center gap-2 hover:bg-muted px-2 py-1 -mx-2 rounded-md transition-colors">
+                  <Avatar className="w-7 h-7">
+                    <AvatarImage src={userProfilePicture || undefined} />
+                    <AvatarFallback className="bg-muted text-xs">
+                      {session?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">{session?.user?.name || 'User'}</span>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -558,13 +631,6 @@ export function ModernDashboardLayout({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <div className="w-px h-5 bg-border mx-1" />
-            <Avatar className="w-7 h-7">
-              <AvatarImage src={userProfilePicture || undefined} />
-              <AvatarFallback className="bg-muted text-xs">
-                {session?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || "U"}
-              </AvatarFallback>
-            </Avatar>
           </div>
         </div>
 
@@ -631,10 +697,23 @@ export function ModernDashboardLayout({
                           }
 
                           if (selectedManager) {
+                            // Fetch profile picture for the selected manager
+                            const { supabase } = await import("@/lib/supabase")
+                            let profilePicture = ""
+                            if (supabase && selectedManager.id) {
+                              const { data: userData } = await supabase
+                                .from('users')
+                                .select('profile_picture')
+                                .eq('id', selectedManager.id)
+                                .single()
+                              if (userData?.profile_picture) {
+                                profilePicture = userData.profile_picture
+                              }
+                            }
                             setSpaceManager({
                               id: selectedManager.id,
                               name: selectedManager.full_name || "Unknown Manager",
-                              avatar: ""
+                              avatar: profilePicture
                             })
                           } else {
                             // Check if company has a manager_id
@@ -642,7 +721,7 @@ export function ModernDashboardLayout({
                             if (supabase) {
                               const { data: company } = await supabase
                                 .from('companies')
-                                .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name)')
+                                .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name, profile_picture)')
                                 .eq('id', currentSpaceId)
                                 .single()
                               
@@ -652,7 +731,7 @@ export function ModernDashboardLayout({
                                   setSpaceManager({
                                     id: managerData.id,
                                     name: managerData.full_name || "Unknown Manager",
-                                    avatar: ""
+                                    avatar: managerData.profile_picture || ""
                                   })
                                 } else {
                                   setSpaceManager({ name: "No Manager", avatar: "" })

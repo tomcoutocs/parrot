@@ -208,7 +208,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   const [deletingTasks, setDeletingTasks] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
-  const [users, setUsers] = useState<Array<{ id: string; full_name: string; email: string }>>([])
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string; email: string; profile_picture?: string | null }>>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedTaskForSidebar, setSelectedTaskForSidebar] = useState<TaskWithDetails | null>(null)
   const [isTaskSidebarOpen, setIsTaskSidebarOpen] = useState(false)
@@ -276,7 +276,8 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         const spaceUsers = uniqueUsers.map(user => ({
           id: user.id,
           full_name: user.full_name || "",
-          email: user.email || ""
+          email: user.email || "",
+          profile_picture: user.profile_picture || null
         }))
         setUsers(spaceUsers)
         
@@ -430,6 +431,60 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
       }
     }
     loadEditModalUsers()
+  }, [activeSpace])
+
+  // Listen for profile picture updates to refresh users list
+  useEffect(() => {
+    if (!activeSpace) return
+
+    const handleProfilePictureUpdate = async () => {
+      try {
+        const usersData = await fetchUsersOptimized()
+        const directSpaceUsers = usersData.filter(user => 
+          user.company_id === activeSpace && 
+          user.is_active !== false &&
+          (user.role === 'user' || user.role === 'manager' || user.role === 'admin' || user.role === 'internal')
+        )
+        
+        const internalUserIds: string[] = []
+        if (supabase) {
+          const result = await supabase
+            .from('internal_user_companies')
+            .select('user_id')
+            .eq('company_id', activeSpace)
+          if (result.data) {
+            internalUserIds.push(...result.data.map((ia: { user_id: string }) => ia.user_id))
+          }
+        }
+        
+        const internalUsers = usersData.filter(user => 
+          internalUserIds.includes(user.id) && 
+          user.is_active !== false &&
+          (user.role === 'user' || user.role === 'manager' || user.role === 'admin' || user.role === 'internal')
+        )
+        
+        const allSpaceUsers = [...directSpaceUsers, ...internalUsers]
+        const uniqueUsers = Array.from(
+          new Map(allSpaceUsers.map(user => [user.id, user])).values()
+        )
+        
+        const updatedSpaceUsers = uniqueUsers.map(user => ({
+          id: user.id,
+          full_name: user.full_name || "",
+          email: user.email || "",
+          profile_picture: user.profile_picture || null
+        }))
+        setUsers(updatedSpaceUsers)
+      } catch (error) {
+        console.error('Error refreshing users after profile picture update:', error)
+      }
+    }
+
+    window.addEventListener('profilePictureUpdated', handleProfilePictureUpdate)
+    
+    return () => {
+      window.removeEventListener('profilePictureUpdated', handleProfilePictureUpdate)
+    }
   }, [activeSpace])
 
   const handleProjectUpdated = () => {

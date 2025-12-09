@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 interface UserOption {
   id: string
   full_name: string
+  profile_picture?: string | null
 }
 
 interface InlineTaskCreationProps {
@@ -157,7 +158,7 @@ export function InlineTaskCreation({ onSave, onCancel, statusColor, users = [] }
                   className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                 >
                   <Avatar className="w-5 h-5 border border-border">
-                    <AvatarImage src="" />
+                    <AvatarImage src={user.profile_picture || undefined} />
                     <AvatarFallback className="bg-muted text-xs">
                       {getInitials(user.full_name)}
                     </AvatarFallback>

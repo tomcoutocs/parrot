@@ -22,7 +22,7 @@ interface BulkEditBarProps {
   onClearSelection: () => void
   onBulkUpdate: (updates: Record<string, unknown>) => void
   onBulkDelete: () => void
-  users?: Array<{ id: string; full_name: string; email: string }>
+  users?: Array<{ id: string; full_name: string; email: string; profile_picture?: string | null }>
 }
 
 // Helper function to get initials from name
@@ -96,7 +96,7 @@ export function BulkEditBar({ selectedCount, onClearSelection, onBulkUpdate, onB
               >
                 <div className="flex items-center gap-2">
                   <Avatar className="w-5 h-5">
-                    <AvatarImage src="" />
+                    <AvatarImage src={user.profile_picture || undefined} />
                     <AvatarFallback className="text-xs">{getInitials(user.full_name)}</AvatarFallback>
                   </Avatar>
                   <span>{user.full_name}</span>

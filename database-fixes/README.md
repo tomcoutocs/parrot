@@ -186,3 +186,29 @@ This script creates the `activity_logs` table for comprehensive user activity tr
 - Activity logs are retained indefinitely (no automatic cleanup)
 - The activity feed can now show activities from any time period, not just 7 days
 
+## add_profile_picture_to_users.sql
+
+This script adds the `profile_picture` column to the `users` table to store user profile picture URLs.
+
+### How to Use
+
+1. Open your Supabase Dashboard
+2. Go to SQL Editor
+3. Copy and paste the contents of `add_profile_picture_to_users.sql`
+4. Run the script
+
+### What It Does
+
+- **Adds a `profile_picture` TEXT column** to the `users` table if it doesn't already exist
+- The column is nullable, so existing users won't be affected
+- Stores the URL or path to the user's profile picture
+- The script is idempotent - it checks if the column exists before adding it, so it's safe to run multiple times
+
+### Notes
+
+- This fixes the error: "Could not find the 'profile_picture' column of 'users' in the schema cache"
+- After running this script, users will be able to upload and update their profile pictures
+- Profile pictures are stored in Supabase Storage (in the `documents` bucket under `profile-pictures/`)
+- The column stores the public URL to the profile picture
+- Existing users will have `NULL` for `profile_picture` until they upload one
+
