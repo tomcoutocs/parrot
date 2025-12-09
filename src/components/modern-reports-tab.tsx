@@ -207,11 +207,9 @@ export function ModernReportsTab({ activeSpace }: ModernReportsTabProps) {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-medium">Performance Reports</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {dateRangeLabels[dateRange]}
-          </p>
+        <div className="flex items-center gap-3">
+          <TrendingUp className="w-6 h-6 text-foreground" />
+          <h1 className="text-2xl font-semibold text-foreground">Performance Reports</h1>
         </div>
         <div className="flex items-center gap-2">
           <DropdownMenu>

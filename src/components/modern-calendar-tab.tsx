@@ -945,7 +945,6 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         {/* Calendar Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <CalendarIcon className="w-5 h-5 text-muted-foreground" />
             <h2 className="text-lg">
               {view === 'month' && `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
               {view === 'week' && (() => {

@@ -160,11 +160,9 @@ export default function UserSettingsTab() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-semibold">User Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage your account preferences and security
-        </p>
+      <div className="flex items-center gap-3">
+        <User className="w-6 h-6 text-foreground" />
+        <h1 className="text-2xl font-semibold text-foreground">User Settings</h1>
       </div>
 
       {/* Account Settings */}

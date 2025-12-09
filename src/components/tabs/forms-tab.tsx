@@ -376,18 +376,9 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
         <>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Forms</h2>
-          <p className="text-gray-600">
-            {currentSpaceId 
-              ? (canManageForms 
-                  ? 'Assign or remove forms from this space' 
-                  : 'Fill out forms from your company')
-              : (isAdmin 
-                  ? 'Create and manage forms for your clients' 
-                  : 'Fill out forms from your company')
-            }
-          </p>
+        <div className="flex items-center gap-3">
+          <FileText className="w-6 h-6 text-foreground" />
+          <h1 className="text-2xl font-semibold text-foreground">Forms</h1>
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && !currentSpaceId && (

@@ -320,11 +320,9 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-medium">Space Settings</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage space information and configuration
-          </p>
+        <div className="flex items-center gap-3">
+          <Settings className="w-6 h-6 text-foreground" />
+          <h1 className="text-2xl font-semibold text-foreground">Space Settings</h1>
         </div>
         <div className="flex items-center gap-3">
           <Button onClick={handleSave} disabled={saving} className="gap-2">

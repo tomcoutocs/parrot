@@ -1647,11 +1647,9 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     <div className="space-y-0">
       {/* Header with Actions */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-border/50">
-        <div>
-          <h2 className="text-base font-medium">Projects & Tasks</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {projects.length} project{projects.length !== 1 ? 's' : ''}
-          </p>
+        <div className="flex items-center gap-3">
+          <FolderKanban className="w-6 h-6 text-foreground" />
+          <h1 className="text-2xl font-semibold text-foreground">Projects & Tasks</h1>
         </div>
         <div className="flex items-center gap-3">
           <button 

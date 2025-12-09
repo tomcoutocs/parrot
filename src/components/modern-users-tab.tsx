@@ -592,11 +592,9 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-medium">User Management</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage internal team members and client access
-          </p>
+        <div className="flex items-center gap-3">
+          <UserIcon className="w-6 h-6 text-foreground" />
+          <h1 className="text-2xl font-semibold text-foreground">User Management</h1>
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
