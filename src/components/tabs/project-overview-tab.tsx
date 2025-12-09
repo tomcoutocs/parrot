@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { fetchTasks, fetchCompanies, fetchProjects } from '@/lib/database-functions'
 import type { TaskWithDetails, Company, ProjectWithDetails } from '@/lib/supabase'
@@ -146,35 +146,44 @@ export default function ProjectOverviewTab() {
     }
   }
 
-  // Filter tasks based on search and filters
-  const filteredTasks = tasks.filter(task => {
+  // Memoize filtered tasks based on search and filters
+  const filteredTasks = useMemo(() => {
     const searchLower = (searchTerm || '').toLowerCase()
-         const matchesSearch = !searchTerm || 
-                          task.title.toLowerCase().includes(searchLower) ||
-                          task.description?.toLowerCase().includes(searchLower) ||
-                          task.company?.name?.toLowerCase().includes(searchLower) ||
-                          task.project?.title?.toLowerCase().includes(searchLower)
+    return tasks.filter(task => {
+      const matchesSearch = !searchTerm || 
+                        task.title.toLowerCase().includes(searchLower) ||
+                        task.description?.toLowerCase().includes(searchLower) ||
+                        task.company?.name?.toLowerCase().includes(searchLower) ||
+                        task.project?.title?.toLowerCase().includes(searchLower)
+      
+      const matchesStatus = statusFilter === 'all' || task.status === statusFilter
+      const matchesCompany = companyFilter === 'all' || task.company?.id === companyFilter
+      const matchesProject = projectFilter === 'all' || task.project?.id === projectFilter
+      const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter
+
+      return matchesSearch && matchesStatus && matchesCompany && matchesProject && matchesPriority
+    })
+  }, [tasks, searchTerm, statusFilter, companyFilter, projectFilter, priorityFilter])
+
+  // Memoize statistics calculations
+  const statistics = useMemo(() => {
+    const totalTasks = tasks.length
+    const activeTasks = tasks.filter(t => t.status === 'todo' || t.status === 'in_progress').length
+    const completedTasks = tasks.filter(t => t.status === 'done').length
+    const overdueTasks = tasks.filter(t => {
+      if ((t.status === 'todo' || t.status === 'in_progress') && t.due_date) {
+        return new Date(t.due_date) < new Date()
+      }
+      return false
+    }).length
     
-    const matchesStatus = statusFilter === 'all' || task.status === statusFilter
-    const matchesCompany = companyFilter === 'all' || task.company?.id === companyFilter
-    const matchesProject = projectFilter === 'all' || task.project?.id === projectFilter
-    const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter
+    return { totalTasks, activeTasks, completedTasks, overdueTasks }
+  }, [tasks])
+  
+  const { totalTasks, activeTasks, completedTasks, overdueTasks } = statistics
 
-    return matchesSearch && matchesStatus && matchesCompany && matchesProject && matchesPriority
-  })
-
-  // Calculate statistics
-  const totalTasks = tasks.length
-  const activeTasks = tasks.filter(t => t.status === 'todo' || t.status === 'in_progress').length
-  const completedTasks = tasks.filter(t => t.status === 'done').length
-  const overdueTasks = tasks.filter(t => {
-    if ((t.status === 'todo' || t.status === 'in_progress') && t.due_date) {
-      return new Date(t.due_date) < new Date()
-    }
-    return false
-  }).length
-
-  const getStatusColor = (status: string) => {
+  // Memoize helper functions to avoid recreating on every render
+  const getStatusColor = useCallback((status: string) => {
     switch (status) {
       case 'todo': return 'bg-gray-100 text-gray-800'
       case 'in_progress': return 'bg-blue-100 text-blue-800'
@@ -182,9 +191,9 @@ export default function ProjectOverviewTab() {
       case 'done': return 'bg-green-100 text-green-800'
       default: return 'bg-gray-100 text-gray-800'
     }
-  }
+  }, [])
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = useCallback((priority: string) => {
     switch (priority) {
       case 'urgent': return 'bg-red-100 text-red-800'
       case 'high': return 'bg-orange-100 text-orange-800'
@@ -193,17 +202,17 @@ export default function ProjectOverviewTab() {
       case 'low': return 'bg-green-100 text-green-800'
       default: return 'bg-gray-100 text-gray-800'
     }
-  }
+  }, [])
 
-  const formatDate = (dateString: string | undefined) => {
+  const formatDate = useCallback((dateString: string | undefined) => {
     if (!dateString) return 'No due date'
     return new Date(dateString).toLocaleDateString()
-  }
+  }, [])
 
-  const isOverdue = (dueDate: string | undefined) => {
+  const isOverdue = useCallback((dueDate: string | undefined) => {
     if (!dueDate) return false
     return new Date(dueDate) < new Date()
-  }
+  }, [])
 
   const downloadCSV = () => {
     // Create CSV header

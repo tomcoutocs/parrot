@@ -497,25 +497,8 @@ html.dark .parrot-page-bg,
   background-color: oklch(var(--muted-foreground) / 0.6);
 }
 
-/* Dark mode form elements */
-.dark input[type="text"],
-.dark input[type="email"],
-.dark input[type="password"],
-.dark textarea,
-.dark select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(71, 85, 105, 0.3);
-  color: #e2e8f0;
-}
-
-.dark input[type="text"]:focus,
-.dark input[type="email"]:focus,
-.dark input[type="password"]:focus,
-.dark textarea:focus,
-.dark select:focus {
-  border-color: rgba(254, 78, 3, 0.5);
-  box-shadow: 0 0 0 3px rgba(254, 78, 3, 0.1);
-}
+/* Dark mode form elements - using Tailwind classes instead */
+/* Removed to allow Tailwind dark:bg-input/30 to work properly */
 
 /* Dark mode badges */
 .dark .bg-green-100 {

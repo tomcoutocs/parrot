@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckSquare, Clock, AlertCircle, MoreHorizontal, ChevronRight, Plus, Calendar, FolderKanban, Edit, Archive } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { TaskRow } from "./task-row"
@@ -581,7 +581,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     }
   }
 
-  const toggleProject = (projectId: string) => {
+  const toggleProject = useCallback((projectId: string) => {
     setExpandedProjects(prev => 
       prev.includes(projectId) 
         ? prev.filter(id => id !== projectId)
@@ -589,15 +589,15 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     )
     // Update selected project for task creation
     setSelectedProjectId(projectId)
-  }
+  }, [])
 
-  const toggleStatus = (statusId: string) => {
+  const toggleStatus = useCallback((statusId: string) => {
     setExpandedStatuses(prev => 
       prev.includes(statusId) 
         ? prev.filter(id => id !== statusId)
         : [...prev, statusId]
     )
-  }
+  }, [])
 
   const handleToggleSelect = (taskId: string) => {
     setSelectedTasks(prev =>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Plus, Edit, Trash2, User as UserIcon, Mail, Shield, Users, Search, Grid3X3, List, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -59,7 +59,6 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
   const searchParams = useSearchParams()
   const [users, setUsers] = useState<UserWithCompanies[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<UserWithCompanies[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
@@ -113,7 +112,8 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
     }
   }, [isAdmin])
 
-  const filterUsers = useCallback(() => {
+  // Memoize filtered users to avoid recalculating on every render
+  const filteredUsers = useMemo(() => {
     let filtered = users
 
     // Filter by search term
@@ -146,12 +146,8 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
       })
     }
 
-    setFilteredUsers(filtered)
+    return filtered
   }, [users, searchTerm, roleFilter, companyFilter])
-
-  useEffect(() => {
-    filterUsers()
-  }, [filterUsers])
 
   const loadUsers = async () => {
     setIsLoading(true)

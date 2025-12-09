@@ -9,6 +9,7 @@ import {
   Users,
   Settings
 } from "lucide-react"
+import { prefetchTab } from "./lazy-tab-loader"
 
 interface NavigationItem {
   id: string
@@ -43,15 +44,36 @@ export function ModernNavigation({ activeTab, onTabChange, userRole }: ModernNav
     return userRole && item.roles.includes(userRole)
   })
 
+  // Map navigation IDs to internal tab names for prefetching
+  const getTabName = (navId: string): string => {
+    const tabMap: Record<string, string> = {
+      'overview': 'dashboard',
+      'tasks': 'projects',
+      'forms': 'forms',
+      'documents': 'documents',
+      'calendar': 'company-calendars',
+      'reports': 'reports',
+      'users': 'admin',
+      'settings': 'settings'
+    }
+    return tabMap[navId] || navId
+  }
+
   return (
     <div className="border-b border-border/50">
       <div className="flex items-center gap-5">
         {visibleItems.map((item) => {
           const isActive = activeTab === item.id
+          const tabName = getTabName(item.id)
+          
           return (
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
+              onMouseEnter={() => {
+                // Prefetch tab when user hovers (for faster loading)
+                prefetchTab(tabName)
+              }}
               className={`
                 group relative flex items-center gap-2 px-3 py-2.5 text-sm transition-all duration-200 rounded-t-md
                 ${isActive 

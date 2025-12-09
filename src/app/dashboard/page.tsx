@@ -5,7 +5,7 @@ import { useSession } from '@/components/providers/session-provider'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout, { TabType } from '@/components/dashboard-layout'
 import { ModernDashboardLayout } from '@/components/modern-dashboard-layout'
-import LazyTabComponent, { preloadCriticalTabs } from '@/components/lazy-tab-loader'
+import LazyTabComponent, { preloadCriticalTabs, prefetchTab } from '@/components/lazy-tab-loader'
 import { loadDashboardData, cleanupSubscriptions } from '@/lib/simplified-database-functions'
 
 function DashboardContent() {
@@ -236,23 +236,33 @@ function DashboardContent() {
     }
   }, [session, searchParams, activeTab, router, currentSpaceId]) // Use session directly for stable dependency
 
-  // Initialize dashboard data and preload critical tabs
+  // Initialize dashboard data and preload critical tabs (deferred to avoid blocking initial render)
   useEffect(() => {
     if (session && !isInitialized) {
+      // Mark as initialized immediately to allow UI to render
+      setIsInitialized(true)
+      
+      // Defer data loading to avoid blocking initial render
       const initializeDashboard = async () => {
         try {
-          // Preload critical tabs in the background
+          // Preload critical tabs immediately (non-blocking, but starts right away)
           preloadCriticalTabs()
           
-          // Load initial dashboard data based on user role
+          // Load initial dashboard data in the background (non-blocking)
           const userRole = session.user.role
           const companyId = session.user.role === 'admin' ? undefined : session.user.company_id
           
-          await loadDashboardData(userRole, companyId)
-          setIsInitialized(true)
+          // Use setTimeout to defer this to next tick, allowing UI to render first
+          setTimeout(async () => {
+            try {
+              await loadDashboardData(userRole, companyId)
+            } catch (error) {
+              console.error('Failed to initialize dashboard:', error)
+              // Continue anyway - data will load when needed
+            }
+          }, 0)
         } catch (error) {
           console.error('Failed to initialize dashboard:', error)
-          setIsInitialized(true) // Continue anyway
         }
       }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useSearchParams } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
@@ -928,26 +928,40 @@ export default function ProjectsTab({
   }
 
   const userRole = session?.user?.role || 'user'
-  const currentProject = projects.find(p => p.id === selectedProject)
   
-  // Filter projects by current space (company)
-  const filteredProjects = projects.filter(project => 
-    currentSpaceId ? project.company_id === currentSpaceId : true
+  // Memoize current project lookup
+  const currentProject = useMemo(() => 
+    projects.find(p => p.id === selectedProject),
+    [projects, selectedProject]
   )
   
-  // Filter tasks for selected project (tasks are already filtered by project when loaded)
-  const projectTasks = tasks.filter(task => 
-    (searchTerm === '' || task.title.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    (filterPriority === 'all' || task.priority === filterPriority)
+  // Memoize filtered projects by current space (company)
+  const filteredProjects = useMemo(() => 
+    projects.filter(project => 
+      currentSpaceId ? project.company_id === currentSpaceId : true
+    ),
+    [projects, currentSpaceId]
+  )
+  
+  // Memoize filtered tasks for selected project
+  const projectTasks = useMemo(() => 
+    tasks.filter(task => 
+      (searchTerm === '' || task.title.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (filterPriority === 'all' || task.priority === filterPriority)
+    ),
+    [tasks, searchTerm, filterPriority]
   )
 
-  // Group tasks by status
-  const tasksByStatus = columns.reduce((acc, column) => {
-    acc[column.id] = projectTasks
-      .filter(task => task.status === column.id)
-      .sort((a, b) => a.position - b.position)
-    return acc
-  }, {} as Record<string, TaskWithDetails[]>)
+  // Memoize tasks grouped by status (expensive computation)
+  const tasksByStatus = useMemo(() => 
+    columns.reduce((acc, column) => {
+      acc[column.id] = projectTasks
+        .filter(task => task.status === column.id)
+        .sort((a, b) => a.position - b.position)
+      return acc
+    }, {} as Record<string, TaskWithDetails[]>),
+    [projectTasks, columns]
+  )
 
   // Load data on component mount
   useEffect(() => {
@@ -1080,7 +1094,7 @@ export default function ProjectsTab({
     }
   }
 
-  const handleAddTask = async (status: Task['status']) => {
+  const handleAddTask = useCallback(async (status: Task['status']) => {
     if (!session?.user?.id || !selectedProject || !supabase) return
 
     try {
@@ -1131,9 +1145,9 @@ export default function ProjectsTab({
     } catch (error) {
       console.error('Error creating task:', error)
     }
-  }
+  }, [session?.user?.id, selectedProject, tasks])
 
-  const handleTaskCreated = async () => {
+  const handleTaskCreated = useCallback(async () => {
     // Refresh tasks and projects list
     try {
       const [tasksData, projectsData] = await Promise.all([
@@ -1159,37 +1173,37 @@ export default function ProjectsTab({
     } catch (error) {
       // Handle error silently
     }
-  }
+  }, [selectedProject, currentProject])
 
-  const handleEditTask = (task: TaskWithDetails) => {
+  const handleEditTask = useCallback((task: TaskWithDetails) => {
     setSelectedTask(task)
     setShowEditTaskModal(true)
-  }
+  }, [])
 
-  const handleTaskUpdated = async () => {
+  const handleTaskUpdated = useCallback(async () => {
     try {
       const updatedTasks = await fetchTasksOptimized(selectedProject)
       setTasks(updatedTasks)
     } catch (error) {
       // Handle error silently
     }
-  }
+  }, [selectedProject])
 
-  const handleManageTaskAssignments = (task: TaskWithDetails) => {
+  const handleManageTaskAssignments = useCallback((task: TaskWithDetails) => {
     setSelectedTask(task)
     setShowManageTaskAssignmentsModal(true)
-  }
+  }, [])
 
-  const handleAssignmentsUpdated = async () => {
+  const handleAssignmentsUpdated = useCallback(async () => {
     try {
       const updatedTasks = await fetchTasksOptimized(selectedProject)
       setTasks(updatedTasks)
     } catch (error) {
       // Handle error silently
     }
-  }
+  }, [selectedProject])
 
-  const handleQuickEdit = async (task: TaskWithDetails, field: string, value: string | null) => {
+  const handleQuickEdit = useCallback(async (task: TaskWithDetails, field: string, value: string | null) => {
     if (!session?.user?.id || !supabase) return
 
     try {
@@ -1231,9 +1245,9 @@ export default function ProjectsTab({
     } catch (error) {
       console.error('Error updating task:', error)
     }
-  }
+  }, [session?.user?.id, selectedProject])
 
-  const handleDeleteTask = async (taskId: string) => {
+  const handleDeleteTask = useCallback(async (taskId: string) => {
     if (!confirm('Are you sure you want to delete this task?')) {
       return
     }
@@ -1255,7 +1269,7 @@ export default function ProjectsTab({
     } catch (error) {
       // Handle error silently
     }
-  }
+  }, [selectedProject, selectedTaskForSidebar])
 
   const handleTaskClick = useCallback((task: TaskWithDetails) => {
     setSelectedTaskForSidebar(task)

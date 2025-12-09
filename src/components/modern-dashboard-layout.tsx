@@ -14,21 +14,24 @@ import {
 import { ModernSidebar } from "./modern-sidebar"
 import { ModernNavigation } from "./modern-navigation"
 import { SpaceOverview } from "./space-overview"
-import { AdminAllProjects } from "./admin-all-projects"
-import { AdminAllTasks } from "./admin-all-tasks"
-import { AdminDashboard } from "./admin-dashboard"
-import { AdminAnalytics } from "./admin-analytics"
-import { AdminTeam } from "./admin-team"
-import { AdminAllUsers } from "./admin-all-users"
-import { ModernOverviewTab } from "./modern-overview-tab"
-import { ModernDashboardTab } from "./modern-dashboard-tab"
-import { ModernTasksTab } from "./modern-tasks-tab"
-import { ModernProjectsTab } from "./modern-projects-tab"
-import { ModernDocumentsTab } from "./modern-documents-tab"
-import { ModernCalendarTab } from "./modern-calendar-tab"
-import { ModernReportsTab } from "./modern-reports-tab"
-import { ModernUsersTab } from "./modern-users-tab"
-import { ModernSettingsTab } from "./modern-settings-tab"
+// Lazy load admin components to reduce initial bundle size
+import dynamic from "next/dynamic"
+
+const AdminAllProjects = dynamic(() => import("./admin-all-projects").then(m => ({ default: m.AdminAllProjects })), { ssr: false })
+const AdminAllTasks = dynamic(() => import("./admin-all-tasks").then(m => ({ default: m.AdminAllTasks })), { ssr: false })
+const AdminDashboard = dynamic(() => import("./admin-dashboard").then(m => ({ default: m.AdminDashboard })), { ssr: false })
+const AdminAnalytics = dynamic(() => import("./admin-analytics").then(m => ({ default: m.AdminAnalytics })), { ssr: false })
+const AdminTeam = dynamic(() => import("./admin-team").then(m => ({ default: m.AdminTeam })), { ssr: false })
+const AdminAllUsers = dynamic(() => import("./admin-all-users").then(m => ({ default: m.AdminAllUsers })), { ssr: false })
+const ModernOverviewTab = dynamic(() => import("./modern-overview-tab").then(m => ({ default: m.ModernOverviewTab })), { ssr: false })
+const ModernDashboardTab = dynamic(() => import("./modern-dashboard-tab").then(m => ({ default: m.ModernDashboardTab })), { ssr: false })
+const ModernTasksTab = dynamic(() => import("./modern-tasks-tab").then(m => ({ default: m.ModernTasksTab })), { ssr: false })
+const ModernProjectsTab = dynamic(() => import("./modern-projects-tab").then(m => ({ default: m.ModernProjectsTab })), { ssr: false })
+const ModernDocumentsTab = dynamic(() => import("./modern-documents-tab").then(m => ({ default: m.ModernDocumentsTab })), { ssr: false })
+const ModernCalendarTab = dynamic(() => import("./modern-calendar-tab").then(m => ({ default: m.ModernCalendarTab })), { ssr: false })
+const ModernReportsTab = dynamic(() => import("./modern-reports-tab").then(m => ({ default: m.ModernReportsTab })), { ssr: false })
+const ModernUsersTab = dynamic(() => import("./modern-users-tab").then(m => ({ default: m.ModernUsersTab })), { ssr: false })
+const ModernSettingsTab = dynamic(() => import("./modern-settings-tab").then(m => ({ default: m.ModernSettingsTab })), { ssr: false })
 import LazyTabComponent from "./lazy-tab-loader"
 import { fetchCompaniesOptimized, fetchProjectsOptimized } from "@/lib/simplified-database-functions"
 import { Company, Service, Form } from "@/lib/supabase"
