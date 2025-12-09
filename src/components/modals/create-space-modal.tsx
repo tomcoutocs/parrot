@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { createCompany, updateCompanyServices, assignCompanyToInternalUser, updateUser, createDefaultOnboardingProject, createDefaultOnboardingDocument, fetchForms, assignFormToSpace } from "@/lib/database-functions"
+import { createSpace, updateSpaceServices, assignCompanyToInternalUser, updateUser, createDefaultOnboardingProject, createDefaultOnboardingDocument, fetchForms, assignFormToSpace } from "@/lib/database-functions"
 import { useSession } from "@/components/providers/session-provider"
 import { fetchServicesOptimized } from "@/lib/simplified-database-functions"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
@@ -107,24 +107,24 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         ? `${companyName}${description ? ` - ${description}` : ''}`
         : description || undefined
       
-      const result = await createCompany({
+      const result = await createSpace({
         name: spaceName, // Use spaceName for the nav bar display
         description: finalDescription,
         manager_id: accountManager || null // Set manager during creation
       })
 
       if (!result.success || !result.data) {
-        toastError(result.error || "Failed to create company")
+        toastError(result.error || "Failed to create space")
         setIsSubmitting(false)
         return
       }
 
-      const companyId = result.data.id
+      const spaceId = result.data.id
 
       // Create default onboarding project with tasks
       if (session?.user?.id) {
         try {
-          const onboardingResult = await createDefaultOnboardingProject(companyId, session.user.id)
+          const onboardingResult = await createDefaultOnboardingProject(spaceId, session.user.id)
           if (!onboardingResult.success) {
             console.error("Failed to create default onboarding project:", onboardingResult.error)
             // Don't fail the whole operation, just log the error
@@ -138,7 +138,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
       // Create default onboarding document in external documents folder
       if (session?.user?.id) {
         try {
-          const docResult = await createDefaultOnboardingDocument(companyId, session.user.id)
+          const docResult = await createDefaultOnboardingDocument(spaceId, session.user.id)
           if (!docResult.success) {
             console.error("Failed to create default onboarding document:", docResult.error)
             // Don't fail the whole operation, just log the error
@@ -167,7 +167,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         
         // Assign Support Ticket form if found
         if (supportTicketForm) {
-          const formAssignmentResult = await assignFormToSpace(supportTicketForm.id, companyId)
+          const formAssignmentResult = await assignFormToSpace(supportTicketForm.id, spaceId)
           if (!formAssignmentResult.success) {
             console.error("Failed to assign Support Ticket form to space:", formAssignmentResult.error)
             // Don't fail the whole operation, just log the error
@@ -178,7 +178,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         
         // Assign Onboarding form if found
         if (onboardingForm) {
-          const onboardingAssignmentResult = await assignFormToSpace(onboardingForm.id, companyId)
+          const onboardingAssignmentResult = await assignFormToSpace(onboardingForm.id, spaceId)
           if (!onboardingAssignmentResult.success) {
             console.error("Failed to assign Onboarding form to space:", onboardingAssignmentResult.error)
             // Don't fail the whole operation, just log the error
@@ -193,7 +193,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
 
       // Update company services if any are selected
       if (selectedServices.length > 0) {
-        const servicesResult = await updateCompanyServices(companyId, selectedServices)
+        const servicesResult = await updateSpaceServices(spaceId, selectedServices)
         if (!servicesResult.success) {
           console.error("Failed to update services:", servicesResult.error)
           // Don't fail the whole operation, just log the error
@@ -209,7 +209,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
 
             if (user.role === 'internal') {
               // For internal users, add to internal_user_companies table
-              await assignCompanyToInternalUser(userId, companyId, false)
+              await assignCompanyToInternalUser(userId, spaceId, false)
             } else {
               // For regular users/managers, update company_id using updateUser
               // We need to preserve all existing user data
@@ -218,7 +218,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
                 full_name: user.full_name || '',
                 role: user.role as 'admin' | 'manager' | 'user' | 'internal',
                 is_active: user.is_active !== false,
-                company_id: companyId,
+                company_id: spaceId, // Database column is still company_id
                 assigned_manager_id: user.assigned_manager_id || undefined,
                 tab_permissions: user.tab_permissions || []
               })

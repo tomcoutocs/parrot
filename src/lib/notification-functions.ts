@@ -548,34 +548,35 @@ export async function createTaskUpdateNotification(
 }
 
 /**
- * Get all active user IDs in a space (company)
+ * Get all active user IDs in a space
+ * Note: Database uses "company_id" but we use "space" terminology throughout the codebase
  * This includes:
- * - Users directly assigned to the company (company_id)
- * - Internal users assigned to the company via internal_user_companies
- * - Managers assigned to the company via companies.manager_id
+ * - Users directly assigned to the space (company_id)
+ * - Internal users assigned to the space via internal_user_companies
+ * - Managers assigned to the space via companies.manager_id
  */
-async function getUsersInSpace(companyId: string): Promise<string[]> {
-  if (!supabase || !companyId) {
+async function getUsersInSpace(spaceId: string): Promise<string[]> {
+  if (!supabase || !spaceId) {
     return []
   }
 
   try {
-    // Get users directly assigned to the company
+    // Get users directly assigned to the space
     const { data: directUsers, error: directError } = await supabase
       .from('users')
       .select('id')
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId)
       .eq('is_active', true)
 
     if (directError) {
       console.error('Error fetching direct users:', directError)
     }
 
-    // Get internal users assigned to the company
+    // Get internal users assigned to the space
     const { data: internalUsers, error: internalError } = await supabase
       .from('internal_user_companies')
       .select('user_id')
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId)
 
     if (internalError) {
       console.error('Error fetching internal users:', internalError)
@@ -595,20 +596,20 @@ async function getUsersInSpace(companyId: string): Promise<string[]> {
       activeInternalUserIds = (activeInternalUsers || []).map(u => u.id)
     }
 
-    // Get managers assigned to the company via companies.manager_id
-    const { data: company, error: companyError } = await supabase
+    // Get managers assigned to the space via companies.manager_id
+    const { data: space, error: spaceError } = await supabase
       .from('companies')
       .select('manager_id')
-      .eq('id', companyId)
+      .eq('id', spaceId)
       .single()
 
     let managerIds: string[] = []
-    if (!companyError && company?.manager_id) {
+    if (!spaceError && space?.manager_id) {
       // Verify the manager is active
       const { data: manager } = await supabase
         .from('users')
         .select('id')
-        .eq('id', company.manager_id)
+        .eq('id', space.manager_id)
         .eq('is_active', true)
         .single()
 
@@ -632,11 +633,12 @@ async function getUsersInSpace(companyId: string): Promise<string[]> {
 }
 
 /**
- * Create a space-wide notification for all users in a company's space
+ * Create a space-wide notification for all users in a space
+ * Note: Database uses "company_id" but we use "space" terminology throughout the codebase
  * This sends a notification to all active users who have access to the space
  */
 export async function createSpaceWideNotification(
-  companyId: string,
+  spaceId: string,
   notification: {
     title: string
     message: string
@@ -650,20 +652,20 @@ export async function createSpaceWideNotification(
     return { success: false, error: 'Supabase not configured' }
   }
 
-  if (!companyId) {
-    return { success: false, error: 'Company ID is required' }
+  if (!spaceId) {
+    return { success: false, error: 'Space ID is required' }
   }
 
   try {
     // Get all users in the space
-    const userIds = await getUsersInSpace(companyId)
+    const userIds = await getUsersInSpace(spaceId)
 
     if (userIds.length === 0) {
-      console.warn(`No active users found in space/company: ${companyId}`)
+      console.warn(`No active users found in space: ${spaceId}`)
       return { success: true, createdCount: 0 }
     }
 
-    console.log(`Creating space-wide notification for ${userIds.length} users in company ${companyId}`)
+    console.log(`Creating space-wide notification for ${userIds.length} users in space ${spaceId}`)
 
     // Create notifications for all users
     const notifications = userIds.map(userId => ({
@@ -676,7 +678,8 @@ export async function createSpaceWideNotification(
       created_by_user_id: notification.created_by_user_id,
       metadata: {
         ...notification.metadata,
-        company_id: companyId,
+        space_id: spaceId,
+        company_id: spaceId, // Keep for backward compatibility
         is_space_wide: true
       },
       "read": false

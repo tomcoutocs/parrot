@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { updateCompany } from '@/lib/database-functions'
+import { updateSpace } from '@/lib/database-functions'
 
 interface KlaviyoCredentialsModalProps {
   isOpen: boolean
@@ -63,7 +63,7 @@ export function KlaviyoCredentialsModal({
   const handleSave = async () => {
     setLoading(true)
     try {
-      const result = await updateCompany(companyId, {
+      const result = await updateSpace(companyId, {
         klaviyo_public_api_key: credentials.public_api_key || undefined,
         klaviyo_private_api_key: credentials.private_api_key || undefined,
       })

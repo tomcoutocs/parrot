@@ -13,7 +13,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { createCompany, updateCompany, deleteCompany, fetchServices, updateCompanyServices, getCompanyServices, fetchCompaniesWithServices } from '@/lib/simplified-database-functions'
+import { createSpace, updateSpace, deleteSpace, fetchServices, updateSpaceServices, getSpaceServices, fetchSpacesWithServices } from '@/lib/database-functions'
+import { fetchCompaniesOptimized } from '@/lib/simplified-database-functions' // Still needed for optimized fetching
 import { fetchCompanyDetails, testCompanyAccess, simpleCompanyTest, fetchCompaniesDirect } from '@/lib/company-detail-functions'
 import { fetchUsers } from '@/lib/database-functions'
 import type { Company, Service } from '@/lib/supabase'
@@ -101,7 +102,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
   const loadCompanies = async () => {
     setIsLoading(true)
     try {
-      const companiesData = await fetchCompaniesWithServices()
+      const companiesData = await fetchSpacesWithServices()
       setCompanies(companiesData)
     } catch (error) {
       console.error('Error loading companies:', error)
@@ -195,8 +196,11 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     }
 
     try {
-      // Create the company
-      const result = await createCompany(createCompanyData)
+      // Create the space
+      const result = await createSpace({
+        name: createCompanyData.name,
+        is_partner: createCompanyData.is_partner || false
+      })
       if (result.success && result.data) {
         const companyId = result.data.id
         
@@ -266,7 +270,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     if (!selectedCompany) return
 
     try {
-      const result = await updateCompany(selectedCompany.id, editCompanyData)
+      const result = await updateSpace(selectedCompany.id, editCompanyData)
       if (result.success) {
         toastSuccess('Company updated successfully')
         setShowEditModal(false)
@@ -287,7 +291,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     if (!selectedCompany) return
 
     try {
-      const result = await deleteCompany(selectedCompany.id)
+      const result = await deleteSpace(selectedCompany.id)
       if (result.success) {
         toastSuccess('Company deleted successfully')
         setShowDeleteModal(false)
@@ -328,8 +332,8 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
       const allServices = await fetchServices()
       setServices(allServices)
       
-      // Load company's current services
-      const companyServices = await getCompanyServices(company.id)
+      // Load space's current services
+      const companyServices = await getSpaceServices(company.id)
       const activeServiceIds = companyServices.map(service => service.id)
       setSelectedServices(activeServiceIds)
     } catch (error) {
@@ -342,7 +346,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
     if (!editingCompanyForServices) return
 
     try {
-      const result = await updateCompanyServices(editingCompanyForServices.id, selectedServices)
+      const result = await updateSpaceServices(editingCompanyForServices.id, selectedServices)
       
       if (result.success) {
         toastSuccess('Company services updated successfully')

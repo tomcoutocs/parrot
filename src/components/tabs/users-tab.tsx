@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 
 import { Loader2 } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
-import { createUser, updateUser, deleteUser, fetchCompanies, fetchUsersWithCompanies } from '@/lib/database-functions'
+import { createUser, updateUser, deleteUser, fetchSpaces, fetchUsersWithCompanies } from '@/lib/database-functions'
 import type { Company, UserWithCompanies } from '@/lib/supabase'
 import { Checkbox } from '@/components/ui/checkbox'
 import UserInvitationModal from '@/components/modals/user-invitation-modal'
@@ -154,7 +154,7 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
     try {
       const [usersData, companiesData] = await Promise.all([
         fetchUsersWithCompanies(),
-        fetchCompanies()
+        fetchSpaces()
       ])
       setUsers(usersData)
       setCompanies(companiesData)

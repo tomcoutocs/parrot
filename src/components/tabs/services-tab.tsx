@@ -13,18 +13,18 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2 } from 'lucide-react'
 import EmptyState from '@/components/ui/empty-state'
 import { useSession } from '@/components/providers/session-provider'
-import { fetchServicesWithCompanyStatus, updateCompanyServices, getCompanyServices } from '@/lib/database-functions'
-import type { ServiceWithCompanyStatus } from '@/lib/supabase'
+import { fetchServicesWithSpaceStatus, updateSpaceServices, getSpaceServices } from '@/lib/database-functions'
+import type { ServiceWithSpaceStatus } from '@/lib/supabase'
 import { toastSuccess, toastError } from '@/lib/toast'
 
 interface ServiceCategory {
   name: string
-  services: ServiceWithCompanyStatus[]
+  services: ServiceWithSpaceStatus[]
 }
 
 export default function ServicesTab() {
   const { data: session } = useSession()
-  const [services, setServices] = useState<ServiceWithCompanyStatus[]>([])
+  const [services, setServices] = useState<ServiceWithSpaceStatus[]>([])
   const [filteredServices, setFilteredServices] = useState<ServiceCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -48,7 +48,7 @@ export default function ServicesTab() {
   const loadServices = async () => {
     setIsLoading(true)
     try {
-      const servicesData = await fetchServicesWithCompanyStatus(userCompanyId)
+      const servicesData = await fetchServicesWithSpaceStatus(userCompanyId)
       setServices(servicesData)
     } catch (error) {
       console.error('Error loading services:', error)
@@ -77,9 +77,9 @@ export default function ServicesTab() {
       filtered = filtered.filter(service => service.category === categoryFilter)
     }
 
-    // Filter by company active status
+    // Filter by space active status
     if (showOnlyActive) {
-      filtered = filtered.filter(service => service.is_company_active)
+      filtered = filtered.filter(service => service.is_space_active)
     }
 
     // Group by category
@@ -107,7 +107,7 @@ export default function ServicesTab() {
       console.log('Updating company services for company:', userCompanyId)
       console.log('Selected services:', selectedServices)
       
-      const result = await updateCompanyServices(userCompanyId, selectedServices)
+      const result = await updateSpaceServices(userCompanyId, selectedServices)
       
       if (result.success) {
         toastSuccess('Services updated successfully')
@@ -186,13 +186,13 @@ export default function ServicesTab() {
                 <div>
                   <h3 className="font-semibold text-green-800">Your Company Services</h3>
                   <p className="text-sm text-green-600">
-                    {services.filter(s => s.is_company_active).length} of {services.length} services are available to your company
+                    {services.filter(s => s.is_space_active).length} of {services.length} services are available to your space
                   </p>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-green-600">
-                  {services.filter(s => s.is_company_active).length}
+                  {services.filter(s => s.is_space_active).length}
                 </div>
                 <div className="text-xs text-green-500">Active Services</div>
               </div>
@@ -263,12 +263,12 @@ export default function ServicesTab() {
                   <Card 
                     key={service.id} 
                     className={`parrot-card-enhanced relative transition-all duration-200 hover:shadow-lg ${
-                      service.is_company_active 
-                        ? 'ring-2 ring-green-500 bg-green-50 border-green-200 shadow-md' 
+                      service.is_space_active
+                        ? 'ring-2 ring-green-500 bg-green-50 border-green-200 shadow-md'
                         : 'hover:ring-1 hover:ring-gray-300'
                     }`}
                   >
-                    {service.is_company_active && (
+                    {service.is_space_active && (
                       <div className="absolute -top-2 -right-2">
                         <div className="bg-green-500 text-white rounded-full p-1 shadow-lg">
                           <CheckCircle className="h-4 w-4" />
@@ -286,7 +286,7 @@ export default function ServicesTab() {
                               {service.subcategory}
                             </Badge>
                           )}
-                          {service.is_company_active && (
+                          {service.is_space_active && (
                             <Badge className="bg-green-100 text-green-800 text-xs font-medium">
                               Active
                             </Badge>
@@ -298,7 +298,7 @@ export default function ServicesTab() {
                       <CardDescription className="text-sm leading-relaxed">
                         {service.description}
                       </CardDescription>
-                      {service.is_company_active && (
+                      {service.is_space_active && (
                         <div className="mt-3 p-2 bg-green-100 rounded-lg border border-green-200">
                           <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
                             <CheckCircle className="h-4 w-4" />

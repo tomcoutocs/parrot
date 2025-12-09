@@ -12,7 +12,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
 import { User, Form } from "@/lib/supabase"
-import { updateCompany, fetchFormsForSpace, hasUserSubmittedForm } from "@/lib/database-functions"
+import { updateSpace, fetchFormsForSpace, hasUserSubmittedForm } from "@/lib/database-functions"
 import { useSession } from "@/components/providers/session-provider"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { Loader2, ChevronDown, FileText, X } from "lucide-react"
@@ -174,7 +174,7 @@ export function SpaceOverview({
       }
 
       // Update company with new manager_id (null if "none" is selected)
-      const updateResult = await updateCompany(companyId, {
+      const updateResult = await updateSpace(companyId, {
         name: currentCompany.name,
         description: currentCompany.description || undefined,
         industry: currentCompany.industry || undefined,

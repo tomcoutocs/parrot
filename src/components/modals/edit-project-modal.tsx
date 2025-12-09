@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Project, ProjectWithDetails, User, Company } from '@/lib/supabase'
 import { useSession } from '@/components/providers/session-provider'
-import { fetchUsers, fetchCompanies, updateProject } from '@/lib/database-functions'
+import { fetchUsers, fetchSpaces, updateProject } from '@/lib/database-functions'
 
 interface EditProjectModalProps {
   isOpen: boolean
@@ -47,7 +47,7 @@ export default function EditProjectModal({
   useEffect(() => {
     const loadCompanies = async () => {
       try {
-        const companiesData = await fetchCompanies()
+        const companiesData = await fetchSpaces()
         setCompanies(companiesData)
       } catch (error) {
         console.error('Error loading companies:', error)

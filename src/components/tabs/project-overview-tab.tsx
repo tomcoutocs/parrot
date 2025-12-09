@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
-import { fetchTasks, fetchCompanies, fetchProjects } from '@/lib/database-functions'
+import { fetchTasks, fetchSpaces, fetchProjects } from '@/lib/database-functions'
 import type { TaskWithDetails, Company, ProjectWithDetails } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -80,10 +80,10 @@ export default function ProjectOverviewTab() {
       let allCompanies: Company[]
       if (session?.user.role === 'admin') {
         // Admin can see all companies
-        allCompanies = await fetchCompanies()
+        allCompanies = await fetchSpaces()
       } else if (session?.user.role === 'manager') {
         // Manager can only see their own company
-        const allCompaniesData = await fetchCompanies()
+        const allCompaniesData = await fetchSpaces()
         allCompanies = session.user.company_id 
           ? allCompaniesData.filter(c => c.id === session.user.company_id)
           : []

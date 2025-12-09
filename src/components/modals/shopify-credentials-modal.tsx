@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { updateCompany } from '@/lib/database-functions'
+import { updateSpace } from '@/lib/database-functions'
 
 interface ShopifyCredentialsModalProps {
   isOpen: boolean
@@ -75,7 +75,7 @@ export function ShopifyCredentialsModal({
   const handleSave = async () => {
     setLoading(true)
     try {
-      const result = await updateCompany(companyId, {
+      const result = await updateSpace(companyId, {
         shopify_store_domain: credentials.store_domain || undefined,
         shopify_api_key: credentials.api_key || undefined,
         shopify_api_secret_key: credentials.api_secret_key || undefined,

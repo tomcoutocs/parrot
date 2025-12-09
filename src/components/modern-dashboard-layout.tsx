@@ -35,7 +35,7 @@ const ModernSettingsTab = dynamic(() => import("./modern-settings-tab").then(m =
 import LazyTabComponent from "./lazy-tab-loader"
 import { fetchCompaniesOptimized, fetchProjectsOptimized } from "@/lib/simplified-database-functions"
 import { Company, Service, Form } from "@/lib/supabase"
-import { getCompanyServices, fetchForms } from "@/lib/database-functions"
+import { getSpaceServices, fetchForms } from "@/lib/database-functions"
 import { supabase } from "@/lib/supabase"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { useAuth } from "@/components/providers/session-provider"
@@ -244,7 +244,7 @@ export function ModernDashboardLayout({
       }
 
       try {
-        const services = await getCompanyServices(currentSpaceId)
+        const services = await getSpaceServices(currentSpaceId)
         setSpaceServices(services.map(service => service.name))
       } catch (error) {
         console.error("Error fetching services:", error)
@@ -803,7 +803,7 @@ export function ModernDashboardLayout({
                           return
                         }
                         try {
-                          const services = await getCompanyServices(currentSpaceId)
+                          const services = await getSpaceServices(currentSpaceId)
                           setSpaceServices(services.map(service => service.name))
                         } catch (error) {
                           console.error("Error fetching services:", error)

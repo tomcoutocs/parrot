@@ -109,7 +109,7 @@ export async function logActivity(data: {
 
 // Database Functions for Project Management
 
-export async function fetchProjects(companyId?: string): Promise<ProjectWithDetails[]> {
+export async function fetchProjects(spaceId?: string): Promise<ProjectWithDetails[]> {
   if (!supabase) {
     return []
   }
@@ -139,9 +139,9 @@ export async function fetchProjects(companyId?: string): Promise<ProjectWithDeta
       .order('position', { ascending: true })
       .order('created_at', { ascending: false })
 
-    // Filter by company if provided
-    if (companyId) {
-      query = query.eq('company_id', companyId)
+    // Filter by space if provided
+    if (spaceId) {
+      query = query.eq('company_id', spaceId) // Database column is still company_id
     }
 
     const { data, error } = await query
@@ -473,7 +473,7 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
       
       // Create space-wide notification
       await createSpaceWideNotification(
-        data.company_id,
+        data.company_id, // spaceId - database column is still company_id
         {
           title: 'New Project Created',
           message: `${creatorName} created a new project "${data.name}"${data.description ? `: ${data.description}` : ''}`,
@@ -1995,7 +1995,11 @@ export async function fetchCompanies(): Promise<Company[]> {
   return fetchSpaces() as Promise<Company[]>
 }
 
-export async function fetchCompaniesWithServices(): Promise<Company[]> {
+/**
+ * Fetch all spaces with their associated services
+ * Note: Database table is "companies" but we use "space" terminology throughout the codebase
+ */
+export async function fetchSpacesWithServices(): Promise<Space[]> {
   if (!supabase) {
     return []
   }
@@ -2043,47 +2047,52 @@ export async function fetchCompaniesWithServices(): Promise<Company[]> {
     }
 
     if (error) {
-      console.error('Error fetching companies with services:', error)
+      console.error('Error fetching spaces with services:', error)
       return []
     }
 
     // Transform the data to flatten the services structure and decrypt API keys
-    const transformedData = await Promise.all((data || []).map(async (company) => {
-      const services = company.company_services
+    const transformedData = await Promise.all((data || []).map(async (space) => {
+      const services = space.company_services
         ?.map((cs: { service_id: string; service: Service }) => cs.service)
         .filter(Boolean) || []
       
-      console.log(`Company ${company.name} has ${services.length} services:`, services.map((s: Service) => s.name))
+      console.log(`Space ${space.name} has ${services.length} services:`, services.map((s: Service) => s.name))
       
       return {
-        ...company,
+        ...space,
         services,
         // Legacy API keys
-        meta_api_key: company.meta_api_key ? await decrypt(company.meta_api_key) : undefined,
-        google_api_key: company.google_api_key ? await decrypt(company.google_api_key) : undefined,
-        shopify_api_key: company.shopify_api_key ? await decrypt(company.shopify_api_key) : undefined,
-        klaviyo_api_key: company.klaviyo_api_key ? await decrypt(company.klaviyo_api_key) : undefined,
+        meta_api_key: space.meta_api_key ? await decrypt(space.meta_api_key) : undefined,
+        google_api_key: space.google_api_key ? await decrypt(space.google_api_key) : undefined,
+        shopify_api_key: space.shopify_api_key ? await decrypt(space.shopify_api_key) : undefined,
+        klaviyo_api_key: space.klaviyo_api_key ? await decrypt(space.klaviyo_api_key) : undefined,
         // Google Ads API credentials (decrypt sensitive fields)
-        google_ads_developer_token: company.google_ads_developer_token ? await decrypt(company.google_ads_developer_token) : undefined,
-        google_ads_client_secret: company.google_ads_client_secret ? await decrypt(company.google_ads_client_secret) : undefined,
-        google_ads_refresh_token: company.google_ads_refresh_token ? await decrypt(company.google_ads_refresh_token) : undefined,
+        google_ads_developer_token: space.google_ads_developer_token ? await decrypt(space.google_ads_developer_token) : undefined,
+        google_ads_client_secret: space.google_ads_client_secret ? await decrypt(space.google_ads_client_secret) : undefined,
+        google_ads_refresh_token: space.google_ads_refresh_token ? await decrypt(space.google_ads_refresh_token) : undefined,
         // Meta Ads API credentials (decrypt sensitive fields)
-        meta_ads_app_secret: company.meta_ads_app_secret ? await decrypt(company.meta_ads_app_secret) : undefined,
-        meta_ads_access_token: company.meta_ads_access_token ? await decrypt(company.meta_ads_access_token) : undefined,
-        meta_ads_system_user_token: company.meta_ads_system_user_token ? await decrypt(company.meta_ads_system_user_token) : undefined,
+        meta_ads_app_secret: space.meta_ads_app_secret ? await decrypt(space.meta_ads_app_secret) : undefined,
+        meta_ads_access_token: space.meta_ads_access_token ? await decrypt(space.meta_ads_access_token) : undefined,
+        meta_ads_system_user_token: space.meta_ads_system_user_token ? await decrypt(space.meta_ads_system_user_token) : undefined,
         // Shopify API credentials (decrypt sensitive fields)
-        shopify_api_secret_key: company.shopify_api_secret_key ? await decrypt(company.shopify_api_secret_key) : undefined,
-        shopify_access_token: company.shopify_access_token ? await decrypt(company.shopify_access_token) : undefined,
+        shopify_api_secret_key: space.shopify_api_secret_key ? await decrypt(space.shopify_api_secret_key) : undefined,
+        shopify_access_token: space.shopify_access_token ? await decrypt(space.shopify_access_token) : undefined,
         // Klaviyo API credentials (decrypt sensitive fields)
-        klaviyo_private_api_key: company.klaviyo_private_api_key ? await decrypt(company.klaviyo_private_api_key) : undefined,
+        klaviyo_private_api_key: space.klaviyo_private_api_key ? await decrypt(space.klaviyo_private_api_key) : undefined,
       }
     }))
 
     return transformedData
   } catch (error) {
-    console.error('Error in fetchCompaniesWithServices:', error)
+    console.error('Error in fetchSpacesWithServices:', error)
     return []
   }
+}
+
+/** @deprecated Use fetchSpacesWithServices instead. This function exists for backward compatibility. */
+export async function fetchCompaniesWithServices(): Promise<Company[]> {
+  return fetchSpacesWithServices() as Promise<Company[]>
 }
 
 /**
@@ -2164,7 +2173,7 @@ export async function createCompany(companyData: {
  * This function calls a server-side API route to generate the PDF
  */
 export async function createDefaultOnboardingDocument(
-  companyId: string,
+  spaceId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -2173,7 +2182,7 @@ export async function createDefaultOnboardingDocument(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ companyId, userId }),
+      body: JSON.stringify({ companyId: spaceId, userId }), // API expects companyId but we use spaceId
     })
 
     const result = await response.json()
@@ -2188,7 +2197,7 @@ export async function createDefaultOnboardingDocument(
  * Creates a default onboarding project with standard tasks for a new space
  */
 export async function createDefaultOnboardingProject(
-  companyId: string,
+  spaceId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
@@ -2203,7 +2212,7 @@ export async function createDefaultOnboardingProject(
       {
         name: 'Onboarding',
         description: 'Default onboarding project',
-        company_id: companyId,
+        company_id: spaceId, // Database column is still company_id
         status: 'active',
         manager_id: null,
         created_by: userId
@@ -2262,7 +2271,11 @@ export async function createDefaultOnboardingProject(
   }
 }
 
-export async function updateCompany(companyId: string, companyData: {
+/**
+ * Update a space (client workspace)
+ * Note: Database table is "companies" but we use "space" terminology throughout the codebase
+ */
+export async function updateSpace(spaceId: string, spaceData: {
   name?: string
   description?: string
   industry?: string
@@ -2299,14 +2312,14 @@ export async function updateCompany(companyId: string, companyData: {
   // Klaviyo API credentials
   klaviyo_public_api_key?: string
   klaviyo_private_api_key?: string
-}): Promise<{ success: boolean; data?: Company; error?: string }> {
+}): Promise<{ success: boolean; data?: Space; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Updating company:', companyId, companyData)
+    console.log('Updating space:', spaceId, spaceData)
     await setAppContext()
     
     const updateData: any = {
@@ -2314,99 +2327,99 @@ export async function updateCompany(companyId: string, companyData: {
     }
 
     // Only include fields that are provided
-    if (companyData.name !== undefined) updateData.name = companyData.name
-    if (companyData.description !== undefined) updateData.description = companyData.description
-    if (companyData.industry !== undefined) updateData.industry = companyData.industry
-    if (companyData.website !== undefined) updateData.website = companyData.website
-    if (companyData.phone !== undefined) updateData.phone = companyData.phone
-    if (companyData.address !== undefined) updateData.address = companyData.address
-    if (companyData.is_partner !== undefined) updateData.is_partner = companyData.is_partner
-    if (companyData.is_active !== undefined) updateData.is_active = companyData.is_active
-    if (companyData.retainer !== undefined) updateData.retainer = companyData.retainer
-    if (companyData.revenue !== undefined) updateData.revenue = companyData.revenue
+    if (spaceData.name !== undefined) updateData.name = spaceData.name
+    if (spaceData.description !== undefined) updateData.description = spaceData.description
+    if (spaceData.industry !== undefined) updateData.industry = spaceData.industry
+    if (spaceData.website !== undefined) updateData.website = spaceData.website
+    if (spaceData.phone !== undefined) updateData.phone = spaceData.phone
+    if (spaceData.address !== undefined) updateData.address = spaceData.address
+    if (spaceData.is_partner !== undefined) updateData.is_partner = spaceData.is_partner
+    if (spaceData.is_active !== undefined) updateData.is_active = spaceData.is_active
+    if (spaceData.retainer !== undefined) updateData.retainer = spaceData.retainer
+    if (spaceData.revenue !== undefined) updateData.revenue = spaceData.revenue
 
     // Add legacy API keys if provided (encrypt before storing)
-    if (companyData.meta_api_key !== undefined) {
-      updateData.meta_api_key = companyData.meta_api_key ? await encrypt(companyData.meta_api_key) : null
+    if (spaceData.meta_api_key !== undefined) {
+      updateData.meta_api_key = spaceData.meta_api_key ? await encrypt(spaceData.meta_api_key) : null
     }
-    if (companyData.google_api_key !== undefined) {
-      updateData.google_api_key = companyData.google_api_key ? await encrypt(companyData.google_api_key) : null
+    if (spaceData.google_api_key !== undefined) {
+      updateData.google_api_key = spaceData.google_api_key ? await encrypt(spaceData.google_api_key) : null
     }
-    if (companyData.shopify_api_key !== undefined) {
-      updateData.shopify_api_key = companyData.shopify_api_key ? await encrypt(companyData.shopify_api_key) : null
+    if (spaceData.shopify_api_key !== undefined) {
+      updateData.shopify_api_key = spaceData.shopify_api_key ? await encrypt(spaceData.shopify_api_key) : null
     }
-    if (companyData.klaviyo_api_key !== undefined) {
-      updateData.klaviyo_api_key = companyData.klaviyo_api_key ? await encrypt(companyData.klaviyo_api_key) : null
+    if (spaceData.klaviyo_api_key !== undefined) {
+      updateData.klaviyo_api_key = spaceData.klaviyo_api_key ? await encrypt(spaceData.klaviyo_api_key) : null
     }
 
     // Add Google Ads API credentials (encrypt sensitive fields)
-    if (companyData.google_ads_developer_token !== undefined) {
-      updateData.google_ads_developer_token = companyData.google_ads_developer_token ? await encrypt(companyData.google_ads_developer_token) : null
+    if (spaceData.google_ads_developer_token !== undefined) {
+      updateData.google_ads_developer_token = spaceData.google_ads_developer_token ? await encrypt(spaceData.google_ads_developer_token) : null
     }
-    if (companyData.google_ads_client_id !== undefined) {
-      updateData.google_ads_client_id = companyData.google_ads_client_id || null
+    if (spaceData.google_ads_client_id !== undefined) {
+      updateData.google_ads_client_id = spaceData.google_ads_client_id || null
     }
-    if (companyData.google_ads_client_secret !== undefined) {
-      updateData.google_ads_client_secret = companyData.google_ads_client_secret ? await encrypt(companyData.google_ads_client_secret) : null
+    if (spaceData.google_ads_client_secret !== undefined) {
+      updateData.google_ads_client_secret = spaceData.google_ads_client_secret ? await encrypt(spaceData.google_ads_client_secret) : null
     }
-    if (companyData.google_ads_refresh_token !== undefined) {
-      updateData.google_ads_refresh_token = companyData.google_ads_refresh_token ? await encrypt(companyData.google_ads_refresh_token) : null
+    if (spaceData.google_ads_refresh_token !== undefined) {
+      updateData.google_ads_refresh_token = spaceData.google_ads_refresh_token ? await encrypt(spaceData.google_ads_refresh_token) : null
     }
-    if (companyData.google_ads_customer_id !== undefined) {
-      updateData.google_ads_customer_id = companyData.google_ads_customer_id || null
+    if (spaceData.google_ads_customer_id !== undefined) {
+      updateData.google_ads_customer_id = spaceData.google_ads_customer_id || null
     }
 
     // Add Meta Ads API credentials (encrypt sensitive fields)
-    if (companyData.meta_ads_app_id !== undefined) {
-      updateData.meta_ads_app_id = companyData.meta_ads_app_id || null
+    if (spaceData.meta_ads_app_id !== undefined) {
+      updateData.meta_ads_app_id = spaceData.meta_ads_app_id || null
     }
-    if (companyData.meta_ads_app_secret !== undefined) {
-      updateData.meta_ads_app_secret = companyData.meta_ads_app_secret ? await encrypt(companyData.meta_ads_app_secret) : null
+    if (spaceData.meta_ads_app_secret !== undefined) {
+      updateData.meta_ads_app_secret = spaceData.meta_ads_app_secret ? await encrypt(spaceData.meta_ads_app_secret) : null
     }
-    if (companyData.meta_ads_access_token !== undefined) {
-      updateData.meta_ads_access_token = companyData.meta_ads_access_token ? await encrypt(companyData.meta_ads_access_token) : null
+    if (spaceData.meta_ads_access_token !== undefined) {
+      updateData.meta_ads_access_token = spaceData.meta_ads_access_token ? await encrypt(spaceData.meta_ads_access_token) : null
     }
-    if (companyData.meta_ads_ad_account_id !== undefined) {
-      updateData.meta_ads_ad_account_id = companyData.meta_ads_ad_account_id || null
+    if (spaceData.meta_ads_ad_account_id !== undefined) {
+      updateData.meta_ads_ad_account_id = spaceData.meta_ads_ad_account_id || null
     }
-    if (companyData.meta_ads_system_user_token !== undefined) {
-      updateData.meta_ads_system_user_token = companyData.meta_ads_system_user_token ? await encrypt(companyData.meta_ads_system_user_token) : null
+    if (spaceData.meta_ads_system_user_token !== undefined) {
+      updateData.meta_ads_system_user_token = spaceData.meta_ads_system_user_token ? await encrypt(spaceData.meta_ads_system_user_token) : null
     }
 
     // Add Shopify API credentials (encrypt sensitive fields)
-    if (companyData.shopify_store_domain !== undefined) {
-      updateData.shopify_store_domain = companyData.shopify_store_domain || null
+    if (spaceData.shopify_store_domain !== undefined) {
+      updateData.shopify_store_domain = spaceData.shopify_store_domain || null
     }
-    if (companyData.shopify_api_key !== undefined) {
-      updateData.shopify_api_key = companyData.shopify_api_key ? await encrypt(companyData.shopify_api_key) : null
+    if (spaceData.shopify_api_key !== undefined) {
+      updateData.shopify_api_key = spaceData.shopify_api_key ? await encrypt(spaceData.shopify_api_key) : null
     }
-    if (companyData.shopify_api_secret_key !== undefined) {
-      updateData.shopify_api_secret_key = companyData.shopify_api_secret_key ? await encrypt(companyData.shopify_api_secret_key) : null
+    if (spaceData.shopify_api_secret_key !== undefined) {
+      updateData.shopify_api_secret_key = spaceData.shopify_api_secret_key ? await encrypt(spaceData.shopify_api_secret_key) : null
     }
-    if (companyData.shopify_access_token !== undefined) {
-      updateData.shopify_access_token = companyData.shopify_access_token ? await encrypt(companyData.shopify_access_token) : null
+    if (spaceData.shopify_access_token !== undefined) {
+      updateData.shopify_access_token = spaceData.shopify_access_token ? await encrypt(spaceData.shopify_access_token) : null
     }
-    if (companyData.shopify_scopes !== undefined) {
-      updateData.shopify_scopes = companyData.shopify_scopes || null
+    if (spaceData.shopify_scopes !== undefined) {
+      updateData.shopify_scopes = spaceData.shopify_scopes || null
     }
 
     // Add Klaviyo API credentials (encrypt sensitive fields)
-    if (companyData.klaviyo_public_api_key !== undefined) {
-      updateData.klaviyo_public_api_key = companyData.klaviyo_public_api_key || null
+    if (spaceData.klaviyo_public_api_key !== undefined) {
+      updateData.klaviyo_public_api_key = spaceData.klaviyo_public_api_key || null
     }
-    if (companyData.klaviyo_private_api_key !== undefined) {
-      updateData.klaviyo_private_api_key = companyData.klaviyo_private_api_key ? await encrypt(companyData.klaviyo_private_api_key) : null
+    if (spaceData.klaviyo_private_api_key !== undefined) {
+      updateData.klaviyo_private_api_key = spaceData.klaviyo_private_api_key ? await encrypt(spaceData.klaviyo_private_api_key) : null
     }
 
     // Only include manager_id if it's provided (can be null to remove manager)
-    if (companyData.manager_id !== undefined) {
-      updateData.manager_id = companyData.manager_id
+    if (spaceData.manager_id !== undefined) {
+      updateData.manager_id = spaceData.manager_id
     }
 
     const { data, error } = await supabase
       .from('companies')
       .update(updateData)
-      .eq('id', companyId)
+      .eq('id', spaceId)
       .select()
       .single()
 
@@ -2429,21 +2442,21 @@ export async function updateCompany(companyId: string, companyData: {
         const { data: retryData, error: retryError } = await supabase
           .from('companies')
           .update(updateDataWithoutApiKeys)
-          .eq('id', companyId)
+          .eq('id', spaceId)
           .select()
           .single()
         
         if (retryError) {
-          console.error('Error updating company:', retryError)
-          return { success: false, error: retryError.message || 'Failed to update company' }
+          console.error('Error updating space:', retryError)
+          return { success: false, error: retryError.message || 'Failed to update space' }
         }
         
-        console.log('Company updated successfully (without API keys):', retryData)
+        console.log('Space updated successfully (without API keys):', retryData)
         return { success: true, data: retryData }
       }
       
-      console.error('Error updating company:', error)
-      return { success: false, error: error.message || 'Failed to update company' }
+      console.error('Error updating space:', error)
+      return { success: false, error: error.message || 'Failed to update space' }
     }
 
     // Log activity
@@ -2451,58 +2464,68 @@ export async function updateCompany(companyId: string, companyData: {
     if (currentUser && data) {
       await logActivity({
         user_id: currentUser.id,
-        action_type: 'company_updated',
-        entity_type: 'company',
-        entity_id: companyId,
-        description: `Updated company "${data.name}"`,
+        action_type: 'space_updated',
+        entity_type: 'space',
+        entity_id: spaceId,
+        description: `Updated space "${data.name}"`,
         metadata: { 
-          company_name: data.name,
+          space_name: data.name,
           updated_fields: Object.keys(updateData).filter(k => k !== 'updated_at')
         },
-        company_id: companyId,
+        company_id: spaceId,
       })
     }
 
-    console.log('Company updated successfully:', data)
+    console.log('Space updated successfully:', data)
     return { success: true, data }
   } catch (error) {
-    console.error('Error updating company:', error)
+    console.error('Error updating space:', error)
     return { success: false, error: error instanceof Error ? error.message : 'An unexpected error occurred' }
   }
 }
 
-export async function deleteCompany(companyId: string): Promise<{ success: boolean; error?: string }> {
+/** @deprecated Use updateSpace instead. This function exists for backward compatibility. */
+export async function updateCompany(companyId: string, companyData: Parameters<typeof updateSpace>[1]): Promise<{ success: boolean; data?: Company; error?: string }> {
+  const result = await updateSpace(companyId, companyData)
+  return { ...result, data: result.data as Company | undefined }
+}
+
+/**
+ * Delete a space (client workspace)
+ * Note: Database table is "companies" but we use "space" terminology throughout the codebase
+ */
+export async function deleteSpace(spaceId: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured')
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    console.log('Deleting company:', companyId)
+    console.log('Deleting space:', spaceId)
     await setAppContext()
     
-    // First, check if company exists
-    const { data: company, error: fetchError } = await supabase
+    // First, check if space exists
+    const { data: space, error: fetchError } = await supabase
       .from('companies')
       .select('id, name')
-      .eq('id', companyId)
+      .eq('id', spaceId)
       .single()
 
     if (fetchError) {
-      console.error('Error fetching company:', fetchError)
-      return { success: false, error: fetchError.message || 'Company not found' }
+      console.error('Error fetching space:', fetchError)
+      return { success: false, error: fetchError.message || 'Space not found' }
     }
 
-    if (!company) {
-      return { success: false, error: 'Company not found' }
+    if (!space) {
+      return { success: false, error: 'Space not found' }
     }
 
     // Delete related data in the correct order (cascading deletion)
-    // 1. Delete activity logs for tasks in projects belonging to this company
+    // 1. Delete activity logs for tasks in projects belonging to this space
     const { data: projects } = await supabase
       .from('projects')
       .select('id')
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId)
 
     if (projects && projects.length > 0) {
       const projectIds = projects.map(p => p.id)
@@ -2517,155 +2540,147 @@ export async function deleteCompany(companyId: string): Promise<{ success: boole
         const taskIds = tasks.map(t => t.id)
         
         // Delete activity logs for these tasks
-        const { error: activityLogsError } = await supabase
+        const { error: activityLogError } = await supabase
           .from('activity_logs')
           .delete()
           .in('task_id', taskIds)
 
-        if (activityLogsError) {
-          console.warn('Error deleting activity logs (continuing anyway):', activityLogsError)
-        }
-
-        // 2. Delete tasks
-        const { error: tasksError } = await supabase
-          .from('tasks')
-          .delete()
-          .in('project_id', projectIds)
-
-        if (tasksError) {
-          console.warn('Error deleting tasks (continuing anyway):', tasksError)
+        if (activityLogError) {
+          console.warn('Error deleting activity logs for tasks:', activityLogError)
         }
       }
+    }
 
-      // 3. Delete projects
-      const { error: projectsError } = await supabase
-        .from('projects')
+    // 2. Delete company_services (if table exists)
+    try {
+      const { error: servicesError } = await supabase
+        .from('company_services')
         .delete()
-        .eq('company_id', companyId)
+        .eq('company_id', spaceId)
 
-      if (projectsError) {
-        console.warn('Error deleting projects (continuing anyway):', projectsError)
+      if (servicesError && !servicesError.message.includes('does not exist')) {
+        console.warn('Error deleting company services:', servicesError)
+      }
+    } catch (e) {
+      console.warn('Company services table may not exist:', e)
+    }
+
+    // 3. Delete internal_user_companies (if table exists)
+    try {
+      const { error: internalUsersError } = await supabase
+        .from('internal_user_companies')
+        .delete()
+        .eq('company_id', spaceId)
+
+      if (internalUsersError && !internalUsersError.message.includes('does not exist')) {
+        console.warn('Error deleting internal user companies:', internalUsersError)
+      }
+    } catch (e) {
+      console.warn('Internal user companies table may not exist:', e)
+    }
+
+    // 4. Delete cache tables (if they exist)
+    const cacheTables = [
+      'google_ads_metrics_cache',
+      'meta_ads_metrics_cache',
+      'shopify_metrics_cache'
+    ]
+
+    for (const table of cacheTables) {
+      try {
+        const { error: cacheError } = await supabase
+          .from(table)
+          .delete()
+          .eq('company_id', spaceId)
+
+        if (cacheError && !cacheError.message.includes('does not exist')) {
+          console.warn(`Error deleting ${table}:`, cacheError)
+        }
+      } catch (e) {
+        console.warn(`${table} may not exist:`, e)
       }
     }
 
-    // 4. Delete documents (both regular and rich documents)
-    const { error: documentsError } = await supabase
-      .from('documents')
+    // 5. Delete space_bookmarks (if table exists)
+    try {
+      const { error: bookmarksError } = await supabase
+        .from('space_bookmarks')
+        .delete()
+        .eq('company_id', spaceId)
+
+      if (bookmarksError && !bookmarksError.message.includes('does not exist')) {
+        console.warn('Error deleting space bookmarks:', bookmarksError)
+      }
+    } catch (e) {
+      console.warn('Space bookmarks table may not exist:', e)
+    }
+
+    // 6. Delete projects (cascade should handle tasks, but we'll be explicit)
+    const { error: projectsError } = await supabase
+      .from('projects')
       .delete()
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId)
 
-    if (documentsError) {
-      console.warn('Error deleting documents (continuing anyway):', documentsError)
+    if (projectsError) {
+      console.error('Error deleting projects:', projectsError)
+      return { success: false, error: projectsError.message || 'Failed to delete projects' }
     }
 
-    const { error: richDocumentsError } = await supabase
-      .from('rich_documents')
-      .delete()
-      .eq('company_id', companyId)
+    // 7. Delete documents (if table exists)
+    try {
+      const { error: documentsError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('company_id', spaceId)
 
-    if (richDocumentsError) {
-      console.warn('Error deleting rich documents (continuing anyway):', richDocumentsError)
+      if (documentsError && !documentsError.message.includes('does not exist')) {
+        console.warn('Error deleting documents:', documentsError)
+      }
+    } catch (e) {
+      console.warn('Documents table may not exist:', e)
     }
 
-    // 5. Delete company services associations
-    const { error: companyServicesError } = await supabase
-      .from('company_services')
-      .delete()
-      .eq('company_id', companyId)
+    // 8. Delete form_submissions (if table exists)
+    try {
+      const { error: formSubmissionsError } = await supabase
+        .from('form_submissions')
+        .delete()
+        .eq('company_id', spaceId)
 
-    if (companyServicesError) {
-      console.warn('Error deleting company services (continuing anyway):', companyServicesError)
+      if (formSubmissionsError && !formSubmissionsError.message.includes('does not exist')) {
+        console.warn('Error deleting form submissions:', formSubmissionsError)
+      }
+    } catch (e) {
+      console.warn('Form submissions table may not exist:', e)
     }
 
-    // 6. Delete internal user company assignments
-    const { error: internalUserCompaniesError } = await supabase
-      .from('internal_user_companies')
-      .delete()
-      .eq('company_id', companyId)
-
-    if (internalUserCompaniesError) {
-      console.warn('Error deleting internal user company assignments (continuing anyway):', internalUserCompaniesError)
-    }
-
-    // 7. Update users to remove company_id reference (set to null)
-    const { error: usersUpdateError } = await supabase
-      .from('users')
-      .update({ company_id: null })
-      .eq('company_id', companyId)
-
-    if (usersUpdateError) {
-      console.warn('Error updating users (continuing anyway):', usersUpdateError)
-    }
-
-    // Now attempt to delete the company
-    const { error, data } = await supabase
+    // 9. Finally, delete the space itself
+    const { error: deleteError } = await supabase
       .from('companies')
       .delete()
-      .eq('id', companyId)
-      .select()
+      .eq('id', spaceId)
 
-    if (error) {
-      // Handle specific error types
-      let errorMessage = 'Failed to delete company'
+    if (deleteError) {
+      console.error('Error deleting space:', deleteError)
       
-      // Check for error message first
-      if (error.message) {
-        errorMessage = error.message
-        
-        // Parse foreign key constraint errors for better user messages
-        if (error.message.includes('violates foreign key constraint')) {
-          if (error.message.includes('activity_logs')) {
-            errorMessage = 'Cannot delete company: There are activity logs associated with tasks in this company. Please delete all tasks and their associated data first.'
-          } else if (error.message.includes('tasks')) {
-            errorMessage = 'Cannot delete company: There are tasks associated with this company. Please delete all tasks first.'
-          } else if (error.message.includes('projects')) {
-            errorMessage = 'Cannot delete company: There are projects associated with this company. Please delete all projects first.'
-          } else if (error.message.includes('users')) {
-            errorMessage = 'Cannot delete company: There are users associated with this company. Please remove all users first.'
-          } else if (error.message.includes('documents')) {
-            errorMessage = 'Cannot delete company: There are documents associated with this company. Please delete all documents first.'
-          } else {
-            errorMessage = 'Cannot delete company: It is referenced by other records. Please remove all associated data first.'
-          }
-        }
-      } else if (error.code) {
-        // Handle PostgreSQL error codes
-        if (error.code === '23503') {
-          errorMessage = 'Cannot delete company: It is referenced by other records (users, projects, documents, tasks, etc.). Please remove all associated data first.'
-        } else if (error.code === '42501') {
-          errorMessage = 'Permission denied: You do not have permission to delete this company.'
-        } else {
-          errorMessage = `Database error (${error.code}): ${error.details || 'Unknown error'}`
-        }
-      } else if (error.details) {
-        errorMessage = error.details
-        
-        // Parse foreign key constraint errors in details too
-        if (error.details.includes('violates foreign key constraint')) {
-          if (error.details.includes('activity_logs')) {
-            errorMessage = 'Cannot delete company: There are activity logs associated with tasks in this company. Please delete all tasks and their associated data first.'
-          } else {
-            errorMessage = 'Cannot delete company: It is referenced by other records. Please remove all associated data first.'
-          }
-        }
-      } else if (error.hint) {
-        errorMessage = `${errorMessage}. ${error.hint}`
-      } else {
-        // If error object is empty or doesn't have standard properties
-        const errorString = JSON.stringify(error)
-        if (errorString !== '{}') {
-          errorMessage = `Error: ${errorString}`
-        } else {
-          // Default message for empty error objects (likely foreign key constraint)
-          errorMessage = 'Cannot delete company: It is referenced by other records (users, projects, documents, tasks, activity logs, etc.). Please remove all associated data first.'
-        }
+      // Better error handling
+      let errorMessage = 'Failed to delete space'
+      if (deleteError.message) {
+        errorMessage = deleteError.message
+      } else if (deleteError.code) {
+        errorMessage = `Error code: ${deleteError.code}`
+      } else if (deleteError.details) {
+        errorMessage = deleteError.details
+      } else if (deleteError.hint) {
+        errorMessage = deleteError.hint
       }
       
-      // Log the formatted error message (only log raw error if it has useful info)
-      if (error.message || error.code || error.details) {
-        console.error('Error deleting company:', errorMessage)
+      // Log the full error object for debugging
+      const errorObj: any = deleteError
+      if (errorObj.message || errorObj.code || errorObj.details) {
+        console.error('Error deleting space:', errorMessage)
       } else {
-        console.error('Error deleting company:', errorMessage, '(Raw error object was empty or unhelpful)')
+        console.error('Error deleting space:', errorMessage, '(Raw error object was empty or unhelpful)')
       }
       
       return { success: false, error: errorMessage }
@@ -2673,22 +2688,22 @@ export async function deleteCompany(companyId: string): Promise<{ success: boole
 
     // Log activity
     const currentUser = getCurrentUser()
-    if (currentUser && company) {
+    if (currentUser && space) {
       await logActivity({
         user_id: currentUser.id,
-        action_type: 'company_deleted',
-        entity_type: 'company',
-        entity_id: companyId,
-        description: `Deleted company "${company.name}"`,
-        metadata: { company_name: company.name },
-        company_id: companyId,
+        action_type: 'space_deleted',
+        entity_type: 'space',
+        entity_id: spaceId,
+        description: `Deleted space "${space.name}"`,
+        metadata: { space_name: space.name },
+        company_id: spaceId,
       })
     }
 
-    console.log('Company deleted successfully')
+    console.log('Space deleted successfully')
     return { success: true }
   } catch (error) {
-    console.error('Error deleting company:', error)
+    console.error('Error deleting space:', error)
     
     // Better error handling for caught errors
     let errorMessage = 'An unexpected error occurred'
@@ -2711,6 +2726,11 @@ export async function deleteCompany(companyId: string): Promise<{ success: boole
     
     return { success: false, error: errorMessage }
   }
+}
+
+/** @deprecated Use deleteSpace instead. This function exists for backward compatibility. */
+export async function deleteCompany(companyId: string): Promise<{ success: boolean; error?: string }> {
+  return deleteSpace(companyId)
 } 
 
 // Form Management Functions
@@ -3248,7 +3268,7 @@ export async function fetchUserFormSubmissions(userId: string): Promise<FormSubm
 }
 
 // Check if a user has submitted a specific form for a space
-export async function hasUserSubmittedForm(userId: string, formId: string, companyId: string): Promise<boolean> {
+export async function hasUserSubmittedForm(userId: string, formId: string, spaceId: string): Promise<boolean> {
   if (!supabase) {
     console.warn('Supabase not configured')
     return false
@@ -3260,7 +3280,7 @@ export async function hasUserSubmittedForm(userId: string, formId: string, compa
       .select('id')
       .eq('user_id', userId)
       .eq('form_id', formId)
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId) // Database column is still company_id
       .limit(1)
 
     if (error) {
@@ -3457,7 +3477,7 @@ export async function fetchServices(): Promise<Service[]> {
   }
 }
 
-export async function fetchServicesWithCompanyStatus(companyId?: string): Promise<ServiceWithCompanyStatus[]> {
+export async function fetchServicesWithSpaceStatus(spaceId?: string): Promise<ServiceWithSpaceStatus[]> {
   if (!supabase) {
     console.warn('Supabase not configured - running in demo mode')
     return []
@@ -3479,41 +3499,47 @@ export async function fetchServicesWithCompanyStatus(companyId?: string): Promis
       return []
     }
 
-    if (!companyId) {
+    if (!spaceId) {
       return services || []
     }
 
-    // Get company services
-    const { data: companyServices, error: companyServicesError } = await supabase
+    // Get space services (database table is still company_services)
+    const { data: spaceServices, error: spaceServicesError } = await supabase
       .from('company_services')
       .select('service_id, is_active')
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId) // Database column is still company_id
       .eq('is_active', true)
 
-    if (companyServicesError) {
-      console.error('Error fetching company services:', companyServicesError)
+    if (spaceServicesError) {
+      console.error('Error fetching space services:', spaceServicesError)
       return services || []
     }
 
-    // Create a map of active service IDs for this company
+    // Create a map of active service IDs for this space
     const activeServiceIds = new Set(
-      companyServices?.map(cs => cs.service_id) || []
+      spaceServices?.map(cs => cs.service_id) || []
     )
 
     // Merge the data
     const servicesWithStatus = services?.map(service => ({
       ...service,
-      is_company_active: activeServiceIds.has(service.id)
+      is_space_active: activeServiceIds.has(service.id)
     })) || []
 
     return servicesWithStatus
   } catch (error) {
-    console.error('Error fetching services with company status:', error)
+    console.error('Error fetching services with space status:', error)
     return []
   }
 }
 
-export async function updateCompanyServices(companyId: string, serviceIds: string[]): Promise<{ success: boolean; error?: string }> {
+/** @deprecated Use fetchServicesWithSpaceStatus instead. This function exists for backward compatibility. */
+export async function fetchServicesWithCompanyStatus(companyId?: string): Promise<ServiceWithCompanyStatus[]> {
+  const result = await fetchServicesWithSpaceStatus(companyId)
+  return result.map(s => ({ ...s, is_company_active: s.is_space_active })) as ServiceWithCompanyStatus[]
+}
+
+export async function updateSpaceServices(spaceId: string, serviceIds: string[]): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
     console.warn('Supabase not configured - running in demo mode')
     return { success: true }
@@ -3525,15 +3551,15 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
     
     // Verify user has admin or manager role
     if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
-      return { success: false, error: 'Only admins and managers can update company services' }
+      return { success: false, error: 'Only admins and managers can update space services' }
     }
     
     await setAppContext()
 
     // Validate inputs
-    if (!companyId) {
-      console.error('Company ID is required')
-      return { success: false, error: 'Company ID is required' }
+    if (!spaceId) {
+      console.error('Space ID is required')
+      return { success: false, error: 'Space ID is required' }
     }
 
     if (!Array.isArray(serviceIds)) {
@@ -3563,16 +3589,16 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
       
     }
 
-    // First, get all current services for this company (including inactive ones)
+    // First, get all current services for this space (including inactive ones)
     const { data: currentServices, error: fetchError } = await supabase
       .from('company_services')
       .select('service_id, is_active')
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId) // Database column is still company_id
 
-    if (fetchError) {
-      console.error('Error fetching current company services:', fetchError)
-      return { success: false, error: `Failed to fetch current services: ${fetchError.message}` }
-    }
+      if (fetchError) {
+        console.error('Error fetching current space services:', fetchError)
+        return { success: false, error: `Failed to fetch current services: ${fetchError.message}` }
+      }
 
     const currentServiceIds = new Set(currentServices?.map(cs => cs.service_id) || [])
     const currentActiveServiceIds = new Set(
@@ -3599,7 +3625,7 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
         const { error: reactivateError } = await supabase
           .from('company_services')
           .update({ is_active: true })
-          .eq('company_id', companyId)
+          .eq('company_id', spaceId) // Database column is still company_id
           .in('service_id', servicesToReactivate)
         
         if (reactivateError) {
@@ -3612,7 +3638,7 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
       if (servicesToInsert.length > 0) {
         // Try upsert first (insert or update if exists) - this sometimes bypasses RLS issues
         const servicesToUpsert = servicesToInsert.map(serviceId => ({
-          company_id: companyId,
+          company_id: spaceId, // Database column is still company_id
           service_id: serviceId,
           is_active: true
         }))
@@ -3630,7 +3656,7 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
           .select()
 
         if (upsertError) {
-          console.error('Error upserting company services:', upsertError)
+          console.error('Error upserting space services:', upsertError)
           
           // If upsert fails, try individual inserts as fallback
           let hasError = false
@@ -3638,7 +3664,7 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
           
           for (const serviceId of servicesToInsert) {
             const serviceToInsertData = {
-              company_id: companyId,
+              company_id: spaceId, // Database column is still company_id
               service_id: serviceId,
               is_active: true
             }
@@ -3651,7 +3677,7 @@ export async function updateCompanyServices(companyId: string, serviceIds: strin
               .insert(serviceToInsertData)
 
             if (insertError) {
-              console.error('Error adding company service:', insertError)
+              console.error('Error adding space service:', insertError)
               hasError = true
               lastError = insertError
               // Continue trying other services
@@ -3684,24 +3710,24 @@ The database administrator needs to update the RLS policy to allow admins and ma
       const { error: updateError } = await supabase
         .from('company_services')
         .update({ is_active: false })
-        .eq('company_id', companyId)
-        .in('service_id', servicesToRemove)
+          .eq('company_id', spaceId) // Database column is still company_id
+          .in('service_id', servicesToRemove)
 
       if (updateError) {
-        console.error('Error removing company services:', updateError)
+        console.error('Error removing space services:', updateError)
         return { success: false, error: `Failed to remove services: ${updateError.message}` }
       }
     }
 
     return { success: true }
   } catch (error) {
-    console.error('Error updating company services:', error)
+    console.error('Error updating space services:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-    return { success: false, error: `Failed to update company services: ${errorMessage}` }
+    return { success: false, error: `Failed to update space services: ${errorMessage}` }
   }
 }
 
-export async function getCompanyServices(companyId: string): Promise<Service[]> {
+export async function getSpaceServices(spaceId: string): Promise<Service[]> {
   if (!supabase) {
     console.warn('Supabase not configured - running in demo mode')
     return []
@@ -3716,11 +3742,11 @@ export async function getCompanyServices(companyId: string): Promise<Service[]> 
         is_active,
         services (*)
       `)
-      .eq('company_id', companyId)
+      .eq('company_id', spaceId) // Database column is still company_id
       .eq('is_active', true)
 
     if (error) {
-      console.error('Error fetching company services:', error)
+      console.error('Error fetching space services:', error)
       return []
     }
 
@@ -3728,9 +3754,14 @@ export async function getCompanyServices(companyId: string): Promise<Service[]> 
     const services = data?.map(item => item.services).filter(Boolean) || []
     return services as unknown as Service[]
   } catch (error) {
-    console.error('Error fetching company services:', error)
+    console.error('Error fetching space services:', error)
     return []
   }
+}
+
+/** @deprecated Use getSpaceServices instead. This function exists for backward compatibility. */
+export async function getCompanyServices(companyId: string): Promise<Service[]> {
+  return getSpaceServices(companyId)
 } 
 
 // Internal user company management functions

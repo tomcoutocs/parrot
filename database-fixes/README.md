@@ -212,3 +212,50 @@ This script adds the `profile_picture` column to the `users` table to store user
 - The column stores the public URL to the profile picture
 - Existing users will have `NULL` for `profile_picture` until they upload one
 
+## rename_companies_to_spaces.sql
+
+**IMPORTANT**: This migration renames the `companies` table to `spaces` and all `company_id` columns to `space_id` throughout the database.
+
+**What it does:**
+- Renames `companies` table to `spaces`
+- Renames `company_services` table to `space_services`
+- Renames all `company_id` columns to `space_id` in all tables
+- Updates foreign key constraints to reference the new table/column names
+- Updates indexes to use space terminology
+- Adds comments documenting the changes
+
+**Tables affected:**
+- `spaces` (formerly `companies`)
+- `space_services` (formerly `company_services`)
+- `users` (column renamed)
+- `projects` (column renamed)
+- `documents` (column renamed)
+- `rich_documents` (column renamed)
+- `space_bookmarks` (column renamed)
+- `form_submissions` (column renamed)
+- `activity_logs` (column renamed)
+- `internal_user_companies` (column renamed)
+- `google_ads_metrics_cache` (column renamed)
+- `meta_ads_metrics_cache` (column renamed)
+- `shopify_metrics_cache` (column renamed)
+- `user_invitations` (column renamed, if exists)
+- `space_dashboard_config` (column renamed, if exists)
+- `dashboard_notes` (column renamed, if exists)
+- `dashboard_links` (column renamed, if exists)
+
+**Before running:**
+1. **BACKUP YOUR DATABASE** - This is a destructive migration
+2. Ensure all application code has been updated to use space terminology
+3. Test in a development/staging environment first
+
+**To run:**
+1. Open Supabase SQL Editor
+2. Copy and paste the entire migration script
+3. Execute the script
+4. Verify using the verification queries at the end of the script
+
+**Rollback:**
+If you need to rollback, you would need to reverse all the changes manually. Consider creating a backup before running this migration.
+
+**Note:** After running this migration, you may also need to update RLS policies that reference `companies` or `company_id` to use `spaces` and `space_id` instead. Check your RLS policies in the Supabase dashboard.
+

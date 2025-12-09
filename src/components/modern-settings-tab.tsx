@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { updateCompany, updateCompanyServices, getCompanyServices, deleteCompany } from "@/lib/database-functions"
+import { updateSpace, updateSpaceServices, getSpaceServices, deleteSpace } from "@/lib/database-functions"
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { fetchServicesOptimized } from "@/lib/simplified-database-functions"
 import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
@@ -103,7 +103,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
         fetchCompaniesOptimized(),
         fetchServicesOptimized(),
         fetchUsersOptimized(),
-        getCompanyServices(activeSpace) // Fetch services for this specific company
+        getSpaceServices(activeSpace) // Fetch services for this specific space
       ])
       
       const spaceCompany = companiesData.find(c => c.id === activeSpace)
@@ -169,8 +169,8 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
 
     setSaving(true)
     try {
-      // Update company details
-      const updateResult = await updateCompany(activeSpace, {
+      // Update space details
+      const updateResult = await updateSpace(activeSpace, {
         name: formData.name,
         description: formData.description || undefined,
         industry: formData.industry || undefined,
@@ -187,11 +187,11 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
       })
 
       if (!updateResult.success) {
-        throw new Error(updateResult.error || "Failed to update company")
+        throw new Error(updateResult.error || "Failed to update space")
       }
 
       // Update services
-      const servicesResult = await updateCompanyServices(activeSpace, servicesToSave)
+      const servicesResult = await updateSpaceServices(activeSpace, servicesToSave)
       if (!servicesResult.success) {
         throw new Error(servicesResult.error || "Failed to update services")
       }
@@ -218,7 +218,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
       
       const reloadAndVerify = async () => {
         // First verify the services were saved correctly before reloading form
-        const reloadedServices = await getCompanyServices(activeSpace)
+        const reloadedServices = await getSpaceServices(activeSpace)
         const reloadedServiceIds = reloadedServices.map(s => s.id).sort()
         const expectedIds = servicesToSave.sort()
         
@@ -266,7 +266,7 @@ export function ModernSettingsTab({ activeSpace, onServicesUpdated }: ModernSett
 
     setDeleting(true)
     try {
-      const result = await deleteCompany(activeSpace)
+      const result = await deleteSpace(activeSpace)
       
       if (result.success) {
         toastSuccess("Space deleted successfully")

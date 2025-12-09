@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { updateCompany } from '@/lib/database-functions'
+import { updateSpace } from '@/lib/database-functions'
 import { Company } from '@/lib/supabase'
 
 interface GoogleAdsCredentialsModalProps {
@@ -76,7 +76,7 @@ export function GoogleAdsCredentialsModal({
   const handleSave = async () => {
     setLoading(true)
     try {
-      const result = await updateCompany(companyId, {
+      const result = await updateSpace(companyId, {
         google_ads_developer_token: credentials.developer_token || undefined,
         google_ads_client_id: credentials.client_id || undefined,
         google_ads_client_secret: credentials.client_secret || undefined,

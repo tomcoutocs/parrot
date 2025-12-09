@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { updateCompany } from '@/lib/database-functions'
+import { updateSpace } from '@/lib/database-functions'
 
 interface MetaAdsCredentialsModalProps {
   isOpen: boolean
@@ -75,7 +75,7 @@ export function MetaAdsCredentialsModal({
   const handleSave = async () => {
     setLoading(true)
     try {
-      const result = await updateCompany(companyId, {
+      const result = await updateSpace(companyId, {
         meta_ads_app_id: credentials.app_id || undefined,
         meta_ads_app_secret: credentials.app_secret || undefined,
         meta_ads_access_token: credentials.access_token || undefined,
