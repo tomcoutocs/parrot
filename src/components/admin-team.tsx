@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { Users, Mail, Calendar, Plus, MoreHorizontal, Trash2, Edit } from "lucide-react"
+import { Users, Mail, Calendar, Plus, MoreHorizontal, Trash2, Edit, Download } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect } from "react"
@@ -113,6 +113,94 @@ export function AdminTeam() {
 
     loadActivities()
   }, [])
+
+  // Format activity type for display
+  const formatActivityType = (type: string): string => {
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+
+  // Export activities to CSV
+  const handleExportActivities = async () => {
+    try {
+      setActivitiesLoading(true)
+      // Fetch all activities (or a large number) for export
+      const allActivities = await fetchRecentActivities(10000, 365) // Get up to 10k activities from the last year
+      
+      if (allActivities.length === 0) {
+        toastError("No activities to export")
+        return
+      }
+
+      // Define CSV headers
+      const headers = [
+        "Timestamp",
+        "User",
+        "Activity Type",
+        "Description",
+        "Project",
+        "Task",
+        "Company"
+      ]
+
+      // Convert activities to CSV rows
+      const rows = allActivities.map(activity => {
+        const timestamp = new Date(activity.timestamp).toLocaleString()
+        const user = activity.user_name || "Unknown"
+        const activityType = formatActivityType(activity.type)
+        const description = activity.description || activity.task_title || activity.project_name || ""
+        const project = activity.project_name || ""
+        const task = activity.task_title || ""
+        const company = activity.company_name || ""
+
+        return [
+          timestamp,
+          user,
+          activityType,
+          description,
+          project,
+          task,
+          company
+        ]
+      })
+
+      // Create CSV content
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => 
+          row.map(cell => {
+            // Escape commas and quotes in cell values
+            const cellStr = String(cell || "")
+            if (cellStr.includes(",") || cellStr.includes('"') || cellStr.includes("\n")) {
+              return `"${cellStr.replace(/"/g, '""')}"`
+            }
+            return cellStr
+          }).join(",")
+        )
+      ].join("\n")
+
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const link = document.createElement("a")
+      const url = URL.createObjectURL(blob)
+      
+      link.setAttribute("href", url)
+      link.setAttribute("download", `team-activity-export-${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      toastSuccess(`Exported ${allActivities.length} activities`)
+    } catch (error) {
+      console.error("Error exporting activities:", error)
+      toastError("Failed to export activities")
+    } finally {
+      setActivitiesLoading(false)
+    }
+  }
 
   const handleDeleteMember = async () => {
     if (!selectedMember) return
@@ -338,7 +426,19 @@ export function AdminTeam() {
 
       {/* Activity Log */}
       <Card className="p-4 border-border/60">
-        <h3 className="text-sm mb-3">Recent Activity</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm">Recent Activity</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportActivities}
+            disabled={activitiesLoading || activities.length === 0}
+            className="h-7 text-xs"
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            Export CSV
+          </Button>
+        </div>
         {activitiesLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="text-muted-foreground text-sm">Loading activities...</div>
