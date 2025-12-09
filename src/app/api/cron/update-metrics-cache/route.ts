@@ -19,10 +19,25 @@ export async function GET(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get all companies
-    const { data: companies, error: companiesError } = await supabase
-      .from('companies')
+    // Get all companies/spaces
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: companies, error: companiesError } = await supabase
+      .from('spaces')
       .select('id')
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (companiesError && (companiesError.message?.includes('does not exist') || companiesError.message?.includes('relation') || (companiesError as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('id')
+      
+      if (!fallback.error) {
+        companies = fallback.data
+        companiesError = null
+      } else {
+        companiesError = fallback.error
+      }
+    }
 
     if (companiesError || !companies) {
       return NextResponse.json(

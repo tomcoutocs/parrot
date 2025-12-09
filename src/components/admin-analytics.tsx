@@ -69,7 +69,7 @@ export function AdminAnalytics() {
       <div>
         <h2 className="text-lg">Analytics Overview</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Performance metrics across all clients
+          Performance metrics across all spaces
         </p>
       </div>
 

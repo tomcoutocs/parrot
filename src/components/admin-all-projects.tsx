@@ -48,9 +48,18 @@ export function AdminAllProjects() {
         ])
 
         // Enrich projects with company data
+        // Handle both space_id and company_id for backward compatibility
         const enrichedProjects = projectsData.map(project => {
-          const company = companiesData.find(c => c.id === project.company_id)
-          return { ...project, company }
+          // Try space_id first (after migration), fallback to company_id
+          const spaceId = (project as any).space_id || project.company_id
+          const company = companiesData.find(c => c.id === spaceId)
+          return { 
+            ...project, 
+            company,
+            // Normalize: ensure both space_id and company_id are available
+            company_id: spaceId || project.company_id,
+            space_id: spaceId || (project as any).space_id
+          }
         })
 
         setProjects(enrichedProjects)
@@ -70,7 +79,9 @@ export function AdminAllProjects() {
       project.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.company?.name?.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesCompany = filterCompany === "all" || project.company_id === filterCompany
+    // Handle both space_id and company_id for matching
+    const projectSpaceId = (project as any).space_id || project.company_id
+    const matchesCompany = filterCompany === "all" || projectSpaceId === filterCompany
     const matchesStatus = filterStatus === "all" || project.status === filterStatus
     
     return matchesSearch && matchesCompany && matchesStatus
@@ -157,7 +168,7 @@ export function AdminAllProjects() {
         <div>
           <h2 className="text-lg">All Projects</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {activeProjects.length} active project{activeProjects.length !== 1 ? "s" : ""} across all clients
+            {activeProjects.length} active project{activeProjects.length !== 1 ? "s" : ""} across all spaces
           </p>
         </div>
         <Button 
@@ -184,10 +195,10 @@ export function AdminAllProjects() {
             </div>
             <Select value={filterCompany} onValueChange={setFilterCompany}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Companies" />
+                <SelectValue placeholder="All Spaces" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Companies</SelectItem>
+                <SelectItem value="all">All Spaces</SelectItem>
                 {companies.map((company) => (
                   <SelectItem key={company.id} value={company.id}>
                     {company.name}
@@ -222,7 +233,7 @@ export function AdminAllProjects() {
             <div className="flex flex-wrap gap-2">
               {filterCompany !== "all" && (
                 <Badge variant="secondary" className="text-xs">
-                  {companies.find(c => c.id === filterCompany)?.name || "Company"}
+                  {companies.find(c => c.id === filterCompany)?.name || "Space"}
                   <button
                     onClick={() => setFilterCompany("all")}
                     className="ml-1.5 hover:bg-muted rounded-full p-0.5"
@@ -252,7 +263,7 @@ export function AdminAllProjects() {
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 px-3 py-2 text-xs text-muted-foreground border-b border-border/40 mb-1">
           <div className="col-span-3">Project</div>
-          <div className="col-span-2">Client</div>
+          <div className="col-span-2">Space</div>
           <div className="col-span-1">Due Date</div>
           <div className="col-span-1">Launch</div>
           <div className="col-span-2">Status</div>
@@ -331,9 +342,18 @@ export function AdminAllProjects() {
                 fetchProjectsOptimized(),
                 fetchCompaniesOptimized()
               ])
+              // Handle both space_id and company_id for backward compatibility
               const enrichedProjects = projectsData.map(project => {
-                const company = companiesData.find(c => c.id === project.company_id)
-                return { ...project, company }
+                // Try space_id first (after migration), fallback to company_id
+                const spaceId = (project as any).space_id || project.company_id
+                const company = companiesData.find(c => c.id === spaceId)
+                return { 
+                  ...project, 
+                  company,
+                  // Normalize: ensure both space_id and company_id are available
+                  company_id: spaceId || project.company_id,
+                  space_id: spaceId || (project as any).space_id
+                }
               })
               setProjects(enrichedProjects)
               setCompanies(companiesData)

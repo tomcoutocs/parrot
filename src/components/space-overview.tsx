@@ -163,7 +163,7 @@ export function SpaceOverview({
       }
 
       const { data: currentCompany, error: fetchError } = await supabase
-        .from('companies')
+        .from('spaces')
         .select('*')
         .eq('id', companyId)
         .single()

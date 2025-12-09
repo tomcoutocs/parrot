@@ -25,7 +25,8 @@ interface DashboardEvent {
   description?: string
   start_date: string
   end_date?: string
-  company_id: string
+  company_id?: string
+  space_id?: string
   company_name?: string
 }
 
@@ -104,10 +105,23 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
         // For managers/admins without specific assignments, get all their managed spaces
         if (userRole === 'manager' && spaces.length === 0) {
           // Get companies where this user is the manager
-          const { data: managedCompanies } = await supabase
-            .from('companies')
+          // Try spaces table first (after migration), fallback to companies for backward compatibility
+          let { data: managedCompanies } = await supabase
+            .from('spaces')
             .select('id')
             .eq('manager_id', userId)
+
+          // If spaces table doesn't exist (migration not run), try companies table
+          if (!managedCompanies || (managedCompanies as any).error) {
+            const fallback = await supabase
+              .from('companies')
+              .select('id')
+              .eq('manager_id', userId)
+            
+            if (!fallback.error) {
+              managedCompanies = fallback.data
+            }
+          }
 
           if (managedCompanies) {
             managedCompanies.forEach(company => {
@@ -261,9 +275,11 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
           const startDate = parseISO(event.start_date)
           // Only include upcoming events (within next 30 days)
           if (isAfter(startDate, now) && startDate <= thirtyDaysFromNow) {
+            // Use space_id or company_id to get the space name
+            const eventSpaceId = event.space_id || event.company_id || spaceId
             allEvents.push({
               ...event,
-              company_name: companiesMap.get(spaceId) || 'Unknown Space'
+              company_name: companiesMap.get(eventSpaceId) || 'Unknown Space'
             })
           }
         })

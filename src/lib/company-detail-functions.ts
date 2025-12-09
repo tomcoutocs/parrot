@@ -35,10 +35,26 @@ export async function fetchCompaniesDirect() {
 
   try {
     // Try to fetch companies directly without any RLS context
-    const { data: companies, error } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: companies, error } = await supabase
+      .from('spaces')
       .select('*')
       .limit(10)
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('*')
+        .limit(10)
+      
+      if (!fallback.error) {
+        companies = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     if (error) {
       console.error('Direct company fetch error:', error)
@@ -59,11 +75,28 @@ export async function fetchCompanyDetails(companyId: string) {
     await setAppContext()
     
     // Fetch company basic info with better error handling
-    const { data: company, error: companyError } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: company, error: companyError } = await supabase
+      .from('spaces')
       .select('*')
       .eq('id', companyId)
       .maybeSingle() // Use maybeSingle instead of single to avoid PGRST116 error
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (companyError && (companyError.message?.includes('does not exist') || companyError.message?.includes('relation') || (companyError as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', companyId)
+        .maybeSingle()
+      
+      if (!fallback.error) {
+        company = fallback.data
+        companyError = null
+      } else {
+        companyError = fallback.error
+      }
+    }
 
     if (companyError) {
       console.error('Error fetching company:', companyError)
@@ -100,7 +133,8 @@ export async function fetchCompanyProjects(companyId: string): Promise<ProjectWi
 
   try {
     await setAppContext()
-    const { data, error } = await supabase
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('projects')
       .select(`
         *,
@@ -118,8 +152,37 @@ export async function fetchCompanyProjects(companyId: string): Promise<ProjectWi
           user:users!project_members_user_id_fkey(id, full_name, email)
         )
       `)
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .order('created_at', { ascending: false })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('projects')
+        .select(`
+          *,
+          created_user:users!projects_created_by_fkey(id, full_name, email),
+          manager:users!projects_manager_id_fkey(id, full_name, email),
+          tasks:tasks(id, status),
+          project_managers!project_managers_project_id_fkey(
+            user_id,
+            role,
+            user:users!project_managers_user_id_fkey(id, full_name, email)
+          ),
+          project_members!project_members_project_id_fkey(
+            user_id,
+            role,
+            user:users!project_members_user_id_fkey(id, full_name, email)
+          )
+        `)
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) return []
 
@@ -148,17 +211,38 @@ export async function fetchCompanyTasks(companyId: string): Promise<TaskWithDeta
 
   try {
     await setAppContext()
-    const { data, error } = await supabase
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('tasks')
       .select(`
         *,
         assigned_user:users!tasks_assigned_to_fkey(id, full_name, email),
         created_user:users!tasks_created_by_fkey(id, full_name, email),
         task_comments(id),
-        project:projects!tasks_project_id_fkey(id, name, company_id)
+        project:projects!tasks_project_id_fkey(id, name, space_id)
       `)
-      .eq('project.company_id', companyId)
+      .eq('project.space_id', companyId)
       .order('position', { ascending: true })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          assigned_user:users!tasks_assigned_to_fkey(id, full_name, email),
+          created_user:users!tasks_created_by_fkey(id, full_name, email),
+          task_comments(id),
+          project:projects!tasks_project_id_fkey(id, name, company_id)
+        `)
+        .eq('project.company_id', companyId)
+        .order('position', { ascending: true })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) return []
 
@@ -177,11 +261,26 @@ export async function fetchCompanyUsers(companyId: string): Promise<User[]> {
 
   try {
     await setAppContext()
-    const { data, error } = await supabase
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .order('full_name', { ascending: true })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('users')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('full_name', { ascending: true })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) return []
     return data || []
@@ -197,17 +296,47 @@ export async function fetchCompanyStorage(companyId: string) {
   try {
     await setAppContext()
     
-    // Fetch documents
-    const { data: documents, error: docsError } = await supabase
+    // Fetch documents - try space_id first (after migration), fallback to company_id
+    let { data: documents, error: docsError } = await supabase
       .from('documents')
       .select('file_size')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
 
-    // Fetch folders
-    const { data: folders, error: foldersError } = await supabase
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (docsError && (docsError.message?.includes('does not exist') || docsError.message?.includes('column') || (docsError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('documents')
+        .select('file_size')
+        .eq('company_id', companyId)
+      
+      if (!fallback.error) {
+        documents = fallback.data
+        docsError = null
+      } else {
+        docsError = fallback.error
+      }
+    }
+
+    // Fetch folders - try space_id first (after migration), fallback to company_id
+    let { data: folders, error: foldersError } = await supabase
       .from('document_folders')
       .select('id')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (foldersError && (foldersError.message?.includes('does not exist') || foldersError.message?.includes('column') || (foldersError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('document_folders')
+        .select('id')
+        .eq('company_id', companyId)
+      
+      if (!fallback.error) {
+        folders = fallback.data
+        foldersError = null
+      } else {
+        foldersError = fallback.error
+      }
+    }
 
     if (docsError || foldersError) {
       console.error('Error fetching storage data:', docsError || foldersError)
@@ -236,10 +365,26 @@ export async function testCompanyAccess() {
   try {
     await setAppContext()
     
-    const { data: companies, error } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: companies, error } = await supabase
+      .from('spaces')
       .select('id, name')
       .limit(10)
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('id, name')
+        .limit(10)
+      
+      if (!fallback.error) {
+        companies = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     if (error) {
       return { companies: [], error: error.message }
@@ -256,10 +401,26 @@ export async function simpleCompanyTest() {
   if (!supabase) return { companies: [], error: 'Supabase not initialized' }
 
   try {
-    const { data: companies, error } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: companies, error } = await supabase
+      .from('spaces')
       .select('id, name')
       .limit(5)
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('id, name')
+        .limit(5)
+      
+      if (!fallback.error) {
+        companies = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     if (error) {
       return { companies: [], error: error.message }

@@ -189,6 +189,17 @@ BEGIN
     END IF;
 END $$;
 
+-- Company events table (calendar events)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'company_events' AND column_name = 'company_id'
+    ) THEN
+        ALTER TABLE company_events RENAME COLUMN company_id TO space_id;
+    END IF;
+END $$;
+
 -- Step 4: Drop and recreate foreign key constraints with new names
 -- This ensures all foreign keys point to the renamed tables/columns
 
@@ -215,9 +226,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE users 
-        ADD CONSTRAINT users_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE SET NULL;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'users_space_id_fkey'
+        ) THEN
+            ALTER TABLE users 
+            ADD CONSTRAINT users_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE SET NULL;
+        END IF;
     END IF;
 END $$;
 
@@ -227,9 +243,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'projects') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE projects 
-        ADD CONSTRAINT projects_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'projects_space_id_fkey'
+        ) THEN
+            ALTER TABLE projects 
+            ADD CONSTRAINT projects_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -239,9 +260,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'documents') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'documents' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE documents 
-        ADD CONSTRAINT documents_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'documents_space_id_fkey'
+        ) THEN
+            ALTER TABLE documents 
+            ADD CONSTRAINT documents_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -251,9 +277,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'rich_documents') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rich_documents' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE rich_documents 
-        ADD CONSTRAINT rich_documents_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'rich_documents_space_id_fkey'
+        ) THEN
+            ALTER TABLE rich_documents 
+            ADD CONSTRAINT rich_documents_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -263,9 +294,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'space_bookmarks') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'space_bookmarks' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE space_bookmarks 
-        ADD CONSTRAINT space_bookmarks_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'space_bookmarks_space_id_fkey'
+        ) THEN
+            ALTER TABLE space_bookmarks 
+            ADD CONSTRAINT space_bookmarks_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -275,9 +311,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'form_submissions') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'form_submissions' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE form_submissions 
-        ADD CONSTRAINT form_submissions_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'form_submissions_space_id_fkey'
+        ) THEN
+            ALTER TABLE form_submissions 
+            ADD CONSTRAINT form_submissions_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -287,9 +328,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'activity_logs') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'activity_logs' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE activity_logs 
-        ADD CONSTRAINT activity_logs_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE SET NULL;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'activity_logs_space_id_fkey'
+        ) THEN
+            ALTER TABLE activity_logs 
+            ADD CONSTRAINT activity_logs_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE SET NULL;
+        END IF;
     END IF;
 END $$;
 
@@ -299,9 +345,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'internal_user_companies') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'internal_user_companies' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE internal_user_companies 
-        ADD CONSTRAINT internal_user_companies_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'internal_user_companies_space_id_fkey'
+        ) THEN
+            ALTER TABLE internal_user_companies 
+            ADD CONSTRAINT internal_user_companies_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -311,9 +362,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'space_services') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'space_services' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE space_services 
-        ADD CONSTRAINT space_services_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'space_services_space_id_fkey'
+        ) THEN
+            ALTER TABLE space_services 
+            ADD CONSTRAINT space_services_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -323,9 +379,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'google_ads_metrics_cache') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'google_ads_metrics_cache' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE google_ads_metrics_cache 
-        ADD CONSTRAINT google_ads_metrics_cache_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'google_ads_metrics_cache_space_id_fkey'
+        ) THEN
+            ALTER TABLE google_ads_metrics_cache 
+            ADD CONSTRAINT google_ads_metrics_cache_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -335,9 +396,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'meta_ads_metrics_cache') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'meta_ads_metrics_cache' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE meta_ads_metrics_cache 
-        ADD CONSTRAINT meta_ads_metrics_cache_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'meta_ads_metrics_cache_space_id_fkey'
+        ) THEN
+            ALTER TABLE meta_ads_metrics_cache 
+            ADD CONSTRAINT meta_ads_metrics_cache_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -347,9 +413,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'shopify_metrics_cache') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'shopify_metrics_cache' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE shopify_metrics_cache 
-        ADD CONSTRAINT shopify_metrics_cache_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'shopify_metrics_cache_space_id_fkey'
+        ) THEN
+            ALTER TABLE shopify_metrics_cache 
+            ADD CONSTRAINT shopify_metrics_cache_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -359,9 +430,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_invitations') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_invitations' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE user_invitations 
-        ADD CONSTRAINT user_invitations_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'user_invitations_space_id_fkey'
+        ) THEN
+            ALTER TABLE user_invitations 
+            ADD CONSTRAINT user_invitations_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -371,9 +447,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'space_dashboard_config') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'space_dashboard_config' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE space_dashboard_config 
-        ADD CONSTRAINT space_dashboard_config_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'space_dashboard_config_space_id_fkey'
+        ) THEN
+            ALTER TABLE space_dashboard_config 
+            ADD CONSTRAINT space_dashboard_config_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -383,9 +464,14 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'dashboard_notes') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'dashboard_notes' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE dashboard_notes 
-        ADD CONSTRAINT dashboard_notes_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'dashboard_notes_space_id_fkey'
+        ) THEN
+            ALTER TABLE dashboard_notes 
+            ADD CONSTRAINT dashboard_notes_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
     END IF;
 END $$;
 
@@ -395,9 +481,81 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'dashboard_links') 
     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'dashboard_links' AND column_name = 'space_id')
     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
-        ALTER TABLE dashboard_links 
-        ADD CONSTRAINT dashboard_links_space_id_fkey 
-        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'dashboard_links_space_id_fkey'
+        ) THEN
+            ALTER TABLE dashboard_links 
+            ADD CONSTRAINT dashboard_links_space_id_fkey 
+            FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+        END IF;
+    END IF;
+END $$;
+
+-- Company events -> spaces
+DO $$
+DECLARE
+    orphaned_count INTEGER;
+    has_company_id_col BOOLEAN;
+    has_space_id_col BOOLEAN;
+BEGIN
+    -- Check if company_events table exists
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'company_events') THEN
+        -- Check which columns exist
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'company_events' AND column_name = 'company_id'
+        ) INTO has_company_id_col;
+        
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'company_events' AND column_name = 'space_id'
+        ) INTO has_space_id_col;
+        
+        -- If company_id exists but space_id doesn't, the column rename hasn't happened yet
+        -- This will be handled by the column rename section above
+        
+        -- If space_id column exists, proceed with foreign key constraint
+        IF has_space_id_col AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'spaces') THEN
+            -- Drop old foreign key if it exists
+            ALTER TABLE company_events DROP CONSTRAINT IF EXISTS company_events_company_id_fkey;
+            
+            -- Clean up orphaned records: delete events that reference non-existent spaces
+            -- This handles cases where the space_id was set but the space doesn't exist
+            SELECT COUNT(*) INTO orphaned_count
+            FROM company_events 
+            WHERE space_id IS NOT NULL 
+            AND space_id NOT IN (SELECT id FROM spaces);
+            
+            -- Delete orphaned records if any exist
+            IF orphaned_count > 0 THEN
+                DELETE FROM company_events 
+                WHERE space_id IS NOT NULL 
+                AND space_id NOT IN (SELECT id FROM spaces);
+                
+                RAISE NOTICE 'Deleted % orphaned company_events records that referenced non-existent spaces', orphaned_count;
+            END IF;
+            
+            -- Add new foreign key constraint (only if constraint doesn't already exist)
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint 
+                WHERE conname = 'company_events_space_id_fkey'
+            ) THEN
+                -- Verify no orphaned records remain before creating constraint
+                SELECT COUNT(*) INTO orphaned_count
+                FROM company_events 
+                WHERE space_id IS NOT NULL 
+                AND space_id NOT IN (SELECT id FROM spaces);
+                
+                IF orphaned_count = 0 THEN
+                    ALTER TABLE company_events 
+                    ADD CONSTRAINT company_events_space_id_fkey 
+                    FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
+                ELSE
+                    RAISE WARNING 'Cannot create foreign key constraint: % orphaned records still exist. Please clean up data manually.', orphaned_count;
+                END IF;
+            END IF;
+        END IF;
     END IF;
 END $$;
 
@@ -451,6 +609,7 @@ COMMENT ON COLUMN projects.space_id IS 'Reference to space (formerly company_id)
 COMMENT ON COLUMN documents.space_id IS 'Reference to space (formerly company_id)';
 COMMENT ON COLUMN form_submissions.space_id IS 'Reference to space (formerly company_id)';
 COMMENT ON COLUMN activity_logs.space_id IS 'Reference to space (formerly company_id)';
+COMMENT ON COLUMN company_events.space_id IS 'Reference to space (formerly company_id)';
 
 COMMIT;
 

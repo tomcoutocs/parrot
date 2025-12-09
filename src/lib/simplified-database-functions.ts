@@ -53,11 +53,44 @@ export async function fetchProjectsOptimized(companyId?: string): Promise<Projec
       .order('position', { ascending: true })
       .order('created_at', { ascending: false })
 
+    // Try space_id first (after migration), fallback to company_id
     if (companyId) {
-      query = query.eq('company_id', companyId)
+      query = query.eq('space_id', companyId)
     }
 
-    const { data, error } = await query
+    let { data, error } = await query
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallbackQuery = supabase
+        .from('projects')
+        .select(`
+          *,
+          created_user:users!projects_created_by_fkey(id, full_name, email),
+          manager:users!projects_manager_id_fkey(id, full_name, email),
+          tasks:tasks(id, status),
+          project_managers!project_managers_project_id_fkey(
+            user_id,
+            role,
+            user:users!project_managers_user_id_fkey(id, full_name, email)
+          ),
+          project_members!project_members_project_id_fkey(
+            user_id,
+            role,
+            user:users!project_members_user_id_fkey(id, full_name, email)
+          )
+        `)
+        .neq('status', 'archived')
+        .order('position', { ascending: true })
+        .order('created_at', { ascending: false })
+        .eq('company_id', companyId)
+      
+      const fallback = await fallbackQuery
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) return []
 
@@ -181,10 +214,23 @@ export async function fetchCompaniesOptimized(): Promise<Company[]> {
 
   try {
     await setAppContext()
-    const { data, error } = await supabase
-      .from('companies')
+    // Try 'spaces' table first (after migration), fall back to 'companies' for backward compatibility
+    let { data, error } = await supabase
+      .from('spaces')
       .select('*')
       .order('name', { ascending: true })
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (error && (error.message?.includes('does not exist') || error.code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('*')
+        .order('name', { ascending: true })
+      
+      if (fallback.error) return []
+      data = fallback.data
+      error = null
+    }
 
     if (error) return []
     
@@ -302,7 +348,8 @@ export function invalidateProjectCache() {
 // Fetch company events for calendar
 export async function fetchCompanyEvents(companyId: string): Promise<Array<{
   id: string
-  company_id: string
+  company_id?: string
+  space_id?: string
   title: string
   description?: string
   start_date: string
@@ -314,11 +361,26 @@ export async function fetchCompanyEvents(companyId: string): Promise<Array<{
 
   try {
     await setAppContext()
-    const { data, error } = await supabase
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('company_events')
       .select('*')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .order('start_date', { ascending: true })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('company_events')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('start_date', { ascending: true })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return []

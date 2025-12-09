@@ -132,11 +132,25 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
         }
         // Check if user is the manager of this company
         if (supabase) {
-          const { data: company } = await supabase
-            .from('companies')
+          // Try spaces table first (after migration), fallback to companies for backward compatibility
+          let { data: company } = await supabase
+            .from('spaces')
             .select('manager_id')
             .eq('id', activeSpace)
             .single()
+
+          // If spaces table doesn't exist (migration not run), try companies table
+          if (!company || (company as any).error) {
+            const fallback = await supabase
+              .from('companies')
+              .select('manager_id')
+              .eq('id', activeSpace)
+              .single()
+            
+            if (!fallback.error) {
+              company = fallback.data
+            }
+          }
           
           if (company?.manager_id === userId) {
             setCanAccessInternal(true)
@@ -147,11 +161,29 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
 
       // Check if user is an internal user assigned to this space
       if (userRole === 'internal' && supabase) {
-        const { data: assignments } = await supabase
+        // Try space_id first (after migration), fallback to company_id
+        let { data: assignments } = await supabase
           .from('internal_user_companies')
-          .select('company_id')
+          .select('space_id')
           .eq('user_id', userId)
-          .eq('company_id', activeSpace)
+          .eq('space_id', activeSpace)
+        
+        // If space_id column doesn't exist (migration not run), try company_id
+        if (!assignments || (assignments as any).error) {
+          const fallback = await supabase
+            .from('internal_user_companies')
+            .select('company_id')
+            .eq('user_id', userId)
+            .eq('company_id', activeSpace)
+          
+          if (!fallback.error && fallback.data) {
+            // Normalize fallback data to match expected structure
+            assignments = fallback.data.map((item: { company_id: any }) => ({
+              space_id: item.company_id,
+              company_id: item.company_id
+            }))
+          }
+        }
         
         if (assignments && assignments.length > 0) {
           setCanAccessInternal(true)

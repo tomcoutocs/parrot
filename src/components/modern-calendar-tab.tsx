@@ -59,6 +59,9 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
   const [editingEvent, setEditingEvent] = useState<BrandEvent | null>(null)
   const [events, setEvents] = useState<BrandEvent[]>([])
   const [loading, setLoading] = useState(true)
+  // Track if space_id column exists (cache to avoid repeated failed queries)
+  // null = unknown, true = exists, false = doesn't exist
+  const [spaceIdColumnExists, setSpaceIdColumnExists] = useState<boolean | null>(null)
   
   // Event creation form state
   const [eventTitle, setEventTitle] = useState('')
@@ -88,36 +91,132 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         return
       }
 
-      // Fetch companies for admin view to show company names with events
-      let companiesMap = new Map<string, string>()
+      // Fetch spaces for admin view to show space names with events
+      // Note: fetchCompaniesOptimized returns spaces (table renamed but function name kept for compatibility)
+      let spacesMap = new Map<string, string>()
       if (isAdmin && !companyId) {
         try {
-          const companies = await fetchCompaniesOptimized()
-          companies.forEach(company => {
-            companiesMap.set(company.id, company.name || 'Unknown Space')
+          const spaces = await fetchCompaniesOptimized()
+          spaces.forEach(space => {
+            spacesMap.set(space.id, space.name || 'Unknown Space')
           })
         } catch (error) {
-          console.error("Error fetching companies:", error)
+          console.error("Error fetching spaces:", error)
         }
       }
 
-      // Build query - admins without company_id can see all events
-      // Don't use join to avoid foreign key issues - we'll map company names separately
+      // Build query - admins without space_id can see all events
+      // Don't use join to avoid foreign key issues - we'll map space names separately
       let query = supabase
         .from('company_events')
         .select('*')
       
-      // Only filter by company_id if we have one (non-admin or admin with company)
-      if (companyId) {
-        query = query.eq('company_id', companyId)
-      } else if (!isAdmin) {
-        // Non-admins must have a company_id
-        setLoading(false)
-        return
-      }
-      // Admins without company_id will see all events
-      
-      const { data, error } = await query.order('start_date', { ascending: true })
+      // Only filter by space_id/company_id if we have one (non-admin or admin with company)
+      // Try space_id first (after migration), fallback to company_id
+      let { data, error } = await (async () => {
+        if (companyId) {
+          // If we know space_id doesn't exist, skip directly to company_id
+          if (spaceIdColumnExists === false) {
+            console.log('Using company_id (space_id column known not to exist)')
+            return await supabase
+              .from('company_events')
+              .select('*')
+              .eq('company_id', companyId)
+              .order('start_date', { ascending: true })
+          }
+          
+          try {
+            // Try space_id first (after migration) - only if we haven't confirmed it doesn't exist
+            if (spaceIdColumnExists === null || spaceIdColumnExists === true) {
+              let query = supabase
+                .from('company_events')
+                .select('*')
+                .eq('space_id', companyId)
+                .order('start_date', { ascending: true })
+              
+              let result = await query
+              
+              // If space_id column doesn't exist (migration not run), try company_id
+              // Check for various error conditions that indicate column doesn't exist
+              if (result.error) {
+                const errorCode = (result.error as any).code
+                const errorMessage = result.error.message || ''
+                const statusCode = (result.error as any).status || (result.error as any).statusCode
+                
+                // Check for column not found errors (400 Bad Request often means column doesn't exist)
+                const isColumnError = errorCode === '42703' || // PostgreSQL: undefined_column
+                                     errorCode === 'PGRST116' || // PostgREST: column not found
+                                     statusCode === 400 || // HTTP 400 Bad Request
+                                     errorMessage.includes('does not exist') ||
+                                     errorMessage.includes('column') ||
+                                     errorMessage.includes('400') ||
+                                     errorCode === '400'
+                
+                if (isColumnError) {
+                  console.log('space_id column not found, trying company_id fallback', {
+                    errorCode,
+                    statusCode,
+                    errorMessage
+                  })
+                  // Cache that space_id doesn't exist to avoid repeated failed queries
+                  setSpaceIdColumnExists(false)
+                  
+                  const fallbackQuery = supabase
+                    .from('company_events')
+                    .select('*')
+                    .eq('company_id', companyId)
+                    .order('start_date', { ascending: true })
+                  
+                  const fallback = await fallbackQuery
+                  if (!fallback.error) {
+                    return fallback
+                  }
+                  // If fallback also fails, log it but return the original error
+                  console.error('Fallback to company_id also failed:', fallback.error)
+                }
+              } else {
+                // Success with space_id - cache that it exists
+                setSpaceIdColumnExists(true)
+              }
+              
+              return result
+            }
+          } catch (err) {
+            // If query throws an exception, try company_id fallback
+            console.log('Exception querying with space_id, trying company_id fallback', err)
+            setSpaceIdColumnExists(false)
+            
+            const fallbackQuery = supabase
+              .from('company_events')
+              .select('*')
+              .eq('company_id', companyId)
+              .order('start_date', { ascending: true })
+            
+            const fallback = await fallbackQuery
+            if (!fallback.error) {
+              return fallback
+            }
+            // Return error if fallback also fails
+            return { data: null, error: fallback.error }
+          }
+          
+          // Fallback if spaceIdColumnExists was null and we somehow got here
+          return await supabase
+            .from('company_events')
+            .select('*')
+            .eq('company_id', companyId)
+            .order('start_date', { ascending: true })
+        } else if (!isAdmin) {
+          // Non-admins must have a space/company
+          return { data: null, error: { message: 'No space selected' } }
+        } else {
+          // Admins without space_id will see all events
+          return await supabase
+            .from('company_events')
+            .select('*')
+            .order('start_date', { ascending: true })
+        }
+      })()
 
       if (error) {
         console.error("Error loading events:", error)
@@ -130,8 +229,10 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         // Try to get event type from event_type field, or infer from title
         const eventTypeValue = event.event_type || inferEventType(event.title || "")
         
-        // Get company name from map (we fetched companies separately)
-        const companyName = event.company_id ? companiesMap.get(event.company_id) || null : null
+        // Get space/company name from map (we fetched spaces separately)
+        // Use space_id first (after migration), fallback to company_id
+        const spaceId = event.space_id || event.company_id
+        const spaceName = spaceId ? spacesMap.get(spaceId) || null : null
         
         // Parse dates correctly to avoid timezone shifts
         // Handle both date-only strings (YYYY-MM-DD) and full ISO strings
@@ -159,8 +260,8 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
           endDate: endDate,
           type: eventTypeValue,
           color: eventTypeColors[eventTypeValue] || eventTypeColors.default,
-          companyId: event.company_id,
-          companyName: companyName || undefined
+          companyId: spaceId, // Store space/company ID (space_id takes precedence)
+          companyName: spaceName || undefined
         }
       })
 
@@ -213,12 +314,14 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       const endDateToUse = eventEndDate || eventDate
       const formattedEndDate = formatDateForDatabase(endDateToUse)
       
+      // Try space_id first (after migration), fallback to company_id
       const eventData: {
         title: string
         description: string
         start_date: string
         end_date: string
         created_by: string | undefined
+        space_id?: string | null
         company_id?: string | null
         start_time?: string
         end_time?: string
@@ -229,7 +332,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         start_date: formattedStartDate,
         end_date: formattedEndDate,
         created_by: session?.user?.id,
-        ...(companyId && { company_id: companyId }),
+        ...(companyId && { space_id: companyId }),
         event_type: eventType
       }
 
@@ -255,11 +358,32 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         userRole: session?.user?.role
       })
 
-      const { data, error } = await supabase
+      // Try inserting with space_id first, fallback to company_id
+      let { data, error } = await supabase
         .from('company_events')
         .insert(eventData)
         .select()
         .single()
+
+      // If space_id column doesn't exist (migration not run), try company_id
+      if (error && companyId && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+        const fallbackEventData = {
+          ...eventData,
+          company_id: companyId
+        }
+        delete fallbackEventData.space_id
+        
+        const fallback = await supabase
+          .from('company_events')
+          .insert(fallbackEventData)
+          .select()
+          .single()
+        
+        if (!fallback.error) {
+          data = fallback.data
+          error = null
+        }
+      }
 
       if (error) {
         console.error('Supabase insert error:', {
@@ -395,11 +519,13 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
       const endDateToUse = eventEndDate || eventDate
       const formattedEndDate = formatDateForDatabase(endDateToUse)
       
+      // Try space_id first (after migration), fallback to company_id
       const eventData: {
         title: string
         description: string
         start_date: string
         end_date: string
+        space_id?: string | null
         company_id?: string | null
         start_time?: string
         end_time?: string
@@ -409,7 +535,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         description: eventDescription,
         start_date: formattedStartDate,
         end_date: formattedEndDate,
-        ...(companyId && { company_id: companyId }),
+        ...(companyId && { space_id: companyId }),
         event_type: eventType
       }
 
@@ -425,10 +551,29 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         throw new Error('Supabase client not initialized')
       }
 
-      const { error } = await supabase
+      // Try updating with space_id first, fallback to company_id
+      let { error } = await supabase
         .from('company_events')
         .update(eventData)
         .eq('id', editingEvent.id)
+      
+      // If space_id column doesn't exist (migration not run), try company_id
+      if (error && companyId && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+        const fallbackEventData = {
+          ...eventData,
+          company_id: companyId
+        }
+        delete fallbackEventData.space_id
+        
+        const fallback = await supabase
+          .from('company_events')
+          .update(fallbackEventData)
+          .eq('id', editingEvent.id)
+        
+        if (!fallback.error) {
+          error = null
+        }
+      }
 
       if (error) {
         console.error('Supabase update error:', {

@@ -235,10 +235,23 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           fetchUsersOptimized(),
           supabase ? (async () => {
             try {
-              const result = await supabase
+              // Try space_id first (after migration), fallback to company_id
+              let result = await supabase
                 .from('internal_user_companies')
                 .select('user_id')
-                .eq('company_id', activeSpace)
+                .eq('space_id', activeSpace)
+              
+              // If space_id column doesn't exist (migration not run), try company_id
+              if (result.error && (result.error.message?.includes('does not exist') || result.error.message?.includes('column') || (result.error as any).code === '42703')) {
+                const fallback = await supabase
+                  .from('internal_user_companies')
+                  .select('user_id')
+                  .eq('company_id', activeSpace)
+                
+                if (!fallback.error) {
+                  result = fallback
+                }
+              }
               return result
             } catch {
               return { data: null, error: null }
@@ -386,10 +399,23 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           fetchUsersOptimized(),
           supabase ? (async () => {
             try {
-              const result = await supabase
+              // Try space_id first (after migration), fallback to company_id
+              let result = await supabase
                 .from('internal_user_companies')
                 .select('user_id')
-                .eq('company_id', activeSpace)
+                .eq('space_id', activeSpace)
+              
+              // If space_id column doesn't exist (migration not run), try company_id
+              if (result.error && (result.error.message?.includes('does not exist') || result.error.message?.includes('column') || (result.error as any).code === '42703')) {
+                const fallback = await supabase
+                  .from('internal_user_companies')
+                  .select('user_id')
+                  .eq('company_id', activeSpace)
+                
+                if (!fallback.error) {
+                  result = fallback
+                }
+              }
               return result
             } catch {
               return { data: null, error: null }
@@ -448,10 +474,24 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         
         const internalUserIds: string[] = []
         if (supabase) {
-          const result = await supabase
+          // Try space_id first (after migration), fallback to company_id
+          let result = await supabase
             .from('internal_user_companies')
             .select('user_id')
-            .eq('company_id', activeSpace)
+            .eq('space_id', activeSpace)
+          
+          // If space_id column doesn't exist (migration not run), try company_id
+          if (result.error && (result.error.message?.includes('does not exist') || result.error.message?.includes('column') || (result.error as any).code === '42703')) {
+            const fallback = await supabase
+              .from('internal_user_companies')
+              .select('user_id')
+              .eq('company_id', activeSpace)
+            
+            if (!fallback.error) {
+              result = fallback
+            }
+          }
+          
           if (result.data) {
             internalUserIds.push(...result.data.map((ia: { user_id: string }) => ia.user_id))
           }

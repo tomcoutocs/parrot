@@ -53,11 +53,25 @@ export async function POST(request: NextRequest) {
         // Get company name if company_id is provided
         let companyName: string | undefined
         if (result.data.company_id && supabase) {
-          const { data: company } = await supabase
-            .from('companies')
+          // Try spaces table first (after migration), fallback to companies for backward compatibility
+          let { data: company } = await supabase
+            .from('spaces')
             .select('name')
             .eq('id', result.data.company_id)
             .single()
+
+          // If spaces table doesn't exist (migration not run), try companies table
+          if (!company || (company as any).error) {
+            const fallback = await supabase
+              .from('companies')
+              .select('name')
+              .eq('id', result.data.company_id)
+              .single()
+            
+            if (!fallback.error) {
+              company = fallback.data
+            }
+          }
           
           if (company) {
             companyName = company.name

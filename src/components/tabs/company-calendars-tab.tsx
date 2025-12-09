@@ -128,10 +128,26 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
       
       if (isAdmin) {
         // Admin can see all companies
-        const { data, error } = await supabase
-          .from('companies')
+        // Try spaces table first (after migration), fallback to companies for backward compatibility
+        let { data, error } = await supabase
+          .from('spaces')
           .select('id, name')
           .order('name')
+
+        // If spaces table doesn't exist (migration not run), try companies table
+        if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+          const fallback = await supabase
+            .from('companies')
+            .select('id, name')
+            .order('name')
+          
+          if (!fallback.error) {
+            data = fallback.data
+            error = null
+          } else {
+            error = fallback.error
+          }
+        }
         
         if (error) throw error
         
@@ -150,16 +166,35 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
         if (userError) throw userError
         
         if (userData?.company_id) {
-          const { data: companyData, error: companyError } = await supabase
-            .from('companies')
+          // Try spaces table first (after migration), fallback to companies for backward compatibility
+          let { data: companyData, error: companyError } = await supabase
+            .from('spaces')
             .select('id, name')
             .eq('id', userData.company_id)
             .single()
+
+          // If spaces table doesn't exist (migration not run), try companies table
+          if (companyError && (companyError.message?.includes('does not exist') || companyError.message?.includes('relation') || (companyError as any).code === '42P01')) {
+            const fallback = await supabase
+              .from('companies')
+              .select('id, name')
+              .eq('id', userData.company_id)
+              .single()
+            
+            if (!fallback.error) {
+              companyData = fallback.data
+              companyError = null
+            } else {
+              companyError = fallback.error
+            }
+          }
           
           if (companyError) throw companyError
           
-          setCompanies([companyData])
-          setSelectedCompanyId(companyData.id)
+          if (companyData) {
+            setCompanies([companyData])
+            setSelectedCompanyId(companyData.id)
+          }
         }
       }
     } catch (err) {
@@ -173,12 +208,26 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
     
     try {
       setLoading(true)
-      // Remove the foreign key join for now since it's causing issues
-      const { data, error } = await supabase
+      // Try space_id first (after migration), fallback to company_id
+      let { data, error } = await supabase
         .from('company_events')
         .select('*')
-        .eq('company_id', selectedCompanyId)
+        .eq('space_id', selectedCompanyId)
         .order('start_date', { ascending: true })
+      
+      // If space_id column doesn't exist (migration not run), try company_id
+      if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+        const fallback = await supabase
+          .from('company_events')
+          .select('*')
+          .eq('company_id', selectedCompanyId)
+          .order('start_date', { ascending: true })
+        
+        if (!fallback.error) {
+          data = fallback.data
+          error = null
+        }
+      }
       
       if (error) throw error
       
@@ -206,14 +255,15 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
     try {
       setCreating(true)
       
-      // Prepare the event data
+      // Prepare the event data - try space_id first (after migration), fallback to company_id
       const eventData: {
         title: string
         description: string
         start_date: string
         end_date: string
         created_by: string | undefined
-        company_id: string
+        space_id?: string
+        company_id?: string
         start_time?: string
         end_time?: string
       } = {
@@ -222,7 +272,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
         start_date: eventDate,
         end_date: eventEndDate || eventDate, // Use end date if provided, otherwise same day
         created_by: session?.user?.id,
-        company_id: selectedCompanyId
+        space_id: selectedCompanyId // Try space_id first (after migration)
       }
 
       // Only include time fields if time is enabled
@@ -235,11 +285,32 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
         eventData.end_time = '23:59:59'
       }
 
-      const { data, error } = await supabase
+      // Try inserting with space_id first (after migration)
+      let { data, error } = await supabase
         .from('company_events')
         .insert(eventData)
         .select()
         .single()
+
+      // If space_id column doesn't exist (migration not run), try with company_id
+      if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+        const fallbackData = {
+          ...eventData,
+          company_id: selectedCompanyId
+        }
+        delete (fallbackData as any).space_id
+        
+        const fallback = await supabase
+          .from('company_events')
+          .insert(fallbackData)
+          .select()
+          .single()
+        
+        if (!fallback.error) {
+          data = fallback.data
+          error = null
+        }
+      }
 
       if (error) throw error
 

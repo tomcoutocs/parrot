@@ -407,10 +407,10 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
           </Select>
           <Select value={companyFilter} onValueChange={setCompanyFilter}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by company" />
+              <SelectValue placeholder="Filter by space" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Companies</SelectItem>
+              <SelectItem value="all">All Spaces</SelectItem>
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}

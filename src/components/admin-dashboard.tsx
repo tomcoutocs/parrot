@@ -67,9 +67,24 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
         let companiesWithManagers = companies
         if (supabase) {
           try {
-            const { data: companiesData, error } = await supabase
-              .from('companies')
+            // Try spaces table first (after migration), fallback to companies for backward compatibility
+            let { data: companiesData, error } = await supabase
+              .from('spaces')
               .select('id, manager_id')
+
+            // If spaces table doesn't exist (migration not run), try companies table
+            if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+              const fallback = await supabase
+                .from('companies')
+                .select('id, manager_id')
+              
+              if (!fallback.error) {
+                companiesData = fallback.data
+                error = null
+              } else {
+                error = fallback.error
+              }
+            }
             
             if (!error && companiesData) {
               // Enrich companies with manager_id
@@ -142,17 +157,17 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
     loadData()
   }, [spaceData, refreshKey])
 
-  const totalMonthlyRevenue = allSpaces.reduce((sum, client) => {
-    const monthlySpend = (client as { monthlySpend?: string }).monthlySpend || "$0"
+  const totalMonthlyRevenue = allSpaces.reduce((sum, space) => {
+    const monthlySpend = (space as { monthlySpend?: string }).monthlySpend || "$0"
     const amount = parseFloat(monthlySpend.replace(/[$,]/g, ''))
     return sum + (isNaN(amount) ? 0 : amount)
   }, 0)
 
-  const totalProjects = allSpaces.reduce((sum, client) => sum + ((client as { activeProjects?: number }).activeProjects || 0), 0)
+  const totalProjects = allSpaces.reduce((sum, space) => sum + ((space as { activeProjects?: number }).activeProjects || 0), 0)
 
   const summaryMetrics = [
     {
-      label: "Total Clients",
+      label: "Total Spaces",
       value: allSpaces.length.toString(),
       icon: Users,
     },
@@ -269,11 +284,11 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
           })}
         </div>
 
-        {/* Clients Table */}
+        {/* Spaces Table */}
         <Card className="p-3 border-border/60">
           {/* Table Header */}
           <div className="grid grid-cols-12 gap-3 px-2 py-1.5 text-xs text-muted-foreground border-b border-border/40 mb-0.5">
-            <div className="col-span-4">Client</div>
+            <div className="col-span-4">Space</div>
             <div className="col-span-2">Manager</div>
             <div className="col-span-2">Services</div>
             <div className="col-span-2">Spend</div>
@@ -282,49 +297,49 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
 
           {/* Table Rows */}
           <div className="space-y-0">
-            {allSpaces.map((client) => (
+            {allSpaces.map((space) => (
               <div
-                key={client.id}
-                onClick={() => onSpaceClick(client.id)}
+                key={space.id}
+                onClick={() => onSpaceClick(space.id)}
                 className="grid grid-cols-12 gap-3 px-2 py-2 hover:bg-muted/30 transition-colors items-center group rounded-md cursor-pointer"
               >
                 <div className="col-span-4 flex items-center gap-2">
-                  {client.active && (
+                  {space.active && (
                     <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] flex-shrink-0" />
                   )}
-                  {!client.active && (
+                  {!space.active && (
                     <div className="w-2 h-2 rounded-full bg-muted-foreground/30 flex-shrink-0" />
                   )}
-                  <span className="text-sm truncate">{client.name}</span>
+                  <span className="text-sm truncate">{space.name}</span>
                 </div>
                 <div className="col-span-2">
                   <div className="flex items-center gap-1.5">
                     <Avatar className="w-5 h-5 flex-shrink-0">
-                      <AvatarImage src={((client as { manager?: { avatar?: string; name: string } }).manager?.avatar) || ""} />
+                      <AvatarImage src={((space as { manager?: { avatar?: string; name: string } }).manager?.avatar) || ""} />
                       <AvatarFallback className="bg-muted text-xs">
-                        {((client as { manager?: { name: string } }).manager?.name || "Unassigned").split(' ').map((n: string) => n[0]).join('')}
+                        {((space as { manager?: { name: string } }).manager?.name || "Unassigned").split(' ').map((n: string) => n[0]).join('')}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="text-sm truncate">{((client as { manager?: { name: string } }).manager?.name || "Unassigned").split(' ')[0]}</span>
+                    <span className="text-sm truncate">{((space as { manager?: { name: string } }).manager?.name || "Unassigned").split(' ')[0]}</span>
                   </div>
                 </div>
                 <div className="col-span-2">
                   <div className="flex flex-wrap gap-1">
-                    {(((client as { services?: string[] }).services) || []).slice(0, 2).map((service: string, idx: number) => (
+                    {(((space as { services?: string[] }).services) || []).slice(0, 2).map((service: string, idx: number) => (
                       <span key={idx} className="text-xs text-muted-foreground">
-                        {service}{idx < Math.min((((client as { services?: string[] }).services) || []).length - 1, 1) ? ',' : ''}
+                        {service}{idx < Math.min((((space as { services?: string[] }).services) || []).length - 1, 1) ? ',' : ''}
                       </span>
                     ))}
-                    {(((client as { services?: string[] }).services) || []).length > 2 && (
-                      <span className="text-xs text-muted-foreground">+{(((client as { services?: string[] }).services) || []).length - 2}</span>
+                    {(((space as { services?: string[] }).services) || []).length > 2 && (
+                      <span className="text-xs text-muted-foreground">+{(((space as { services?: string[] }).services) || []).length - 2}</span>
                     )}
                   </div>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-sm">{((client as { monthlySpend?: string }).monthlySpend) || "$0"}</span>
+                  <span className="text-sm">{((space as { monthlySpend?: string }).monthlySpend) || "$0"}</span>
                 </div>
                 <div className="col-span-2 flex items-center justify-between">
-                  <span className="text-sm">{((client as { activeProjects?: number }).activeProjects) || 0}</span>
+                  <span className="text-sm">{((space as { activeProjects?: number }).activeProjects) || 0}</span>
                   <ArrowRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </div>

@@ -204,20 +204,48 @@ export async function fetchCompaniesOptimized(): Promise<Company[]> {
       try {
         await setAppContext()
         
+        // Try spaces table first (after migration), fallback to companies for backward compatibility
         let { data, error } = await supabase
-          .from('companies')
+          .from('spaces')
           .select('*')
           .eq('is_active', true)
           .order('name', { ascending: true })
 
+        // If spaces table doesn't exist (migration not run), try companies table
+        if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+          const fallback = await supabase
+            .from('companies')
+            .select('*')
+            .eq('is_active', true)
+            .order('name', { ascending: true })
+          
+          if (!fallback.error) {
+            data = fallback.data
+            error = null
+          } else {
+            error = fallback.error
+          }
+        }
+
         if (error && error.message.includes('column "is_active" does not exist')) {
           const result = await supabase
-            .from('companies')
+            .from('spaces')
             .select('*')
             .order('name', { ascending: true })
           
-          data = result.data
-          error = result.error
+          // If spaces table doesn't exist, try companies table
+          if (result.error && (result.error.message?.includes('does not exist') || result.error.message?.includes('relation') || (result.error as any).code === '42P01')) {
+            const companiesResult = await supabase
+              .from('companies')
+              .select('*')
+              .order('name', { ascending: true })
+            
+            data = companiesResult.data
+            error = companiesResult.error
+          } else {
+            data = result.data
+            error = result.error
+          }
         }
 
         if (error) return []

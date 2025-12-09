@@ -230,12 +230,12 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
         }
       }
 
-      toastSuccess("Client space created successfully!")
+      toastSuccess("Space created successfully!")
       onSuccess?.()
       onClose()
     } catch (error) {
       console.error("Error creating space:", error)
-      toastError("Failed to create client space")
+      toastError("Failed to create space")
     } finally {
       setIsSubmitting(false)
     }
@@ -245,9 +245,9 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">Create New Client Space</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">Create New Space</DialogTitle>
           <DialogDescription className="mt-1">
-            Set up a new client workspace with services, team, and settings
+            Set up a new workspace with services, team, and settings
           </DialogDescription>
         </DialogHeader>
 
@@ -285,7 +285,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
               <Label htmlFor="description">Description (Optional)</Label>
               <Textarea
                 id="description"
-                placeholder="Brief description of the client or project..."
+                placeholder="Brief description of the space or project..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
@@ -355,7 +355,7 @@ export function CreateSpaceModal({ isOpen, onClose, onSuccess }: CreateSpaceModa
           <div className="space-y-4">
             <h3 className="text-sm font-semibold">Services</h3>
             <p className="text-sm text-muted-foreground">
-              Select all services that apply to this client
+              Select all services that apply to this space
             </p>
             
             <div className="grid grid-cols-2 gap-3">

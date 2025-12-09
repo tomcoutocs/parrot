@@ -104,10 +104,23 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
             fetchCompanyUsers(activeSpace).catch(() => []),
             supabase ? (async () => {
               try {
-                const result = await supabase
+                // Try space_id first (after migration), fallback to company_id
+                let result = await supabase
                   .from('internal_user_companies')
                   .select('user_id')
-                  .eq('company_id', activeSpace)
+                  .eq('space_id', activeSpace)
+                
+                // If space_id column doesn't exist (migration not run), try company_id
+                if (result.error && (result.error.message?.includes('does not exist') || result.error.message?.includes('column') || (result.error as any).code === '42703')) {
+                  const fallback = await supabase
+                    .from('internal_user_companies')
+                    .select('user_id')
+                    .eq('company_id', activeSpace)
+                  
+                  if (!fallback.error) {
+                    result = fallback
+                  }
+                }
                 return result
               } catch {
                 return { data: null, error: null }
@@ -203,10 +216,23 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
             let internalUserIds: string[] = []
             if (supabase) {
               try {
-                const { data: internalAssignments } = await supabase
+                // Try space_id first (after migration), fallback to company_id
+                let { data: internalAssignments } = await supabase
                   .from('internal_user_companies')
                   .select('user_id')
-                  .eq('company_id', activeSpace)
+                  .eq('space_id', activeSpace)
+                
+                // If space_id column doesn't exist (migration not run), try company_id
+                if (!internalAssignments || (internalAssignments as any).error) {
+                  const fallback = await supabase
+                    .from('internal_user_companies')
+                    .select('user_id')
+                    .eq('company_id', activeSpace)
+                  
+                  if (!fallback.error && fallback.data) {
+                    internalAssignments = fallback.data
+                  }
+                }
                 
                 if (internalAssignments) {
                   internalUserIds = internalAssignments.map(assignment => assignment.user_id)

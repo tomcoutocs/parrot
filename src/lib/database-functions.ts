@@ -75,6 +75,7 @@ async function setAppContext() {
 }
 
 // Helper function to log activities to activity_logs table
+// Supports both company_id (before migration) and space_id (after migration)
 export async function logActivity(data: {
   user_id: string
   action_type: string
@@ -83,27 +84,63 @@ export async function logActivity(data: {
   description?: string
   metadata?: Record<string, unknown>
   company_id?: string
+  space_id?: string
   project_id?: string
   task_id?: string
 }): Promise<void> {
   if (!supabase) return
 
   try {
-    await supabase
+    // Try inserting with space_id first (after migration), fallback to company_id
+    const insertData: any = {
+      user_id: data.user_id,
+      action_type: data.action_type,
+      entity_type: data.entity_type,
+      entity_id: data.entity_id || null,
+      description: data.description || null,
+      metadata: data.metadata || {},
+      project_id: data.project_id || null,
+      task_id: data.task_id || null,
+    }
+    
+    // Add space_id if provided, otherwise use company_id
+    if (data.space_id) {
+      insertData.space_id = data.space_id
+    } else if (data.company_id) {
+      insertData.company_id = data.company_id
+    }
+    
+    let { error } = await supabase
       .from('activity_logs')
-      .insert({
+      .insert(insertData)
+    
+    // If space_id column doesn't exist (migration not run), try with company_id only
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallbackData: any = {
         user_id: data.user_id,
         action_type: data.action_type,
         entity_type: data.entity_type,
         entity_id: data.entity_id || null,
         description: data.description || null,
         metadata: data.metadata || {},
-        company_id: data.company_id || null,
+        company_id: data.company_id || data.space_id || null, // Use space_id as company_id if company_id not provided
         project_id: data.project_id || null,
         task_id: data.task_id || null,
-      })
+      }
+      
+      const fallback = await supabase
+        .from('activity_logs')
+        .insert(fallbackData)
+      
+      if (fallback.error) {
+        console.warn('Failed to log activity:', fallback.error)
+      }
+    } else if (error) {
+      console.warn('Failed to log activity:', error)
+    }
   } catch (error) {
     // Silent error handling - don't fail operations if logging fails
+    console.warn('Error in logActivity:', error)
   }
 }
 
@@ -140,11 +177,44 @@ export async function fetchProjects(spaceId?: string): Promise<ProjectWithDetail
       .order('created_at', { ascending: false })
 
     // Filter by space if provided
+    // Try space_id first (after migration), fallback to company_id
     if (spaceId) {
-      query = query.eq('company_id', spaceId) // Database column is still company_id
+      query = query.eq('space_id', spaceId) // After migration, column is space_id
     }
 
-    const { data, error } = await query
+    let { data, error } = await query
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallbackQuery = supabase
+        .from('projects')
+        .select(`
+          *,
+          created_user:users!projects_created_by_fkey(id, full_name, email),
+          manager:users!projects_manager_id_fkey(id, full_name, email),
+          tasks:tasks(id, status),
+          project_managers!project_managers_project_id_fkey(
+            user_id,
+            role,
+            user:users!project_managers_user_id_fkey(id, full_name, email)
+          ),
+          project_members!project_members_project_id_fkey(
+            user_id,
+            role,
+            user:users!project_members_user_id_fkey(id, full_name, email)
+          )
+        `)
+        .neq('status', 'archived')
+        .order('position', { ascending: true })
+        .order('created_at', { ascending: false })
+        .eq('company_id', spaceId) // Before migration, column is company_id
+      
+      const fallback = await fallbackQuery
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return []
@@ -1740,38 +1810,86 @@ export async function fetchUsers(): Promise<User[]> {
   }
 
   try {
-    // Try to fetch with tab_permissions first
-    const resultWithPermissions = await supabase
+    await setAppContext()
+    
+    // Try to fetch with space_id first (after migration), fallback to company_id
+    let resultWithPermissions = await supabase
       .from('users')
-      .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, tab_permissions')
+      .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, space_id, tab_permissions')
       .eq('is_active', true)
       .order('full_name', { ascending: true })
     
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (resultWithPermissions.error && (resultWithPermissions.error.message?.includes('does not exist') || resultWithPermissions.error.message?.includes('column') || (resultWithPermissions.error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('users')
+        .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, tab_permissions')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true })
+      
+      if (!fallback.error && fallback.data) {
+        // Normalize fallback data to include space_id (mapped from company_id)
+        resultWithPermissions = {
+          ...fallback,
+          data: fallback.data.map((user: any) => ({
+            ...user,
+            space_id: user.company_id || null
+          }))
+        } as unknown as typeof resultWithPermissions
+      }
+    }
+    
     if (resultWithPermissions.error) {
         // Fallback to fetch without tab_permissions if column doesn't exist
-        const resultWithoutPermissions = await supabase
+        let resultWithoutPermissions = await supabase
           .from('users')
-          .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, profile_picture')
+          .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, space_id, profile_picture')
           .eq('is_active', true)
           .order('full_name', { ascending: true })
+        
+        // If space_id column doesn't exist (migration not run), try company_id
+        if (resultWithoutPermissions.error && (resultWithoutPermissions.error.message?.includes('does not exist') || resultWithoutPermissions.error.message?.includes('column') || (resultWithoutPermissions.error as any).code === '42703')) {
+          const fallback = await supabase
+            .from('users')
+            .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, profile_picture')
+            .eq('is_active', true)
+            .order('full_name', { ascending: true })
+          
+          if (!fallback.error && fallback.data) {
+            // Normalize fallback data to include space_id (mapped from company_id)
+            resultWithoutPermissions = {
+              ...fallback,
+              data: fallback.data.map((user: any) => ({
+                ...user,
+                space_id: user.company_id || null
+              }))
+            } as unknown as typeof resultWithoutPermissions
+          }
+        }
       
       if (resultWithoutPermissions.error) {
         return []
       }
 
-      // Transform data to include tab_permissions as empty array
+      // Transform data to include tab_permissions as empty array and normalize space_id/company_id
       const users = (resultWithoutPermissions.data || []).map(user => ({
         ...user,
-        tab_permissions: []
+        tab_permissions: [],
+        // Normalize: use space_id if available, otherwise use company_id
+        space_id: (user as any).space_id || (user as any).company_id || null,
+        company_id: (user as any).company_id || (user as any).space_id || null
       }))
       
       return users
     }
 
-    // Transform data to ensure tab_permissions is always an array
+    // Transform data to ensure tab_permissions is always an array and normalize space_id/company_id
     const users = (resultWithPermissions.data || []).map(user => ({
       ...user,
-      tab_permissions: user.tab_permissions || []
+      tab_permissions: user.tab_permissions || [],
+      // Normalize: use space_id if available, otherwise use company_id
+      space_id: (user as any).space_id || (user as any).company_id || null,
+      company_id: (user as any).company_id || (user as any).space_id || null
     }))
     console.log('Sample user tab permissions:', users.slice(0, 2).map(u => ({ email: u.email, tab_permissions: u.tab_permissions })))
     return users
@@ -1939,22 +2057,50 @@ export async function fetchSpaces(): Promise<Space[]> {
     // Set application context for RLS
     await setAppContext()
     
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
     // First try to fetch with is_active filter
     let { data, error } = await supabase
-      .from('companies')
+      .from('spaces')
       .select('*')
       .eq('is_active', true)
       .order('name', { ascending: true })
 
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('*')
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
+
     // If that fails, try without the is_active filter
     if (error && error.message.includes('column "is_active" does not exist')) {
       const result = await supabase
-        .from('companies')
+        .from('spaces')
         .select('*')
         .order('name', { ascending: true })
       
-      data = result.data
-      error = result.error
+      // If spaces table doesn't exist, try companies table
+      if (result.error && (result.error.message?.includes('does not exist') || result.error.message?.includes('relation') || (result.error as any).code === '42P01')) {
+        const companiesResult = await supabase
+          .from('companies')
+          .select('*')
+          .order('name', { ascending: true })
+        
+        data = companiesResult.data
+        error = companiesResult.error
+      } else {
+        data = result.data
+        error = result.error
+      }
     }
 
     if (error) {
@@ -2008,14 +2154,16 @@ export async function fetchSpacesWithServices(): Promise<Space[]> {
     // Set application context for RLS
     await setAppContext()
     
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    // Try space_services first, fallback to company_services
     // First try to fetch with is_active filter
     let { data, error } = await supabase
-      .from('companies')
+      .from('spaces')
       .select(`
         *,
-        company_services!company_services_company_id_fkey(
+        space_services!space_services_space_id_fkey(
           service_id,
-          service:services!company_services_service_id_fkey(
+          service:services!space_services_service_id_fkey(
             id,
             name,
             description
@@ -2025,9 +2173,9 @@ export async function fetchSpacesWithServices(): Promise<Space[]> {
       .eq('is_active', true)
       .order('name', { ascending: true })
 
-    // If that fails, try without the is_active filter
-    if (error && error.message.includes('column "is_active" does not exist')) {
-      const result = await supabase
+    // If spaces table doesn't exist (migration not run), try companies table with company_services
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+      const fallback = await supabase
         .from('companies')
         .select(`
           *,
@@ -2040,10 +2188,57 @@ export async function fetchSpacesWithServices(): Promise<Space[]> {
             )
           )
         `)
+        .eq('is_active', true)
         .order('name', { ascending: true })
       
-      data = result.data
-      error = result.error
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
+
+    // If that fails, try without the is_active filter
+    if (error && error.message.includes('column "is_active" does not exist')) {
+      const result = await supabase
+        .from('spaces')
+        .select(`
+          *,
+          space_services!space_services_space_id_fkey(
+            service_id,
+            service:services!space_services_service_id_fkey(
+              id,
+              name,
+              description
+            )
+          )
+        `)
+        .order('name', { ascending: true })
+      
+      // If spaces table doesn't exist, try companies table
+      if (result.error && (result.error.message?.includes('does not exist') || result.error.message?.includes('relation') || (result.error as any).code === '42P01')) {
+        const companiesResult = await supabase
+          .from('companies')
+          .select(`
+            *,
+            company_services!company_services_company_id_fkey(
+              service_id,
+              service:services!company_services_service_id_fkey(
+                id,
+                name,
+                description
+              )
+            )
+          `)
+          .order('name', { ascending: true })
+        
+        data = companiesResult.data
+        error = companiesResult.error
+      } else {
+        data = result.data
+        error = result.error
+      }
     }
 
     if (error) {
@@ -2120,8 +2315,9 @@ export async function createSpace(spaceData: {
     console.log('Creating space:', spaceData)
     await setAppContext()
     
-    const { data, error } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data, error } = await supabase
+      .from('spaces')
       .insert({
         name: spaceData.name,
         description: spaceData.description,
@@ -2137,6 +2333,34 @@ export async function createSpace(spaceData: {
       })
       .select()
       .single()
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .insert({
+          name: spaceData.name,
+          description: spaceData.description,
+          industry: spaceData.industry,
+          website: spaceData.website,
+          phone: spaceData.phone,
+          address: spaceData.address,
+          is_partner: spaceData.is_partner || false,
+          is_active: true,
+          retainer: spaceData.retainer,
+          revenue: spaceData.revenue,
+          manager_id: spaceData.manager_id || null
+        })
+        .select()
+        .single()
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     if (error) {
       console.error('Error creating space:', error)
@@ -2416,12 +2640,30 @@ export async function updateSpace(spaceId: string, spaceData: {
       updateData.manager_id = spaceData.manager_id
     }
 
-    const { data, error } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data, error } = await supabase
+      .from('spaces')
       .update(updateData)
       .eq('id', spaceId)
       .select()
       .single()
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .update(updateData)
+        .eq('id', spaceId)
+        .select()
+        .single()
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     if (error) {
       // Gracefully handle missing API key columns
@@ -2430,21 +2672,38 @@ export async function updateSpace(spaceId: string, spaceData: {
           error.message?.includes('shopify_api_key') || 
           error.message?.includes('klaviyo_api_key') ||
           (error as any).code === 'PGRST204') {
-        console.warn('API key columns not found in companies table, retrying without API keys')
+        console.warn('API key columns not found in spaces/companies table, retrying without API keys')
         
-        // Retry without API keys
+        // Retry without API keys - try spaces first, then companies
         const updateDataWithoutApiKeys = { ...updateData }
         delete updateDataWithoutApiKeys.meta_api_key
         delete updateDataWithoutApiKeys.google_api_key
         delete updateDataWithoutApiKeys.shopify_api_key
         delete updateDataWithoutApiKeys.klaviyo_api_key
         
-        const { data: retryData, error: retryError } = await supabase
-          .from('companies')
+        let { data: retryData, error: retryError } = await supabase
+          .from('spaces')
           .update(updateDataWithoutApiKeys)
           .eq('id', spaceId)
           .select()
           .single()
+
+        // If spaces table doesn't exist, try companies table
+        if (retryError && (retryError.message?.includes('does not exist') || retryError.message?.includes('relation') || (retryError as any).code === '42P01')) {
+          const companiesRetry = await supabase
+            .from('companies')
+            .update(updateDataWithoutApiKeys)
+            .eq('id', spaceId)
+            .select()
+            .single()
+          
+          if (!companiesRetry.error) {
+            retryData = companiesRetry.data
+            retryError = null
+          } else {
+            retryError = companiesRetry.error
+          }
+        }
         
         if (retryError) {
           console.error('Error updating space:', retryError)
@@ -2505,11 +2764,28 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
     await setAppContext()
     
     // First, check if space exists
-    const { data: space, error: fetchError } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: space, error: fetchError } = await supabase
+      .from('spaces')
       .select('id, name')
       .eq('id', spaceId)
       .single()
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (fetchError && (fetchError.message?.includes('does not exist') || fetchError.message?.includes('relation') || (fetchError as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('id', spaceId)
+        .single()
+      
+      if (!fallback.error) {
+        space = fallback.data
+        fetchError = null
+      } else {
+        fetchError = fallback.error
+      }
+    }
 
     if (fetchError) {
       console.error('Error fetching space:', fetchError)
@@ -2522,10 +2798,23 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
 
     // Delete related data in the correct order (cascading deletion)
     // 1. Delete activity logs for tasks in projects belonging to this space
-    const { data: projects } = await supabase
+    // Try space_id first (after migration), fallback to company_id
+    let { data: projects } = await supabase
       .from('projects')
       .select('id')
-      .eq('company_id', spaceId)
+      .eq('space_id', spaceId)
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (!projects || projects.length === 0) {
+      const fallback = await supabase
+        .from('projects')
+        .select('id')
+        .eq('company_id', spaceId)
+      
+      if (!fallback.error && fallback.data) {
+        projects = fallback.data
+      }
+    }
 
     if (projects && projects.length > 0) {
       const projectIds = projects.map(p => p.id)
@@ -2551,12 +2840,27 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
       }
     }
 
-    // 2. Delete company_services (if table exists)
+    // 2. Delete space_services (try space_services first, fallback to company_services)
     try {
-      const { error: servicesError } = await supabase
-        .from('company_services')
+      // Try space_services first (after migration)
+      let { error: servicesError } = await supabase
+        .from('space_services')
         .delete()
-        .eq('company_id', spaceId)
+        .eq('space_id', spaceId)
+      
+      // If space_services doesn't exist, try company_services (before migration)
+      if (servicesError && (servicesError.message?.includes('does not exist') || (servicesError as any).code === '42P01' || (servicesError as any).code === '404')) {
+        const fallback = await supabase
+          .from('company_services')
+          .delete()
+          .eq('company_id', spaceId)
+        
+        if (fallback.error && !fallback.error.message.includes('does not exist')) {
+          servicesError = fallback.error
+        } else {
+          servicesError = null
+        }
+      }
 
       if (servicesError && !servicesError.message.includes('does not exist')) {
         console.warn('Error deleting company services:', servicesError)
@@ -2565,12 +2869,27 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
       console.warn('Company services table may not exist:', e)
     }
 
-    // 3. Delete internal_user_companies (if table exists)
+    // 3. Delete internal_user_companies (if table exists) - try space_id first (after migration), fallback to company_id
     try {
-      const { error: internalUsersError } = await supabase
+      // Try space_id first
+      let { error: internalUsersError } = await supabase
         .from('internal_user_companies')
         .delete()
-        .eq('company_id', spaceId)
+        .eq('space_id', spaceId)
+      
+      // If space_id column doesn't exist (migration not run), try company_id
+      if (internalUsersError && (internalUsersError.message?.includes('does not exist') || (internalUsersError as any).code === '42P01' || (internalUsersError as any).code === '42703')) {
+        const fallback = await supabase
+          .from('internal_user_companies')
+          .delete()
+          .eq('company_id', spaceId)
+        
+        if (fallback.error && !fallback.error.message.includes('does not exist')) {
+          internalUsersError = fallback.error
+        } else {
+          internalUsersError = null
+        }
+      }
 
       if (internalUsersError && !internalUsersError.message.includes('does not exist')) {
         console.warn('Error deleting internal user companies:', internalUsersError)
@@ -2631,7 +2950,7 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
       const { error: documentsError } = await supabase
         .from('documents')
         .delete()
-        .eq('company_id', spaceId)
+        .eq('space_id', spaceId)
 
       if (documentsError && !documentsError.message.includes('does not exist')) {
         console.warn('Error deleting documents:', documentsError)
@@ -2655,10 +2974,25 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
     }
 
     // 9. Finally, delete the space itself
-    const { error: deleteError } = await supabase
-      .from('companies')
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { error: deleteError } = await supabase
+      .from('spaces')
       .delete()
       .eq('id', spaceId)
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (deleteError && (deleteError.message?.includes('does not exist') || deleteError.message?.includes('relation') || (deleteError as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .delete()
+        .eq('id', spaceId)
+      
+      if (!fallback.error) {
+        deleteError = null
+      } else {
+        deleteError = fallback.error
+      }
+    }
 
     if (deleteError) {
       console.error('Error deleting space:', deleteError)
@@ -3275,22 +3609,65 @@ export async function hasUserSubmittedForm(userId: string, formId: string, space
   }
 
   try {
-    const { data, error } = await supabase
+    await setAppContext()
+    
+    // Try with space_id first (after migration), fall back to company_id
+    let { data, error } = await supabase
       .from('form_submissions')
       .select('id')
       .eq('user_id', userId)
       .eq('form_id', formId)
-      .eq('company_id', spaceId) // Database column is still company_id
+      .eq('space_id', spaceId) // After migration, column is space_id
       .limit(1)
 
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('form_submissions')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('form_id', formId)
+        .eq('company_id', spaceId) // Before migration, column is company_id
+        .limit(1)
+      
+      if (fallback.error) {
+        // If both fail, log warning but return false gracefully
+        const errorStr = JSON.stringify(fallback.error)
+        const isEmptyError = errorStr === '{}'
+        if (!isEmptyError) {
+          console.warn('Error checking form submission:', {
+            space_id_error: error,
+            company_id_error: fallback.error,
+            userId,
+            formId,
+            spaceId
+          })
+        }
+        return false
+      }
+      data = fallback.data
+      error = null
+    }
+
     if (error) {
-      console.error('Error checking form submission:', error)
+      const errorStr = JSON.stringify(error)
+      const isEmptyError = errorStr === '{}'
+      if (!isEmptyError) {
+        console.warn('Error checking form submission:', {
+          error,
+          errorMessage: error.message,
+          errorCode: (error as any).code,
+          userId,
+          formId,
+          spaceId
+        })
+      }
       return false
     }
 
     return (data?.length || 0) > 0
   } catch (error) {
-    console.error('Error checking form submission:', error)
+    console.warn('Error checking form submission:', error)
     return false
   }
 }
@@ -3364,11 +3741,27 @@ export async function checkDatabaseSetup(): Promise<{
       }
     }
 
-    // Check if companies table exists
-    const { data: companies, error: companiesError } = await supabase
-      .from('companies')
+    // Check if companies/spaces table exists
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: companies, error: companiesError } = await supabase
+      .from('spaces')
       .select('id')
       .limit(1)
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (companiesError && (companiesError.message?.includes('does not exist') || companiesError.message?.includes('relation') || (companiesError as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('id')
+        .limit(1)
+      
+      if (!fallback.error) {
+        companies = fallback.data
+        companiesError = null
+      } else {
+        companiesError = fallback.error
+      }
+    }
 
     if (companiesError) {
       console.error('Error checking companies table:', companiesError)
@@ -3503,16 +3896,47 @@ export async function fetchServicesWithSpaceStatus(spaceId?: string): Promise<Se
       return services || []
     }
 
-    // Get space services (database table is still company_services)
-    const { data: spaceServices, error: spaceServicesError } = await supabase
-      .from('company_services')
+    // Get space services - try space_services first (after migration), fallback to company_services
+    let { data: spaceServices, error: spaceServicesError } = await supabase
+      .from('space_services')
       .select('service_id, is_active')
-      .eq('company_id', spaceId) // Database column is still company_id
+      .eq('space_id', spaceId) // After migration, column is space_id
       .eq('is_active', true)
 
+    // If space_services query fails, try company_services (before migration)
     if (spaceServicesError) {
-      console.error('Error fetching space services:', spaceServicesError)
-      return services || []
+      const errorMessage = spaceServicesError.message || ''
+      const errorCode = (spaceServicesError as any).code || ''
+      const isTableNotFound = errorMessage.includes('does not exist') || 
+                              errorCode === '42P01' || 
+                              errorCode === 'PGRST116' ||
+                              errorMessage.includes('relation') ||
+                              errorCode === '404'
+      
+      if (isTableNotFound) {
+        const fallback = await supabase
+          .from('company_services')
+          .select('service_id, is_active')
+          .eq('company_id', spaceId) // Before migration, column is company_id
+          .eq('is_active', true)
+        
+        if (!fallback.error) {
+          spaceServices = fallback.data
+          spaceServicesError = null
+        } else {
+          // If both fail, return services without status
+          console.warn('Error fetching space services:', {
+            space_services_error: spaceServicesError,
+            company_services_error: fallback.error,
+            spaceId
+          })
+          return services || []
+        }
+      } else {
+        // Other error (RLS, permissions, etc.) - return services without status
+        console.warn('Error fetching space services:', spaceServicesError)
+        return services || []
+      }
     }
 
     // Create a map of active service IDs for this space
@@ -3589,16 +4013,51 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
       
     }
 
-    // First, get all current services for this space (including inactive ones)
-    const { data: currentServices, error: fetchError } = await supabase
-      .from('company_services')
+    // Detect which table/column to use - try space_services first (after migration), fallback to company_services
+    let tableName = 'space_services'
+    let columnName = 'space_id'
+    let conflictColumns = 'space_id,service_id'
+    
+    let { data: currentServices, error: fetchError } = await supabase
+      .from(tableName)
       .select('service_id, is_active')
-      .eq('company_id', spaceId) // Database column is still company_id
+      .eq(columnName, spaceId)
 
-      if (fetchError) {
+    // If space_services query fails, try company_services (before migration)
+    if (fetchError) {
+      const errorMessage = fetchError.message || ''
+      const errorCode = (fetchError as any).code || ''
+      const isTableNotFound = errorMessage.includes('does not exist') || 
+                              errorCode === '42P01' || 
+                              errorCode === 'PGRST116' ||
+                              errorMessage.includes('relation') ||
+                              errorCode === '404'
+      
+      if (isTableNotFound) {
+        tableName = 'company_services'
+        columnName = 'company_id'
+        conflictColumns = 'company_id,service_id'
+        
+        const fallback = await supabase
+          .from(tableName)
+          .select('service_id, is_active')
+          .eq(columnName, spaceId)
+        
+        if (fallback.error) {
+          console.error('Error fetching current space services:', {
+            space_services_error: fetchError,
+            company_services_error: fallback.error,
+            spaceId
+          })
+          return { success: false, error: `Failed to fetch current services: ${fallback.error.message || fetchError.message}` }
+        }
+        currentServices = fallback.data
+        fetchError = null
+      } else {
         console.error('Error fetching current space services:', fetchError)
         return { success: false, error: `Failed to fetch current services: ${fetchError.message}` }
       }
+    }
 
     const currentServiceIds = new Set(currentServices?.map(cs => cs.service_id) || [])
     const currentActiveServiceIds = new Set(
@@ -3623,9 +4082,9 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
       if (servicesToReactivate.length > 0) {
         await setAppContext()
         const { error: reactivateError } = await supabase
-          .from('company_services')
+          .from(tableName)
           .update({ is_active: true })
-          .eq('company_id', spaceId) // Database column is still company_id
+          .eq(columnName, spaceId)
           .in('service_id', servicesToReactivate)
         
         if (reactivateError) {
@@ -3638,7 +4097,7 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
       if (servicesToInsert.length > 0) {
         // Try upsert first (insert or update if exists) - this sometimes bypasses RLS issues
         const servicesToUpsert = servicesToInsert.map(serviceId => ({
-          company_id: spaceId, // Database column is still company_id
+          [columnName]: spaceId,
           service_id: serviceId,
           is_active: true
         }))
@@ -3648,9 +4107,9 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
 
         // Try upsert with onConflict - this will update if exists, insert if not
         const { data: upsertData, error: upsertError } = await supabase
-          .from('company_services')
+          .from(tableName)
           .upsert(servicesToUpsert, {
-            onConflict: 'company_id,service_id',
+            onConflict: conflictColumns,
             ignoreDuplicates: false
           })
           .select()
@@ -3664,7 +4123,7 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
           
           for (const serviceId of servicesToInsert) {
             const serviceToInsertData = {
-              company_id: spaceId, // Database column is still company_id
+              [columnName]: spaceId,
               service_id: serviceId,
               is_active: true
             }
@@ -3673,7 +4132,7 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
             await setAppContext()
 
             const { error: insertError } = await supabase
-              .from('company_services')
+              .from(tableName)
               .insert(serviceToInsertData)
 
             if (insertError) {
@@ -3692,9 +4151,9 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
             if ((lastError as any).code === '42501' || errorMessage.includes('row-level security') || errorMessage.includes('RLS')) {
               return { 
                 success: false, 
-                error: `Database security policy error (Code 42501): The row-level security (RLS) policy on the 'company_services' table is blocking this operation. Your account has the '${currentUser.role}' role, but the database policy needs to be updated. 
+                error: `Database security policy error (Code 42501): The row-level security (RLS) policy on the '${tableName}' table is blocking this operation. Your account has the '${currentUser.role}' role, but the database policy needs to be updated. 
 
-The database administrator needs to update the RLS policy to allow admins and managers to insert/update company_services. The policy should check the user role from the set_user_context function.` 
+The database administrator needs to update the RLS policy to allow admins and managers to insert/update ${tableName}. The policy should check the user role from the set_user_context function.` 
               }
             }
             
@@ -3706,12 +4165,11 @@ The database administrator needs to update the RLS policy to allow admins and ma
 
     // Remove services (deactivate them)
     if (servicesToRemove.length > 0) {
-
       const { error: updateError } = await supabase
-        .from('company_services')
+        .from(tableName)
         .update({ is_active: false })
-          .eq('company_id', spaceId) // Database column is still company_id
-          .in('service_id', servicesToRemove)
+        .eq(columnName, spaceId)
+        .in('service_id', servicesToRemove)
 
       if (updateError) {
         console.error('Error removing space services:', updateError)
@@ -3735,26 +4193,99 @@ export async function getSpaceServices(spaceId: string): Promise<Service[]> {
 
   try {
     await setAppContext()
-    const { data, error } = await supabase
-      .from('company_services')
-      .select(`
-        service_id,
-        is_active,
-        services (*)
-      `)
-      .eq('company_id', spaceId) // Database column is still company_id
+    
+    // Try 'space_services' table first (after migration), fallback to 'company_services' for backward compatibility
+    // We fetch the junction table records first, then fetch services separately to avoid foreign key relationship issues
+    let { data: junctionData, error: junctionError } = await supabase
+      .from('space_services')
+      .select('service_id, is_active')
+      .eq('space_id', spaceId) // After migration, column is space_id
       .eq('is_active', true)
 
-    if (error) {
-      console.error('Error fetching space services:', error)
+    // If space_services query fails, try company_services (before migration)
+    if (junctionError || !junctionData) {
+      const errorStr = JSON.stringify(junctionError)
+      const errorMessage = junctionError?.message || ''
+      const errorCode = (junctionError as any)?.code || ''
+      const isTableNotFound = errorMessage.includes('does not exist') || 
+                              errorCode === '42P01' || 
+                              errorCode === 'PGRST116' ||
+                              errorMessage.includes('relation') ||
+                              errorCode === '404'
+      
+      if (isTableNotFound || !junctionData) {
+        const fallback = await supabase
+          .from('company_services')
+          .select('service_id, is_active')
+          .eq('company_id', spaceId) // Before migration, column is company_id
+          .eq('is_active', true)
+        
+        if (fallback.data && !fallback.error) {
+          junctionData = fallback.data
+          junctionError = null
+        } else if (fallback.error) {
+          // If both fail, return empty array gracefully
+          const fallbackErrorStr = JSON.stringify(fallback.error)
+          const isEmptyError = (errorStr === '{}' && fallbackErrorStr === '{}') || 
+                               (!errorMessage && !errorCode && !fallback.error?.message)
+          
+          if (!isEmptyError) {
+            console.warn('Could not fetch space services junction table:', {
+              space_services_error: junctionError,
+              company_services_error: fallback.error,
+              spaceId
+            })
+          }
+          return []
+        }
+      } else {
+        // Other error (RLS, permissions, etc.) - return empty array
+        const isEmptyError = errorStr === '{}' || (!errorMessage && !errorCode)
+        if (!isEmptyError) {
+          console.warn('Error fetching space services junction table:', {
+            error: junctionError,
+            spaceId
+          })
+        }
+        return []
+      }
+    }
+
+    // If no junction records found, return empty array
+    if (!junctionData || junctionData.length === 0) {
       return []
     }
 
-    // Extract the services from the joined data
-    const services = data?.map(item => item.services).filter(Boolean) || []
-    return services as unknown as Service[]
+    // Extract service IDs
+    const serviceIds = junctionData.map(item => item.service_id).filter(Boolean)
+    
+    if (serviceIds.length === 0) {
+      return []
+    }
+
+    // Fetch services separately (avoiding foreign key relationship issues)
+    const { data: servicesData, error: servicesError } = await supabase
+      .from('services')
+      .select('*')
+      .in('id', serviceIds)
+      .eq('is_active', true)
+
+    if (servicesError) {
+      const errorStr = JSON.stringify(servicesError)
+      const isEmptyError = errorStr === '{}'
+      if (!isEmptyError) {
+        console.warn('Error fetching services:', {
+          error: servicesError,
+          serviceIds,
+          spaceId
+        })
+      }
+      return []
+    }
+
+    return (servicesData || []) as Service[]
   } catch (error) {
-    console.error('Error fetching space services:', error)
+    console.warn('Unexpected error fetching space services:', error)
     return []
   }
 }
@@ -3892,21 +4423,48 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
   }
 
   try {
-    // First, fetch all users
-    const { data: users, error: usersError } = await supabase
+    // First, fetch all users - try space_id first (after migration), fallback to company_id
+    let { data: users, error: usersError } = await supabase
       .from('users')
-      .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, tab_permissions')
+      .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, space_id, tab_permissions')
       .eq('is_active', true)
       .order('full_name', { ascending: true })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (usersError && (usersError.message?.includes('does not exist') || usersError.message?.includes('column') || (usersError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('users')
+        .select('id, email, full_name, role, created_at, updated_at, is_active, assigned_manager_id, company_id, tab_permissions')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true })
+      
+      if (!fallback.error && fallback.data) {
+        // Normalize fallback data to include space_id (mapped from company_id)
+        users = fallback.data.map((user: any) => ({
+          ...user,
+          space_id: user.company_id || null
+        }))
+        usersError = null
+      } else {
+        usersError = fallback.error
+      }
+    }
 
     if (usersError) {
       console.error('Error fetching users:', usersError)
       return []
     }
 
+    // Normalize users to ensure both space_id and company_id are available
+    const normalizedUsers = (users || []).map((user: any) => ({
+      ...user,
+      space_id: user.space_id || user.company_id || null,
+      company_id: user.company_id || user.space_id || null
+    }))
+
     // For each internal user, fetch their company assignments
     const usersWithCompanies: UserWithCompanies[] = await Promise.all(
-      (users || []).map(async (user) => {
+      normalizedUsers.map(async (user) => {
         if (user.role === 'internal' && supabase) {
           // Fetch company assignments with company details
           const { data: companyAssignments, error: companyError } = await supabase
@@ -3967,11 +4525,25 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
               }
               
               // Fallback: fetch company details separately
-              const { data: company } = await supabase
-                .from('companies')
+              // Try spaces table first (after migration), fallback to companies for backward compatibility
+              let { data: company } = await supabase
+                .from('spaces')
                 .select('id, name, description, industry, is_active, is_partner, created_at, updated_at')
                 .eq('id', assignment.company_id)
                 .single()
+
+              // If spaces table doesn't exist (migration not run), try companies table
+              if (company === null || (company as any).error) {
+                const fallback = await supabase
+                  .from('companies')
+                  .select('id, name, description, industry, is_active, is_partner, created_at, updated_at')
+                  .eq('id', assignment.company_id)
+                  .single()
+                
+                if (!fallback.error) {
+                  company = fallback.data
+                }
+              }
 
               return {
                 id: assignment.id,
@@ -3995,11 +4567,25 @@ export async function fetchUsersWithCompanies(): Promise<UserWithCompanies[]> {
         } else {
           // For non-internal users, fetch their single company
           if (user.company_id && supabase) {
-            const { data: company } = await supabase
-              .from('companies')
+            // Try spaces table first (after migration), fallback to companies for backward compatibility
+            let { data: company } = await supabase
+              .from('spaces')
               .select('id, name, description, industry, is_active, is_partner, created_at, updated_at')
               .eq('id', user.company_id)
               .single()
+
+            // If spaces table doesn't exist (migration not run), try companies table
+            if (company === null || (company as any).error) {
+              const fallback = await supabase
+                .from('companies')
+                .select('id, name, description, industry, is_active, is_partner, created_at, updated_at')
+                .eq('id', user.company_id)
+                .single()
+              
+              if (!fallback.error) {
+                company = fallback.data
+              }
+            }
 
             return {
               ...user,
@@ -4186,12 +4772,30 @@ export async function getCompanyDocuments(
       throw new Error('Supabase client not initialized')
     }
 
-    const { data, error } = await supabase
+    await setAppContext()
+    
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('documents')
       .select('*')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .eq('folder_path', folderPath)
       .order('created_at', { ascending: false })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('documents')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('folder_path', folderPath)
+        .order('created_at', { ascending: false })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return { success: false, error: error.message }
@@ -4897,12 +5501,30 @@ export async function searchDocuments(
       throw new Error('Supabase client not initialized')
     }
 
-    const { data, error } = await supabase
+    await setAppContext()
+    
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('documents')
       .select('*')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .ilike('name', `%${searchTerm}%`)
       .order('created_at', { ascending: false })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('documents')
+        .select('*')
+        .eq('company_id', companyId)
+        .ilike('name', `%${searchTerm}%`)
+        .order('created_at', { ascending: false })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return { success: false, error: error.message }
@@ -4923,10 +5545,26 @@ export async function getCompanyStorageUsage(
       throw new Error('Supabase client not initialized')
     }
 
-    const { data, error } = await supabase
+    await setAppContext()
+    
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('documents')
       .select('file_size')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('documents')
+        .select('file_size')
+        .eq('company_id', companyId)
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return { success: false, error: error.message }
@@ -5074,13 +5712,30 @@ export async function fetchSpaceBookmarks(
       throw new Error('Supabase client not initialized')
     }
 
-    // RLS removed - using custom access control in application code
-    const { data, error } = await supabase
+    await setAppContext()
+    
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('space_bookmarks')
       .select('*')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .order('position', { ascending: true })
       .order('created_at', { ascending: true })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('space_bookmarks')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('position', { ascending: true })
+        .order('created_at', { ascending: true })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return { success: false, error: error.message }
@@ -5124,22 +5779,40 @@ export async function createSpaceBookmark(
       }
     }
 
-    // Get the maximum position for this company to add at the end
-    const { data: existingBookmarks } = await supabase
+    await setAppContext()
+    
+    // Get the maximum position for this company to add at the end - try space_id first
+    let { data: existingBookmarks } = await supabase
       .from('space_bookmarks')
       .select('position')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .order('position', { ascending: false })
       .limit(1)
       .single()
 
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (existingBookmarks === null || (existingBookmarks as any).error) {
+      const fallback = await supabase
+        .from('space_bookmarks')
+        .select('position')
+        .eq('company_id', companyId)
+        .order('position', { ascending: false })
+        .limit(1)
+        .single()
+      
+      if (!fallback.error) {
+        existingBookmarks = fallback.data
+      }
+    }
+
     const maxPosition = existingBookmarks?.position ?? -1
     const newPosition = maxPosition + 1
 
-    const { data, error } = await supabase
+    // Try inserting with space_id first, fallback to company_id
+    let { data, error } = await supabase
       .from('space_bookmarks')
       .insert({
-        company_id: companyId,
+        space_id: companyId,
         name: bookmarkData.name,
         url: bookmarkData.url,
         icon_name: bookmarkData.icon_name || 'ExternalLink',
@@ -5150,6 +5823,29 @@ export async function createSpaceBookmark(
       })
       .select()
       .single()
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('space_bookmarks')
+        .insert({
+          company_id: companyId,
+          name: bookmarkData.name,
+          url: bookmarkData.url,
+          icon_name: bookmarkData.icon_name || 'ExternalLink',
+          color: bookmarkData.color || '#6b7280',
+          favicon_url: bookmarkData.favicon_url || null,
+          position: bookmarkData.position ?? newPosition,
+          created_by: userId
+        })
+        .select()
+        .single()
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return { success: false, error: error.message }
@@ -5183,12 +5879,32 @@ export async function updateSpaceBookmark(
       return { success: false, error: 'User not authenticated' }
     }
 
-    // First, get the bookmark to check company access
-    const { data: existingBookmark, error: fetchError } = await supabase
+    await setAppContext()
+    
+    // First, get the bookmark to check company access - try space_id first
+    let { data: existingBookmark, error: fetchError } = await supabase
       .from('space_bookmarks')
-      .select('company_id, created_by')
+      .select('space_id, created_by')
       .eq('id', bookmarkId)
       .single()
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (fetchError && (fetchError.message?.includes('does not exist') || fetchError.message?.includes('column') || (fetchError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('space_bookmarks')
+        .select('company_id, created_by')
+        .eq('id', bookmarkId)
+        .single()
+      
+      if (!fallback.error && fallback.data) {
+        // Normalize fallback data to include space_id (mapped from company_id)
+        existingBookmark = {
+          ...fallback.data,
+          space_id: fallback.data.company_id || null
+        } as typeof existingBookmark
+        fetchError = null
+      }
+    }
 
     if (fetchError || !existingBookmark) {
       return { success: false, error: 'Bookmark not found' }
@@ -5197,8 +5913,9 @@ export async function updateSpaceBookmark(
     // Verify user has access to this bookmark's company
     // Admins can update any bookmark
     // Managers and other users can only update bookmarks in their own company
+    const bookmarkSpaceId = (existingBookmark as any).space_id || (existingBookmark as any).company_id
     if (currentUser.role !== 'admin') {
-      if (currentUser.companyId !== existingBookmark.company_id) {
+      if (currentUser.companyId !== bookmarkSpaceId) {
         return { success: false, error: 'You can only update bookmarks in your own company' }
       }
     }
@@ -5242,12 +5959,32 @@ export async function deleteSpaceBookmark(
       return { success: false, error: 'User not authenticated' }
     }
 
-    // First, get the bookmark to check company access
-    const { data: existingBookmark, error: fetchError } = await supabase
+    await setAppContext()
+    
+    // First, get the bookmark to check company access - try space_id first
+    let { data: existingBookmark, error: fetchError } = await supabase
       .from('space_bookmarks')
-      .select('company_id, created_by')
+      .select('space_id, created_by')
       .eq('id', bookmarkId)
       .single()
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (fetchError && (fetchError.message?.includes('does not exist') || fetchError.message?.includes('column') || (fetchError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('space_bookmarks')
+        .select('company_id, created_by')
+        .eq('id', bookmarkId)
+        .single()
+      
+      if (!fallback.error && fallback.data) {
+        // Normalize fallback data to include space_id (mapped from company_id)
+        existingBookmark = {
+          ...fallback.data,
+          space_id: fallback.data.company_id || null
+        } as typeof existingBookmark
+        fetchError = null
+      }
+    }
 
     if (fetchError || !existingBookmark) {
       return { success: false, error: 'Bookmark not found' }
@@ -5256,8 +5993,9 @@ export async function deleteSpaceBookmark(
     // Verify user has access to this bookmark's company
     // Admins can delete any bookmark
     // Managers and other users can only delete bookmarks in their own company
+    const bookmarkSpaceId = (existingBookmark as any).space_id || (existingBookmark as any).company_id
     if (currentUser.role !== 'admin') {
-      if (currentUser.companyId !== existingBookmark.company_id) {
+      if (currentUser.companyId !== bookmarkSpaceId) {
         return { success: false, error: 'You can only delete bookmarks in your own company' }
       }
     }
@@ -5809,44 +6547,93 @@ export async function saveRichDocument(
         return { success: false, error: 'Access denied to this company' }
       }
 
-      // Create new document - conditionally include is_internal
-      const insertData: any = {
+      await setAppContext()
+      
+      // Create new document - try space_id first (after migration), fallback to company_id
+      // Try to include is_internal, but handle gracefully if column doesn't exist
+      let insertData: any = {
         title,
         content,
-        company_id: companyId,
+        space_id: companyId,
         created_by: userId,
         folder_path: folderPath
       }
-
-      // Try to include is_internal, but handle gracefully if column doesn't exist
+      
       insertData.is_internal = isInternal
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('rich_documents')
         .insert(insertData)
         .select()
         .single()
 
+      // If space_id column doesn't exist (migration not run), try company_id
+      if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+        insertData = {
+          title,
+          content,
+          company_id: companyId,
+          created_by: userId,
+          folder_path: folderPath,
+          is_internal: isInternal
+        }
+        
+        const fallback = await supabase
+          .from('rich_documents')
+          .insert(insertData)
+          .select()
+          .single()
+        
+        if (!fallback.error) {
+          data = fallback.data
+          error = null
+        } else {
+          error = fallback.error
+        }
+      }
+
       if (error) {
         // If error is about missing is_internal column, retry without it
         if (error.message?.includes('is_internal') || (error as any).code === 'PGRST204') {
           console.warn('is_internal column not found in rich_documents table, creating document without it')
-          const { data: retryData, error: retryError } = await supabase
+          const retryInsertData: any = {
+            title,
+            content,
+            space_id: companyId,
+            created_by: userId,
+            folder_path: folderPath
+          }
+          
+          let { data: retryData, error: retryError } = await supabase
             .from('rich_documents')
-            .insert({
-              title,
-              content,
-              company_id: companyId,
-              created_by: userId,
-              folder_path: folderPath
-            })
+            .insert(retryInsertData)
             .select()
             .single()
-
+          
+          // If space_id column doesn't exist, try company_id
+          if (retryError && (retryError.message?.includes('does not exist') || retryError.message?.includes('column') || (retryError as any).code === '42703')) {
+            const fallbackRetry = await supabase
+              .from('rich_documents')
+              .insert({
+                title,
+                content,
+                company_id: companyId,
+                created_by: userId,
+                folder_path: folderPath
+              })
+              .select()
+              .single()
+            
+            if (!fallbackRetry.error) {
+              retryData = fallbackRetry.data
+              retryError = null
+            }
+          }
+          
           if (retryError) {
             return { success: false, error: retryError.message }
           }
-
+          
           return { success: true, document: retryData }
         }
 
@@ -5909,12 +6696,30 @@ export async function getCompanyRichDocuments(
       return { success: false, error: 'Access denied to this company' }
     }
 
-    const { data, error } = await supabase
+    await setAppContext()
+    
+    // Try space_id first (after migration), fallback to company_id
+    let { data, error } = await supabase
       .from('rich_documents')
       .select('*')
-      .eq('company_id', companyId)
+      .eq('space_id', companyId)
       .eq('folder_path', folderPath)
       .order('created_at', { ascending: false })
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('rich_documents')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('folder_path', folderPath)
+        .order('created_at', { ascending: false })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      }
+    }
 
     if (error) {
       return { success: false, error: error.message }
@@ -6046,12 +6851,101 @@ export async function fetchRecentActivities(limit: number = 50, daysBack: number
   try {
     await setAppContext()
     
-    // Calculate date threshold
-    const dateThreshold = new Date()
-    dateThreshold.setDate(dateThreshold.getDate() - daysBack)
-
-    // Try to fetch from activity_logs table first (new approach)
-    const { data: activityLogs, error: logsError } = await supabase
+    // Calculate date threshold using timestamps to avoid timezone issues
+    // Ensure daysBack is always positive and reasonable (max 365 days)
+    const safeDaysBack = Math.min(Math.max(Math.abs(daysBack) || 90, 1), 365)
+    const now = Date.now()
+    const daysBackMs = safeDaysBack * 24 * 60 * 60 * 1000
+    
+    // Calculate threshold - ensure it's always in the past
+    // Use Math.max to ensure we never go into the future, even with edge cases
+    const dateThresholdMs = Math.max(0, now - daysBackMs)
+    
+    // Double-check: ensure threshold is at least 1 second in the past
+    const safeDateThresholdMs = Math.min(dateThresholdMs, now - 1000)
+    const dateThreshold = new Date(safeDateThresholdMs)
+    
+    // Validate the date is valid and in the past - use strict comparison
+    let dateThresholdISO: string
+    const thresholdTime = dateThreshold.getTime()
+    if (isNaN(thresholdTime) || thresholdTime >= now) {
+      console.error('Date threshold is invalid or in the future, using safe fallback', {
+        dateThreshold: dateThreshold.toISOString(),
+        thresholdTime,
+        now,
+        nowISO: new Date(now).toISOString(),
+        daysBack,
+        safeDaysBack,
+        daysBackMs,
+        dateThresholdMs,
+        safeDateThresholdMs
+      })
+      // Fallback to a safe past date (90 days ago) - ensure it's definitely in the past
+      const fallbackMs = now - (90 * 24 * 60 * 60 * 1000)
+      const fallbackDate = new Date(Math.max(0, fallbackMs))
+      dateThresholdISO = fallbackDate.toISOString()
+    } else {
+      dateThresholdISO = dateThreshold.toISOString()
+    }
+    
+    // Final validation: ensure dateThresholdISO is valid and represents a past date
+    const finalDateThreshold = new Date(dateThresholdISO)
+    const finalThresholdTime = finalDateThreshold.getTime()
+    if (isNaN(finalThresholdTime) || finalThresholdTime >= now) {
+      console.error('Final date threshold validation failed, using ultimate fallback', {
+        dateThresholdISO,
+        finalThresholdTime,
+        now,
+        nowISO: new Date(now).toISOString()
+      })
+      // Ultimate fallback - use 90 days ago, ensure it's in the past
+      const ultimateFallbackMs = now - (90 * 24 * 60 * 60 * 1000)
+      dateThresholdISO = new Date(Math.max(0, ultimateFallbackMs)).toISOString()
+    }
+    
+    // One more check before using in query - log if still invalid
+    const preQueryCheck = new Date(dateThresholdISO)
+    const preQueryTime = preQueryCheck.getTime()
+    
+    // Re-fetch current time to ensure we're comparing against the latest
+    const currentTime = Date.now()
+    
+    if (isNaN(preQueryTime) || preQueryTime >= currentTime) {
+      console.error('CRITICAL: Date threshold is still in future before query!', {
+        dateThresholdISO,
+        preQueryTime,
+        currentTime,
+        now,
+        diff: preQueryTime - currentTime,
+        dateThresholdDate: preQueryCheck.toISOString(),
+        currentDate: new Date(currentTime).toISOString()
+      })
+      // Force to 90 days ago from current time
+      const forcedDate = new Date(currentTime - (90 * 24 * 60 * 60 * 1000))
+      dateThresholdISO = forcedDate.toISOString()
+      console.log('Forced date threshold to:', dateThresholdISO)
+    }
+    
+    // Final sanity check: ensure the ISO string represents a valid past date
+    const finalCheck = new Date(dateThresholdISO)
+    if (finalCheck.getTime() >= Date.now()) {
+      // If still invalid, use a hardcoded safe date (1 year ago)
+      const oneYearAgo = new Date(Date.now() - (365 * 24 * 60 * 60 * 1000))
+      dateThresholdISO = oneYearAgo.toISOString()
+      console.error('EMERGENCY FALLBACK: Using 1 year ago as date threshold:', dateThresholdISO)
+    }
+    
+    // Log the date being used for debugging
+    console.log('Fetching activity logs with date threshold:', {
+      dateThresholdISO,
+      dateThresholdDate: new Date(dateThresholdISO).toISOString(),
+      currentDate: new Date().toISOString(),
+      daysBack,
+      safeDaysBack
+    })
+    
+    // Query activity_logs - migration has been run, so use space_id (not company_id)
+    let { data: activityLogs, error: logsError } = await supabase
       .from('activity_logs')
       .select(`
         id,
@@ -6061,44 +6955,176 @@ export async function fetchRecentActivities(limit: number = 50, daysBack: number
         entity_id,
         description,
         metadata,
-        company_id,
+        space_id,
         project_id,
         task_id,
         created_at,
         user:users!activity_logs_user_id_fkey(id, full_name, email),
-        company:companies!activity_logs_company_id_fkey(id, name),
+        space:spaces!activity_logs_space_id_fkey(id, name),
         project:projects!activity_logs_project_id_fkey(id, name),
         task:tasks!activity_logs_task_id_fkey(id, title)
       `)
-      .gte('created_at', dateThreshold.toISOString())
+      .gte('created_at', dateThresholdISO)
       .order('created_at', { ascending: false })
       .limit(limit)
+    
+    // If space foreign key doesn't work, try without it
+    if (logsError && logsError.message?.includes('relationship')) {
+      console.log('Trying query without space foreign key')
+      const fallback = await supabase
+        .from('activity_logs')
+        .select(`
+          id,
+          user_id,
+          action_type,
+          entity_type,
+          entity_id,
+          description,
+          metadata,
+          space_id,
+          project_id,
+          task_id,
+          created_at,
+          user:users!activity_logs_user_id_fkey(id, full_name, email),
+          project:projects!activity_logs_project_id_fkey(id, name),
+          task:tasks!activity_logs_task_id_fkey(id, title)
+        `)
+        .gte('created_at', dateThresholdISO)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+      
+      if (!fallback.error && fallback.data) {
+        // Normalize fallback data to include space property (empty array since we don't have the relationship)
+        activityLogs = fallback.data.map((log: any) => ({
+          ...log,
+          space: []
+        })) as typeof activityLogs
+        logsError = null
+      }
+    }
+    
+    // Log error details if query fails
+    if (logsError) {
+      console.error('Error fetching activity logs:', {
+        error: logsError,
+        message: logsError.message,
+        details: logsError.details,
+        hint: logsError.hint,
+        dateThresholdISO,
+        dateThresholdDate: new Date(dateThresholdISO).toISOString()
+      })
+      
+      // If basic query fails, try even simpler query without foreign keys
+      if (logsError.message?.includes('400') || logsError.message?.includes('foreign key') || logsError.message?.includes('does not exist')) {
+        console.log('Trying simple fallback query without foreign keys')
+        const fallback = await supabase
+        .from('activity_logs')
+        .select(`
+          id,
+          user_id,
+          action_type,
+          entity_type,
+          entity_id,
+          description,
+          metadata,
+          space_id,
+          project_id,
+          task_id,
+          created_at,
+          user:users!activity_logs_user_id_fkey(id, full_name, email),
+          project:projects!activity_logs_project_id_fkey(id, name),
+          task:tasks!activity_logs_task_id_fkey(id, title)
+        `)
+        .gte('created_at', dateThresholdISO)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+        
+        if (!fallback.error && fallback.data) {
+          // Normalize fallback data to include space property (empty array since we don't have the relationship)
+          activityLogs = fallback.data.map((log: any) => ({
+            ...log,
+            space: []
+          })) as typeof activityLogs
+          logsError = null
+          console.log('Fallback query succeeded')
+        } else {
+          console.error('Fallback query also failed:', fallback.error)
+          // Try even simpler query without foreign keys if both fail
+          const simpleFallback = await supabase
+            .from('activity_logs')
+            .select('*')
+            .gte('created_at', dateThresholdISO)
+            .order('created_at', { ascending: false })
+            .limit(limit)
+          
+          if (!simpleFallback.error && simpleFallback.data) {
+            // Normalize simple fallback data to include space property (empty array)
+            activityLogs = simpleFallback.data.map((log: any) => ({
+              ...log,
+              space: []
+            })) as typeof activityLogs
+            logsError = null
+            console.log('Simple fallback query succeeded')
+          }
+        }
+      }
+    }
 
     // If activity_logs table exists and has data, use it
     if (!logsError && activityLogs && activityLogs.length > 0) {
-      return activityLogs.map(log => ({
-        id: log.id,
-        type: log.action_type,
-        user_id: log.user_id,
-        user_name: (log.user as any)?.full_name || 'Unknown',
-        user_email: (log.user as any)?.email,
-        timestamp: log.created_at,
-        project_id: log.project_id,
-        project_name: (log.project as any)?.name,
-        company_name: (log.company as any)?.name,
-        task_id: log.task_id,
-        task_title: (log.task as any)?.title,
-        description: log.description,
-        metadata: log.metadata || {},
-      }))
+      return activityLogs.map(log => {
+        // Normalize space/company: use space if available, otherwise use company
+        const spaceData = (log as any).space || (log as any).company
+        const spaceId = (log as any).space_id || (log as any).company_id
+        
+        return {
+          id: log.id,
+          type: log.action_type,
+          user_id: log.user_id,
+          user_name: (log.user as any)?.full_name || 'Unknown',
+          user_email: (log.user as any)?.email,
+          timestamp: log.created_at,
+          project_id: log.project_id,
+          project_name: (log.project as any)?.name,
+          company_name: spaceData?.name || null,
+          task_id: log.task_id,
+          task_title: (log.task as any)?.title,
+          description: log.description,
+          metadata: log.metadata || {},
+        }
+      })
     }
 
     // Fallback to old method if activity_logs table doesn't exist or is empty
     const activities: RecentActivity[] = []
-    const oneWeekAgo = new Date()
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-
-    // Fetch recent projects
+    // Use a more reliable method to avoid timezone/date calculation issues
+    const nowMs = Date.now()
+    const oneWeekAgoMs = nowMs - (7 * 24 * 60 * 60 * 1000)
+    
+    // Ensure the date is always in the past (at least 1 second ago)
+    const safeOneWeekAgoMs = Math.min(oneWeekAgoMs, nowMs - 1000)
+    let oneWeekAgoISO: string
+    
+    const oneWeekAgo = new Date(safeOneWeekAgoMs)
+    if (isNaN(oneWeekAgo.getTime()) || oneWeekAgo.getTime() >= nowMs) {
+      console.warn('One week ago date is invalid or in the future, using safe fallback', {
+        oneWeekAgo: oneWeekAgo.toISOString(),
+        now: new Date(nowMs).toISOString()
+      })
+      // Fallback to 7 days ago using safe calculation
+      const fallbackDate = new Date(nowMs - (7 * 24 * 60 * 60 * 1000))
+      oneWeekAgoISO = fallbackDate.toISOString()
+    } else {
+      oneWeekAgoISO = oneWeekAgo.toISOString()
+    }
+    
+    // Final validation: ensure oneWeekAgoISO is valid and represents a past date
+    const finalOneWeekAgo = new Date(oneWeekAgoISO)
+    if (finalOneWeekAgo.getTime() >= nowMs || isNaN(finalOneWeekAgo.getTime())) {
+      // Ultimate fallback - use 7 days ago
+      oneWeekAgoISO = new Date(nowMs - (7 * 24 * 60 * 60 * 1000)).toISOString()
+    }
+    
     const { data: recentProjects } = await supabase
       .from('projects')
       .select(`
@@ -6110,7 +7136,7 @@ export async function fetchRecentActivities(limit: number = 50, daysBack: number
         created_user:users!projects_created_by_fkey(id, full_name, email),
         company:companies!projects_company_id_fkey(id, name)
       `)
-      .gte('created_at', oneWeekAgo.toISOString())
+      .gte('created_at', oneWeekAgoISO)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -6144,7 +7170,7 @@ export async function fetchRecentActivities(limit: number = 50, daysBack: number
         created_user:users!tasks_created_by_fkey(id, full_name, email),
         project:projects!tasks_project_id_fkey(id, name, company_id, company:companies!projects_company_id_fkey(id, name))
       `)
-      .gte('created_at', oneWeekAgo.toISOString())
+      .gte('created_at', oneWeekAgoISO)
       .order('created_at', { ascending: false })
       .limit(limit * 2)
     
@@ -6163,7 +7189,7 @@ export async function fetchRecentActivities(limit: number = 50, daysBack: number
         project:projects!tasks_project_id_fkey(id, name, company_id, company:companies!projects_company_id_fkey(id, name))
       `)
       .eq('status', 'done')
-      .gte('updated_at', oneWeekAgo.toISOString())
+      .gte('updated_at', oneWeekAgoISO)
       .order('updated_at', { ascending: false })
       .limit(limit)
     
@@ -6222,7 +7248,7 @@ export async function fetchRecentActivities(limit: number = 50, daysBack: number
         user:users!task_comments_user_id_fkey(id, full_name, email),
         task:tasks!task_comments_task_id_fkey(id, title, project_id, project:projects!tasks_project_id_fkey(id, name, company_id, company:companies!projects_company_id_fkey(id, name)))
       `)
-      .gte('created_at', oneWeekAgo.toISOString())
+      .gte('created_at', oneWeekAgoISO)
       .order('created_at', { ascending: false })
       .limit(limit)
 

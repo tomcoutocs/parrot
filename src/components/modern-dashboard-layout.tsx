@@ -191,14 +191,21 @@ export function ModernDashboardLayout({
           // Check if company has a manager_id
           const { supabase } = await import("@/lib/supabase")
           if (supabase) {
-            const { data: company } = await supabase
-              .from('companies')
-              .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name, profile_picture)')
+            // Try to fetch manager - if foreign key relationship fails, fetch manager separately
+            let { data: company, error: fkError } = await supabase
+              .from('spaces')
+              .select('manager_id')
               .eq('id', currentSpaceId)
               .single()
             
-            if (company?.manager) {
-              const managerData = Array.isArray(company.manager) ? company.manager[0] : company.manager
+            if (company?.manager_id) {
+              // Fetch manager separately to avoid foreign key relationship issues
+              const { data: managerData } = await supabase
+                .from('users')
+                .select('id, full_name, profile_picture')
+                .eq('id', company.manager_id)
+                .single()
+              
               if (managerData) {
                 setSpaceManager({
                   id: managerData.id,
@@ -719,17 +726,23 @@ export function ModernDashboardLayout({
                               avatar: profilePicture
                             })
                           } else {
-                            // Check if company has a manager_id
+                            // Check if space has a manager_id
                             const { supabase } = await import("@/lib/supabase")
                             if (supabase) {
+                              // Fetch manager separately to avoid foreign key relationship issues
                               const { data: company } = await supabase
-                                .from('companies')
-                                .select('manager_id, manager:users!companies_manager_id_fkey(id, full_name, profile_picture)')
+                                .from('spaces')
+                                .select('manager_id')
                                 .eq('id', currentSpaceId)
                                 .single()
                               
-                              if (company?.manager) {
-                                const managerData = Array.isArray(company.manager) ? company.manager[0] : company.manager
+                              if (company?.manager_id) {
+                                const { data: managerData } = await supabase
+                                  .from('users')
+                                  .select('id, full_name, profile_picture')
+                                  .eq('id', company.manager_id)
+                                  .single()
+                                
                                 if (managerData) {
                                   setSpaceManager({
                                     id: managerData.id,

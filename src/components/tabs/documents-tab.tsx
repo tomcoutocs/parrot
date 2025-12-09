@@ -236,11 +236,28 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
     if (!supabase) return
     
     try {
-      const { data, error } = await supabase
-        .from('companies')
+      // Try spaces table first (after migration), fallback to companies for backward compatibility
+      let { data, error } = await supabase
+        .from('spaces')
         .select('*')
         .eq('is_active', true)
         .order('name')
+
+      // If spaces table doesn't exist (migration not run), try companies table
+      if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+        const fallback = await supabase
+          .from('companies')
+          .select('*')
+          .eq('is_active', true)
+          .order('name')
+        
+        if (!fallback.error) {
+          data = fallback.data
+          error = null
+        } else {
+          error = fallback.error
+        }
+      }
 
       if (error) throw error
       setCompanies(data || [])

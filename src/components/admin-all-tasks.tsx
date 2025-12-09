@@ -58,9 +58,18 @@ export function AdminAllTasks() {
         ])
 
         // Enrich projects with company data
+        // Handle both space_id and company_id for backward compatibility
         const enrichedProjects = allProjectsData.map(project => {
-          const company = companiesData.find(c => c.id === project.company_id)
-          return { ...project, company }
+          // Try space_id first (after migration), fallback to company_id
+          const spaceId = (project as any).space_id || project.company_id
+          const company = companiesData.find(c => c.id === spaceId)
+          return { 
+            ...project, 
+            company,
+            // Normalize: ensure both space_id and company_id are available
+            company_id: spaceId || project.company_id,
+            space_id: spaceId || (project as any).space_id
+          }
         })
 
         // Create a set of active project IDs for quick lookup
@@ -134,7 +143,9 @@ export function AdminAllTasks() {
       task.project?.company?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.assigned_user?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesCompany = filterCompany === "all" || task.project?.company_id === filterCompany
+    // Handle both space_id and company_id for matching
+    const taskSpaceId = task.project ? ((task.project as any).space_id || task.project.company_id) : null
+    const matchesCompany = filterCompany === "all" || taskSpaceId === filterCompany
     const matchesProject = filterProject === "all" || task.project_id === filterProject
     const matchesStatus = filterStatus === "all" || task.status === filterStatus
     const matchesPriority = filterPriority === "all" || task.priority === filterPriority
@@ -160,9 +171,13 @@ export function AdminAllTasks() {
   }
 
   // Get filtered projects based on company filter
+  // Handle both space_id and company_id for matching
   const filteredProjectsForSelect = filterCompany === "all" 
     ? projects 
-    : projects.filter(p => p.company_id === filterCompany)
+    : projects.filter(p => {
+        const projectSpaceId = (p as any).space_id || p.company_id
+        return projectSpaceId === filterCompany
+      })
 
   const getPriorityColor = (priority: string) => {
     const priorityLower = priority?.toLowerCase() || ""
@@ -322,10 +337,10 @@ export function AdminAllTasks() {
               }
             }}>
               <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All Companies" />
+                <SelectValue placeholder="All Spaces" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Companies</SelectItem>
+                <SelectItem value="all">All Spaces</SelectItem>
                 {companies.map((company) => (
                   <SelectItem key={company.id} value={company.id}>
                     {company.name}
@@ -464,7 +479,7 @@ export function AdminAllTasks() {
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 px-12 py-2 text-xs text-muted-foreground border-b border-border/30 opacity-60">
           <div className="col-span-4">Name</div>
-          <div className="col-span-1 text-center">Client</div>
+          <div className="col-span-1 text-center">Space</div>
           <div className="col-span-1 text-center">Project</div>
           <div className="col-span-2 text-center">Assignee</div>
           <div className="col-span-2 text-center">Due date</div>
@@ -536,7 +551,7 @@ export function AdminAllTasks() {
                     <span className="text-sm truncate">{task.title || "Untitled Task"}</span>
                   </div>
                   
-                  {/* Client Column */}
+                  {/* Space Column */}
                   <div className="col-span-1 flex items-center justify-center">
                     <span className="text-sm text-muted-foreground truncate">{task.project?.company?.name || "-"}</span>
                   </div>

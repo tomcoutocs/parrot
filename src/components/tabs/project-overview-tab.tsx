@@ -293,8 +293,8 @@ export default function ProjectOverviewTab() {
           <h1 className="text-3xl font-bold text-gray-900">Task Overview</h1>
           <p className="text-gray-600 mt-1">
             {session?.user.role === 'admin' 
-              ? 'Track all tasks across all companies' 
-              : 'Track tasks for your assigned company'
+              ? 'Track all tasks across all spaces' 
+              : 'Track tasks for your assigned space'
             }
           </p>
         </div>
@@ -316,7 +316,7 @@ export default function ProjectOverviewTab() {
           <CardContent>
             <div className="text-2xl font-bold">{totalTasks}</div>
                          <p className="text-xs text-muted-foreground">
-               {session?.user.role === 'admin' ? 'Across all companies' : 'For your company'}
+               {session?.user.role === 'admin' ? 'Across all spaces' : 'For your space'}
              </p>
           </CardContent>
         </Card>
@@ -401,13 +401,13 @@ export default function ProjectOverviewTab() {
              </div>
 
              <div className="space-y-2">
-               <label className="text-sm font-medium">Company</label>
+               <label className="text-sm font-medium">Space</label>
                <Select value={companyFilter} onValueChange={setCompanyFilter}>
                  <SelectTrigger>
-                   <SelectValue placeholder="All Companies" />
+                   <SelectValue placeholder="All Spaces" />
                  </SelectTrigger>
                  <SelectContent>
-                   <SelectItem value="all">All Companies</SelectItem>
+                   <SelectItem value="all">All Spaces</SelectItem>
                    {companies.map(company => (
                      <SelectItem key={company.id} value={company.id}>
                        {company.name}

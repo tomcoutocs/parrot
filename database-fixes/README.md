@@ -234,6 +234,7 @@ This script adds the `profile_picture` column to the `users` table to store user
 - `space_bookmarks` (column renamed)
 - `form_submissions` (column renamed)
 - `activity_logs` (column renamed)
+- `company_events` (column renamed - calendar events)
 - `internal_user_companies` (column renamed)
 - `google_ads_metrics_cache` (column renamed)
 - `meta_ads_metrics_cache` (column renamed)
@@ -241,6 +242,7 @@ This script adds the `profile_picture` column to the `users` table to store user
 - `user_invitations` (column renamed, if exists)
 - `space_dashboard_config` (column renamed, if exists)
 - `dashboard_notes` (column renamed, if exists)
+- `dashboard_links` (column renamed, if exists)
 - `dashboard_links` (column renamed, if exists)
 
 **Before running:**

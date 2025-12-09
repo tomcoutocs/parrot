@@ -546,7 +546,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search companies..."
+              placeholder="Search spaces..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -558,7 +558,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
             <SelectValue placeholder="Filter by partner status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Companies</SelectItem>
+            <SelectItem value="all">All Spaces</SelectItem>
             <SelectItem value="partner">Partners Only</SelectItem>
             <SelectItem value="non-partner">Non-Partners Only</SelectItem>
           </SelectContent>
@@ -581,12 +581,12 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
       {/* Results Count */}
       <div className="flex items-center justify-between text-sm text-gray-600">
         <span>
-          Showing {filteredCompanies.length} of {companies.length} companies
+          Showing {filteredCompanies.length} of {companies.length} spaces
           {(searchTerm || partnerFilter !== 'all' || serviceFilter !== 'all') && ' (filtered)'}
         </span>
       </div>
 
-      {/* Companies Display */}
+      {/* Spaces Display */}
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin" />
@@ -609,7 +609,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
                                          <div>
                        <CardTitle className="text-lg">{company.name}</CardTitle>
                        <CardDescription className="line-clamp-2">
-                         {company.is_partner ? 'Partner Company' : 'Client Company'}
+                         {company.is_partner ? 'Partner Space' : 'Client Space'}
                        </CardDescription>
                      </div>
                   </div>
@@ -708,7 +708,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
                            {company.is_active ? 'Active' : 'Inactive'}
                          </Badge>
                          <span className="text-sm text-gray-600">
-                           {company.is_partner ? 'Partner Company' : 'Client Company'}
+                           {company.is_partner ? 'Partner Space' : 'Client Space'}
                          </span>
                          <span className="text-sm text-gray-600">
                            Created: {new Date(company.created_at).toLocaleDateString()}
@@ -798,7 +798,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
                    }
                  />
                  <Label htmlFor="is_partner" className="text-sm font-normal">
-                   Mark as Partner Company
+                   Mark as Partner Space
                  </Label>
                </div>
              </div>
@@ -1177,7 +1177,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
               {/* Company Status */}
               <div className="flex items-center gap-2">
                 <Badge variant={selectedCompanyDetails.company.is_partner ? "default" : "secondary"}>
-                  {selectedCompanyDetails.company.is_partner ? "Partner Company" : "Client Company"}
+                  {selectedCompanyDetails.company.is_partner ? "Partner Space" : "Client Space"}
                 </Badge>
                 <Badge variant={selectedCompanyDetails.company.is_active ? "default" : "destructive"}>
                   {selectedCompanyDetails.company.is_active ? "Active" : "Inactive"}

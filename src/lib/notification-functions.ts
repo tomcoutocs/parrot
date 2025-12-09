@@ -561,22 +561,49 @@ async function getUsersInSpace(spaceId: string): Promise<string[]> {
   }
 
   try {
-    // Get users directly assigned to the space
-    const { data: directUsers, error: directError } = await supabase
+    // Get users directly assigned to the space - try space_id first (after migration), fallback to company_id
+    let { data: directUsers, error: directError } = await supabase
       .from('users')
       .select('id')
-      .eq('company_id', spaceId)
+      .eq('space_id', spaceId)
       .eq('is_active', true)
+    
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (directError && (directError.message?.includes('does not exist') || directError.message?.includes('column') || (directError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('users')
+        .select('id')
+        .eq('company_id', spaceId)
+        .eq('is_active', true)
+      
+      if (!fallback.error) {
+        directUsers = fallback.data
+        directError = null
+      }
+    }
 
     if (directError) {
       console.error('Error fetching direct users:', directError)
     }
 
-    // Get internal users assigned to the space
-    const { data: internalUsers, error: internalError } = await supabase
+    // Get internal users assigned to the space - try space_id first (after migration), fallback to company_id
+    let { data: internalUsers, error: internalError } = await supabase
       .from('internal_user_companies')
       .select('user_id')
-      .eq('company_id', spaceId)
+      .eq('space_id', spaceId)
+    
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (internalError && (internalError.message?.includes('does not exist') || internalError.message?.includes('column') || (internalError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('internal_user_companies')
+        .select('user_id')
+        .eq('company_id', spaceId)
+      
+      if (!fallback.error) {
+        internalUsers = fallback.data
+        internalError = null
+      }
+    }
 
     if (internalError) {
       console.error('Error fetching internal users:', internalError)
@@ -596,12 +623,29 @@ async function getUsersInSpace(spaceId: string): Promise<string[]> {
       activeInternalUserIds = (activeInternalUsers || []).map(u => u.id)
     }
 
-    // Get managers assigned to the space via companies.manager_id
-    const { data: space, error: spaceError } = await supabase
-      .from('companies')
+    // Get managers assigned to the space via spaces.manager_id (or companies.manager_id before migration)
+    // Try spaces table first (after migration), fallback to companies for backward compatibility
+    let { data: space, error: spaceError } = await supabase
+      .from('spaces')
       .select('manager_id')
       .eq('id', spaceId)
       .single()
+
+    // If spaces table doesn't exist (migration not run), try companies table
+    if (spaceError && (spaceError.message?.includes('does not exist') || spaceError.message?.includes('relation') || (spaceError as any).code === '42P01')) {
+      const fallback = await supabase
+        .from('companies')
+        .select('manager_id')
+        .eq('id', spaceId)
+        .single()
+      
+      if (!fallback.error) {
+        space = fallback.data
+        spaceError = null
+      } else {
+        spaceError = fallback.error
+      }
+    }
 
     let managerIds: string[] = []
     if (!spaceError && space?.manager_id) {

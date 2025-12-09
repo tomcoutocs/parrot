@@ -8,11 +8,28 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 // Helper to get Google Ads credentials
 async function getGoogleAdsCredentials(companyId: string) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const { data, error } = await supabase
-    .from('companies')
+  // Try spaces table first (after migration), fallback to companies for backward compatibility
+  let { data, error } = await supabase
+    .from('spaces')
     .select('google_ads_developer_token, google_ads_client_id, google_ads_client_secret, google_ads_refresh_token, google_ads_customer_id')
     .eq('id', companyId)
     .single()
+
+  // If spaces table doesn't exist (migration not run), try companies table
+  if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+    const fallback = await supabase
+      .from('companies')
+      .select('google_ads_developer_token, google_ads_client_id, google_ads_client_secret, google_ads_refresh_token, google_ads_customer_id')
+      .eq('id', companyId)
+      .single()
+    
+    if (!fallback.error) {
+      data = fallback.data
+      error = null
+    } else {
+      error = fallback.error
+    }
+  }
 
   if (error || !data) return null
 
@@ -28,11 +45,28 @@ async function getGoogleAdsCredentials(companyId: string) {
 // Helper to get Meta Ads credentials
 async function getMetaAdsCredentials(companyId: string) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const { data, error } = await supabase
-    .from('companies')
+  // Try spaces table first (after migration), fallback to companies for backward compatibility
+  let { data, error } = await supabase
+    .from('spaces')
     .select('meta_ads_app_id, meta_ads_app_secret, meta_ads_access_token, meta_ads_ad_account_id')
     .eq('id', companyId)
     .single()
+
+  // If spaces table doesn't exist (migration not run), try companies table
+  if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+    const fallback = await supabase
+      .from('companies')
+      .select('meta_ads_app_id, meta_ads_app_secret, meta_ads_access_token, meta_ads_ad_account_id')
+      .eq('id', companyId)
+      .single()
+    
+    if (!fallback.error) {
+      data = fallback.data
+      error = null
+    } else {
+      error = fallback.error
+    }
+  }
 
   if (error || !data) return null
 
@@ -47,11 +81,28 @@ async function getMetaAdsCredentials(companyId: string) {
 // Helper to get Shopify credentials
 async function getShopifyCredentials(companyId: string) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const { data, error } = await supabase
-    .from('companies')
+  // Try spaces table first (after migration), fallback to companies for backward compatibility
+  let { data, error } = await supabase
+    .from('spaces')
     .select('shopify_store_domain, shopify_access_token')
     .eq('id', companyId)
     .single()
+
+  // If spaces table doesn't exist (migration not run), try companies table
+  if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
+    const fallback = await supabase
+      .from('companies')
+      .select('shopify_store_domain, shopify_access_token')
+      .eq('id', companyId)
+      .single()
+    
+    if (!fallback.error) {
+      data = fallback.data
+      error = null
+    } else {
+      error = fallback.error
+    }
+  }
 
   if (error || !data) {
     console.warn('Failed to fetch Shopify credentials:', {
