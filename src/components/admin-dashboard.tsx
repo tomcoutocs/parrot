@@ -15,6 +15,7 @@ import { fetchUsersOptimized } from "@/lib/simplified-database-functions"
 import { Company, ProjectWithDetails, TaskWithDetails, User } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
 import { LoadingSpinner } from "@/components/ui/loading-states"
+import { getSpaceServices } from "@/lib/database-functions"
 
 interface AdminDashboardProps {
   spaces: Array<{ id: string; name: string; active: boolean }>
@@ -52,31 +53,33 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
     const loadData = async () => {
       setLoading(true)
       try {
-        const companies = await fetchCompaniesOptimized()
-        const projects = await fetchProjectsOptimized()
-        const tasks = await fetchTasksOptimized()
+        const [companies, projects, tasks, allUsers] = await Promise.all([
+          fetchCompaniesOptimized(),
+          fetchProjectsOptimized(),
+          fetchTasksOptimized(),
+          fetchUsersOptimized()
+        ])
         
-        // Fetch all users to get manager information
-        const allUsers = await fetchUsersOptimized()
+        // Create users map for manager lookup
         const usersMap = new Map<string, User>()
         allUsers.forEach(user => {
           usersMap.set(user.id, user)
         })
         
-        // Fetch companies with manager_id
+        // Fetch companies with manager_id and revenue/retainer
         let companiesWithManagers = companies
         if (supabase) {
           try {
             // Try spaces table first (after migration), fallback to companies for backward compatibility
             let { data: companiesData, error } = await supabase
               .from('spaces')
-              .select('id, manager_id')
+              .select('id, manager_id, revenue, retainer')
 
             // If spaces table doesn't exist (migration not run), try companies table
             if (error && (error.message?.includes('does not exist') || error.message?.includes('relation') || (error as any).code === '42P01')) {
               const fallback = await supabase
                 .from('companies')
-                .select('id, manager_id')
+                .select('id, manager_id, revenue, retainer')
               
               if (!fallback.error) {
                 companiesData = fallback.data
@@ -87,12 +90,14 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
             }
             
             if (!error && companiesData) {
-              // Enrich companies with manager_id
+              // Enrich companies with manager_id, revenue, and retainer
               companiesWithManagers = companies.map(company => {
                 const companyData = companiesData.find((c: any) => c.id === company.id)
                 return {
                   ...company,
-                  manager_id: companyData?.manager_id || null
+                  manager_id: companyData?.manager_id || null,
+                  revenue: companyData?.revenue || company.revenue || null,
+                  retainer: companyData?.retainer || company.retainer || null
                 }
               })
             }
@@ -101,16 +106,22 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
           }
         }
         
-        const enrichedSpaces = companiesWithManagers.map(company => {
-          const companyProjects = projects.filter(p => p.company_id === company.id)
-          const activeProjects = companyProjects.filter(p => {
-            const projectTasks = tasks.filter(t => t.project_id === p.id)
-            const hasOpenTasks = projectTasks.some(t => {
-              const status = t.status?.toLowerCase() || ""
-              return status !== "done" && status !== "completed"
-            })
-            return hasOpenTasks
-          }).length
+        // Fetch services for all spaces in parallel
+        const servicesPromises = companiesWithManagers.map(company => 
+          getSpaceServices(company.id).catch(() => [])
+        )
+        const servicesResults = await Promise.all(servicesPromises)
+        
+        // Enrich spaces with real data
+        const enrichedSpaces = await Promise.all(companiesWithManagers.map(async (company, index) => {
+          // Get projects for this space - check both space_id and company_id for compatibility
+          const companyProjects = projects.filter(p => {
+            const spaceId = (p as any).space_id || (p as any).company_id
+            return spaceId === company.id
+          })
+          
+          // Count active projects (all non-archived projects - fetchProjectsOptimized already excludes archived)
+          const activeProjects = companyProjects.length
           
           // Get manager from company's manager_id
           let manager = { name: "Unassigned", avatar: "" }
@@ -124,6 +135,16 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
             }
           }
           
+          // Get services for this space
+          const spaceServices = servicesResults[index] || []
+          const serviceNames = spaceServices.map(s => s.name)
+          
+          // Calculate monthly spend from revenue or retainer
+          const revenue = (company as any).revenue || company.revenue || 0
+          const retainer = (company as any).retainer || company.retainer || 0
+          const monthlyAmount = revenue || retainer || 0
+          const monthlySpend = monthlyAmount > 0 ? `$${(monthlyAmount / 1000).toFixed(1)}k` : "$0"
+          
           return {
             id: company.id,
             name: company.name,
@@ -134,13 +155,15 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
               month: 'long', 
               day: 'numeric' 
             }) : "-",
-            services: ((spaceData[company.id] as { services?: string[] })?.services) || [],
+            services: serviceNames,
             description: company.description || "",
-            monthlySpend: ((spaceData[company.id] as { monthlySpend?: string })?.monthlySpend) || "$0",
+            monthlySpend,
             activeProjects
           }
-        }).sort((a, b) => {
-          // Active clients first
+        }))
+        
+        // Sort: active clients first
+        enrichedSpaces.sort((a, b) => {
           if (a.active && !b.active) return -1
           if (!a.active && b.active) return 1
           return 0
@@ -155,12 +178,16 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
     }
 
     loadData()
-  }, [spaceData, refreshKey])
+  }, [refreshKey])
 
   const totalMonthlyRevenue = allSpaces.reduce((sum, space) => {
     const monthlySpend = (space as { monthlySpend?: string }).monthlySpend || "$0"
-    const amount = parseFloat(monthlySpend.replace(/[$,]/g, ''))
-    return sum + (isNaN(amount) ? 0 : amount)
+    // Parse the value (e.g., "$5.0k" -> 5000)
+    const cleaned = monthlySpend.replace(/[$,k]/g, '')
+    const amount = parseFloat(cleaned)
+    // If it's in thousands (has 'k'), multiply by 1000
+    const isInThousands = monthlySpend.toLowerCase().includes('k')
+    return sum + (isNaN(amount) ? 0 : (isInThousands ? amount * 1000 : amount))
   }, 0)
 
   const totalProjects = allSpaces.reduce((sum, space) => sum + ((space as { activeProjects?: number }).activeProjects || 0), 0)
@@ -287,12 +314,12 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
         {/* Spaces Table */}
         <Card className="p-3 border-border/60">
           {/* Table Header */}
-          <div className="grid grid-cols-12 gap-3 px-2 py-1.5 text-xs text-muted-foreground border-b border-border/40 mb-0.5">
-            <div className="col-span-4">Space</div>
-            <div className="col-span-2">Manager</div>
-            <div className="col-span-2">Services</div>
-            <div className="col-span-2">Spend</div>
-            <div className="col-span-2">Projects</div>
+          <div className="grid grid-cols-12 gap-3 px-2 pt-1.5 pb-0.5 text-xs text-muted-foreground border-b border-border/40">
+            <div className="col-span-4 text-left">Space</div>
+            <div className="col-span-2 text-center">Manager</div>
+            <div className="col-span-2 text-center">Services</div>
+            <div className="col-span-2 text-center">Spend</div>
+            <div className="col-span-2 text-center">Projects</div>
           </div>
 
           {/* Table Rows */}
@@ -312,7 +339,7 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
                   )}
                   <span className="text-sm truncate">{space.name}</span>
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-2 flex items-center justify-center">
                   <div className="flex items-center gap-1.5">
                     <Avatar className="w-5 h-5 flex-shrink-0">
                       <AvatarImage src={((space as { manager?: { avatar?: string; name: string } }).manager?.avatar) || ""} />
@@ -323,8 +350,8 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
                     <span className="text-sm truncate">{((space as { manager?: { name: string } }).manager?.name || "Unassigned").split(' ')[0]}</span>
                   </div>
                 </div>
-                <div className="col-span-2">
-                  <div className="flex flex-wrap gap-1">
+                <div className="col-span-2 flex items-center justify-center">
+                  <div className="flex flex-wrap gap-1 justify-center">
                     {(((space as { services?: string[] }).services) || []).slice(0, 2).map((service: string, idx: number) => (
                       <span key={idx} className="text-xs text-muted-foreground">
                         {service}{idx < Math.min((((space as { services?: string[] }).services) || []).length - 1, 1) ? ',' : ''}
@@ -335,12 +362,12 @@ export function AdminDashboard({ spaces, spaceData, onSpaceClick, refreshKey = 0
                     )}
                   </div>
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-2 flex items-center justify-center">
                   <span className="text-sm">{((space as { monthlySpend?: string }).monthlySpend) || "$0"}</span>
                 </div>
-                <div className="col-span-2 flex items-center justify-between">
+                <div className="col-span-2 flex items-center justify-center relative">
                   <span className="text-sm">{((space as { activeProjects?: number }).activeProjects) || 0}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ArrowRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity absolute right-0" />
                 </div>
               </div>
             ))}
