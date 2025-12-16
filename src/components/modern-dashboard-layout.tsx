@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react"
 import { useSession } from "@/components/providers/session-provider"
 import { useRouter } from "next/navigation"
-import { Bell, Settings, ChevronDown, LayoutDashboard, LogOut, User, Check, HelpCircle } from "lucide-react"
+import { Bell, Settings, ChevronDown, LayoutDashboard, LogOut, User, Check, HelpCircle, Grid3x3 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -512,25 +513,25 @@ export function ModernDashboardLayout({
         {/* Top Bar */}
         <div className="h-14 border-b border-border/50 flex items-center justify-between px-6">
           {viewMode === "admin" ? (
-            <div className="flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
-              <h2 className="text-lg font-medium">
-                {adminView === "projects" && "All Projects"}
-                {adminView === "dashboard" && "Admin Dashboard"}
-                {adminView === "tasks" && "All Tasks"}
-                {adminView === "calendar" && "Calendar"}
-                {adminView === "all-users" && "All Users"}
-                {adminView === "analytics" && "Analytics"}
-                {adminView === "team" && "Team"}
-                {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics", "team"].includes(adminView) && "Admin Dashboard"}
-              </h2>
-            </div>
-          ) : activeTab === "user-dashboard" ? (
-            <div className="flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
-              <h2 className="text-lg font-medium">Dashboard</h2>
-            </div>
-          ) : currentSpace ? (
+              <div className="flex items-center gap-2">
+                <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-lg font-medium">
+                  {adminView === "projects" && "All Projects"}
+                  {adminView === "dashboard" && "Admin Dashboard"}
+                  {adminView === "tasks" && "All Tasks"}
+                  {adminView === "calendar" && "Calendar"}
+                  {adminView === "all-users" && "All Users"}
+                  {adminView === "analytics" && "Analytics"}
+                  {adminView === "team" && "Team"}
+                  {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics", "team"].includes(adminView) && "Admin Dashboard"}
+                </h2>
+              </div>
+            ) : activeTab === "user-dashboard" ? (
+              <div className="flex items-center gap-2">
+                <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-lg font-medium">Dashboard</h2>
+              </div>
+            ) : currentSpace ? (
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 hover:bg-muted px-2 py-1 -mx-2 rounded-md transition-colors">
                 <h2 className="text-lg font-medium">{currentSpace.name}</h2>
@@ -624,6 +625,14 @@ export function ModernDashboardLayout({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onClick={() => router.push('/apps')}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Grid3x3 className="w-4 h-4" />
+                  <span>Back to Apps</span>
+                </DropdownMenuItem>
+                <div className="w-px h-px bg-border mx-2 my-1" />
                 <DropdownMenuItem
                   onClick={() => onTabChange('user-settings')}
                   className="flex items-center gap-2 cursor-pointer"

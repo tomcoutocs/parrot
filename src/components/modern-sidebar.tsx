@@ -17,10 +17,12 @@ import {
   Building2,
   LogOut,
   Home,
-  User
+  User,
+  Grid3x3
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
 import { useSession, useAuth } from "@/components/providers/session-provider"
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { Company } from "@/lib/supabase"
@@ -176,7 +178,21 @@ export function ModernSidebar({
         {/* Header */}
         <div className={`px-4 py-5 border-b border-border/50 ${isCollapsed ? "px-3" : ""}`}>
           <div className="flex items-center justify-between mb-4">
-            {!isCollapsed && <h3>Parrot</h3>}
+            {!isCollapsed && (
+              <div className="flex items-center gap-3 flex-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push('/apps')}
+                  className="gap-2 h-auto p-0 hover:bg-transparent"
+                >
+                  <Grid3x3 className="w-4 h-4" />
+                  <span>Apps</span>
+                </Button>
+                <div className="h-6 w-px bg-border" />
+                <h3 className="text-sm font-medium">Client Portal</h3>
+              </div>
+            )}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className={`p-1.5 hover:bg-muted rounded-md transition-colors ${

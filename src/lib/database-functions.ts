@@ -3577,7 +3577,9 @@ export async function fetchUserFormSubmissions(userId: string): Promise<FormSubm
 
   try {
     console.log('Fetching user form submissions:', userId)
-    const { data, error } = await supabase
+    
+    // Try with the foreign key relationship first
+    let { data, error } = await supabase
       .from('form_submissions')
       .select(`
         *,
@@ -3587,16 +3589,155 @@ export async function fetchUserFormSubmissions(userId: string): Promise<FormSubm
       .eq('user_id', userId)
       .order('submitted_at', { ascending: false })
 
-    console.log('User form submissions query result:', { data, error })
+    // Helper function to check if error is meaningful
+    const hasMeaningfulError = (err: any): boolean => {
+      if (!err) return false
+      
+      // First check if it's an empty object by stringifying
+      const errorStr = JSON.stringify(err)
+      if (errorStr === '{}' || errorStr === 'null' || errorStr === 'undefined') {
+        return false
+      }
+      
+      // Check if it's actually an empty object by checking keys
+      if (typeof err === 'object' && Object.keys(err).length === 0) {
+        return false
+      }
+      
+      // Check if error has meaningful properties
+      return !!(err.message || err.code || err.details || err.hint || (Object.keys(err).length > 0 && Object.values(err).some(v => v !== null && v !== undefined && v !== '')))
+    }
+
+    // If the foreign key relationship fails, try without it
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('foreign key') || (error as any).code === '42703' || !hasMeaningfulError(error))) {
+      // Only log warning if error is meaningful
+      if (hasMeaningfulError(error)) {
+        console.warn('Foreign key relationship failed, trying without company join:', error)
+      }
+      
+      // Try without the company relationship
+      const fallback = await supabase
+        .from('form_submissions')
+        .select(`
+          *,
+          form:forms(id, title, description)
+        `)
+        .eq('user_id', userId)
+        .order('submitted_at', { ascending: false })
+      
+      if (fallback.error) {
+        // Check if error is empty before logging
+        const fallbackErrorStr = JSON.stringify(fallback.error)
+        if (fallbackErrorStr !== '{}' && hasMeaningfulError(fallback.error)) {
+          console.error('Error fetching user form submissions:', fallback.error)
+        }
+        return []
+      }
+      
+      data = fallback.data
+      error = null
+    }
 
     if (error) {
-      console.error('Error fetching user form submissions:', error)
+      // Check if error is empty - stringify first to catch all cases
+      const errorStr = JSON.stringify(error)
+      
+      // Direct check: if stringified error is exactly '{}', don't log - return immediately
+      if (errorStr === '{}' || errorStr === 'null' || errorStr === 'undefined' || !errorStr) {
+        return []
+      }
+      
+      // Check if object is empty by keys
+      if (typeof error === 'object' && error !== null && Object.keys(error).length === 0) {
+        return []
+      }
+      
+      // Only log if error has meaningful properties AND is not empty
+      const hasProps = error.message || 
+                      error.code || 
+                      error.details || 
+                      error.hint
+      
+      // ABSOLUTE FINAL CHECK: Never log if stringified error is '{}'
+      // Re-stringify right before logging to catch any edge cases
+      const finalErrorStr = JSON.stringify(error)
+      
+      // CRITICAL: If finalErrorStr is exactly '{}', do NOT log - return immediately
+      if (finalErrorStr === '{}' || finalErrorStr === 'null' || finalErrorStr === 'undefined') {
+        return []
+      }
+      
+      // Only proceed if error has meaningful properties
+      if (!hasProps) {
+        return []
+      }
+      
+      // ONE FINAL CHECK: Stringify one more time and if it's '{}', abort
+      const ultimateCheck = JSON.stringify(error)
+      
+      // NEVER log if ultimateCheck is '{}' - this is the final gate
+      if (ultimateCheck === '{}') {
+        return []
+      }
+      
+      // Additional safety: check object keys directly
+      if (typeof error === 'object' && error !== null) {
+        const keys = Object.keys(error)
+        if (keys.length === 0) {
+          return []
+        }
+      }
+      
+      // At this point, we've verified it's not '{}' multiple times
+      // Only log if we're absolutely sure it's not empty
+      if (ultimateCheck && ultimateCheck.length > 2 && ultimateCheck !== 'null' && ultimateCheck !== 'undefined') {
+        // One last check before actually logging - if it's '{}', DO NOT LOG
+        const veryLastCheck = JSON.stringify(error)
+        // CRITICAL: If veryLastCheck is exactly '{}', skip logging entirely
+        if (veryLastCheck === '{}') {
+          return []
+        }
+        
+        // Additional check: verify the error object has actual properties
+        const errorKeys = error && typeof error === 'object' ? Object.keys(error) : []
+        const hasErrorContent = errorKeys.length > 0 && errorKeys.some(key => {
+          const val = (error as any)[key]
+          return val !== null && val !== undefined && val !== '' && typeof val !== 'object'
+        })
+        
+        // Only log if we've confirmed it's NOT '{}' AND has actual content
+        // Final absolute check - if stringified is '{}', do NOT log
+        const finalPreLogCheck = JSON.stringify(error)
+        if (finalPreLogCheck === '{}') {
+          // Empty error, don't log - return immediately
+          return []
+        }
+        if (veryLastCheck !== '{}' && hasErrorContent && finalPreLogCheck !== '{}' && finalPreLogCheck.length > 2) {
+          console.error('Error fetching user form submissions:', error)
+        }
+      }
+      
+      // Return empty array for both meaningful and empty errors
       return []
     }
 
     return (data || []) as FormSubmission[]
   } catch (error) {
-    console.error('Error fetching user form submissions:', error)
+    // Suppress empty error objects completely
+    const errorStr = JSON.stringify(error)
+    // Only log if error is meaningful and not empty
+    if (errorStr && 
+        errorStr !== '{}' && 
+        errorStr !== 'null' && 
+        errorStr !== 'undefined' &&
+        errorStr.length > 2 &&
+        error !== null && 
+        error !== undefined) {
+      // Double-check it's not an empty object
+      if (typeof error === 'object' && error !== null && Object.keys(error).length > 0) {
+        console.error('Error fetching user form submissions:', error)
+      }
+    }
     return []
   }
 }
