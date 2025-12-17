@@ -3,10 +3,10 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
-import { InvoicingLayout } from '@/components/invoicing/invoicing-layout'
+import { UserManagementLayout } from '@/components/user-management/user-management-layout'
 import { Loader2 } from 'lucide-react'
 
-function InvoicingContent() {
+function UserManagementContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -35,7 +35,7 @@ function InvoicingContent() {
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-amber-600"></div>
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
       </div>
     )
   }
@@ -51,22 +51,22 @@ function InvoicingContent() {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab)
-    router.push(`/apps/invoicing?tab=${tab}`)
+    router.push(`/apps/user-management?tab=${tab}`)
   }
 
   return (
-    <InvoicingLayout activeTab={activeTab} onTabChange={handleTabChange} />
+    <UserManagementLayout activeTab={activeTab} onTabChange={handleTabChange} />
   )
 }
 
-export default function InvoicingPage() {
+export default function UserManagementPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
       </div>
     }>
-      <InvoicingContent />
+      <UserManagementContent />
     </Suspense>
   )
 }

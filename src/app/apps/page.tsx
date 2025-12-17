@@ -17,7 +17,9 @@ import {
   Loader2,
   LogOut,
   User,
-  ChevronDown
+  ChevronDown,
+  UserCog,
+  BarChart3
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -28,8 +30,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { fetchForms } from '@/lib/database-functions'
-import { Form } from '@/lib/supabase'
+import { Form, supabase } from '@/lib/supabase'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 
 export default function AppsPage() {
   const { data: session, status } = useSession()
@@ -51,6 +54,49 @@ export default function AppsPage() {
       router.push('/auth/signin')
     }
   }, [session, status, router])
+
+  // Load user profile picture
+  useEffect(() => {
+    if (!session?.user?.id) return
+
+    const loadUserProfilePicture = async () => {
+      if (!supabase) return
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('profile_picture')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (!error && data?.profile_picture) {
+          // Add cache-busting parameter to ensure fresh image
+          const url = data.profile_picture
+          const urlWithCacheBust = url.includes('?') 
+            ? `${url}&t=${Date.now()}` 
+            : `${url}?t=${Date.now()}`
+          setUserProfilePicture(urlWithCacheBust)
+        }
+      } catch (error) {
+        console.error('Error loading user profile picture:', error)
+      }
+    }
+    
+    loadUserProfilePicture()
+
+    // Listen for profile picture updates
+    const handleProfilePictureUpdate = (event: CustomEvent) => {
+      if (event.detail?.userId === session?.user?.id) {
+        setUserProfilePicture(event.detail.url)
+      }
+    }
+
+    window.addEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener)
+    
+    return () => {
+      window.removeEventListener('profilePictureUpdated', handleProfilePictureUpdate as EventListener)
+    }
+  }, [session?.user?.id])
 
   const handleOpenSupport = async () => {
     setLoadingSupportForm(true)
@@ -98,7 +144,8 @@ export default function AppsPage() {
       color: 'text-emerald-400 dark:text-emerald-500',
       bgColor: 'bg-emerald-50/50 dark:bg-emerald-950/30',
       hoverShadow: 'hover:shadow-[0_4px_12px_rgba(16,185,129,0.12)] dark:hover:shadow-[0_4px_12px_rgba(16,185,129,0.18)]',
-      available: false,
+      available: true,
+      adminOnly: true, // Only admins can access this app
     },
     {
       id: 'client-portal',
@@ -118,7 +165,30 @@ export default function AppsPage() {
       color: 'text-amber-400 dark:text-amber-500',
       bgColor: 'bg-amber-50/50 dark:bg-amber-950/30',
       hoverShadow: 'hover:shadow-[0_4px_12px_rgba(245,158,11,0.12)] dark:hover:shadow-[0_4px_12px_rgba(245,158,11,0.18)]',
-      available: false,
+      available: true,
+      adminOnly: true, // Only admins can access this app
+    },
+    {
+      id: 'user-management',
+      name: 'User Management',
+      description: 'Manage users, roles, permissions, and access controls',
+      icon: UserCog,
+      color: 'text-indigo-400 dark:text-indigo-500',
+      bgColor: 'bg-indigo-50/50 dark:bg-indigo-950/30',
+      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(99,102,241,0.12)] dark:hover:shadow-[0_4px_12px_rgba(99,102,241,0.18)]',
+      available: true,
+      adminOnly: true, // Only admins can access this app
+    },
+    {
+      id: 'analytics',
+      name: 'Analytics',
+      description: 'View insights, reports, and data visualizations',
+      icon: BarChart3,
+      color: 'text-rose-400 dark:text-rose-500',
+      bgColor: 'bg-rose-50/50 dark:bg-rose-950/30',
+      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(244,63,94,0.12)] dark:hover:shadow-[0_4px_12px_rgba(244,63,94,0.18)]',
+      available: true,
+      adminOnly: true, // Only admins can access this app
     },
   ]
 
@@ -138,6 +208,12 @@ export default function AppsPage() {
       } else {
         router.push('/dashboard?tab=user-dashboard')
       }
+    } else if (appId === 'crm' || appId === 'lead-generation' || appId === 'invoicing' || appId === 'user-management' || appId === 'analytics') {
+      // Admin-only apps - check role before allowing access
+      if (session?.user?.role !== 'admin') {
+        return // Don't navigate if not admin
+      }
+      router.push(`/apps/${appId}`)
     } else {
       // For placeholder apps, show coming soon message
       router.push(`/apps/${appId}`)
@@ -173,31 +249,32 @@ export default function AppsPage() {
               <h1 className="text-xl font-bold">Parrot Platform</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
+              <NotificationBell />
+              <button
                 onClick={handleOpenSupport}
                 disabled={loadingSupportForm}
-                className="gap-2"
+                className="p-2 hover:bg-muted rounded-md transition-colors"
+                title="Support"
               >
                 {loadingSupportForm ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
                 ) : (
-                  <HelpCircle className="w-4 h-4" />
+                  <HelpCircle className="w-4 h-4 text-muted-foreground" />
                 )}
-                <span>Support</span>
-              </Button>
+              </button>
+              <div className="w-px h-5 bg-border mx-1" />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-2"
-                  >
-                    <Settings className="w-4 h-4" />
-                    <span>Settings</span>
-                    <ChevronDown className="w-4 h-4" />
-                  </Button>
+                  <button className="flex items-center gap-2 hover:bg-muted px-2 py-1 -mx-2 rounded-md transition-colors">
+                    <Avatar className="w-7 h-7">
+                      <AvatarImage src={userProfilePicture || undefined} />
+                      <AvatarFallback className="bg-muted text-xs">
+                        {session?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{session?.user?.name || 'User'}</span>
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuItem
@@ -205,7 +282,7 @@ export default function AppsPage() {
                     className="flex items-center gap-2 cursor-pointer"
                   >
                     <User className="w-4 h-4" />
-                    <span>Settings</span>
+                    <span>User Settings</span>
                   </DropdownMenuItem>
                   <div className="w-px h-px bg-border mx-2 my-1" />
                   <DropdownMenuItem
@@ -223,32 +300,32 @@ export default function AppsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold tracking-tight mb-4">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold tracking-tight mb-2">
               Welcome back, {session?.user?.name || 'User'}!
             </h2>
-            <p className="text-lg text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Choose an app to get started
             </p>
           </div>
 
           {/* App Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {apps.map((app) => {
               const Icon = app.icon
               return (
                 <Card
                   key={app.id}
-                  className={`cursor-pointer transition-all duration-300 border-border/50 hover:scale-[1.01] ${
+                  className={`flex flex-col h-full cursor-pointer transition-all duration-300 border-border/50 hover:scale-[1.01] ${
                     app.available
                       ? `${app.hoverShadow}`
                       : 'opacity-60 cursor-not-allowed'
                   }`}
                   onClick={() => app.available && handleAppClick(app.id)}
                 >
-                  <CardHeader>
+                  <CardHeader className="flex-shrink-0">
                     <div className="flex items-start justify-between">
                       <div className={`p-3 rounded-lg transition-colors duration-300 ${app.bgColor}`}>
                         <Icon className={`w-8 h-8 ${app.color}`} />
@@ -262,7 +339,7 @@ export default function AppsPage() {
                     <CardTitle className="mt-4">{app.name}</CardTitle>
                     <CardDescription>{app.description}</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="mt-auto flex-shrink-0">
                     <Button
                       variant={app.available ? 'default' : 'outline'}
                       className="w-full gap-2"
