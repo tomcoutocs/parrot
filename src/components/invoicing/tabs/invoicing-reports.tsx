@@ -16,14 +16,7 @@ export function InvoicingReports() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
-          <p className="text-muted-foreground mt-1">
-            Financial insights and performance analytics
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <div className="flex items-center justify-end gap-2">
           <Button variant="outline">
             <Filter className="w-4 h-4 mr-2" />
             Customize Report
@@ -33,7 +26,6 @@ export function InvoicingReports() {
             Export Report
           </Button>
         </div>
-      </div>
 
       <Tabs defaultValue="revenue" className="w-full">
         <TabsList>

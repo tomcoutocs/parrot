@@ -18,13 +18,7 @@ export function LeadAnalytics() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-muted-foreground mt-1">
-            Track performance and optimize your lead generation
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 

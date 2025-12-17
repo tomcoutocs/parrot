@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,8 @@ import {
   MoreVertical,
   Edit,
   Trash2,
-  Key
+  Key,
+  Loader2
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -26,6 +27,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { fetchUsers } from '@/lib/database-functions'
+import type { User as DatabaseUser } from '@/lib/supabase'
 
 interface User {
   id: string
@@ -45,50 +48,55 @@ interface User {
 
 export function UserManagementUsers() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [users] = useState<User[]>([
-    {
-      id: '1',
-      name: 'John Doe',
-      email: 'john.doe@company.com',
-      role: 'admin',
-      status: 'active',
-      lastLogin: '2024-02-10',
-      appPermissions: {
-        crm: true,
-        invoicing: true,
-        leadGeneration: true,
-        analytics: true,
-      },
-    },
-    {
-      id: '2',
-      name: 'Jane Smith',
-      email: 'jane.smith@company.com',
-      role: 'internal',
-      status: 'active',
-      lastLogin: '2024-02-12',
-      appPermissions: {
-        crm: true,
-        invoicing: false,
-        leadGeneration: true,
-        analytics: false,
-      },
-    },
-    {
-      id: '3',
-      name: 'Mike Johnson',
-      email: 'mike.j@company.com',
-      role: 'internal',
-      status: 'active',
-      lastLogin: '2024-02-11',
-      appPermissions: {
-        crm: false,
-        invoicing: true,
-        leadGeneration: false,
-        analytics: false,
-      },
-    },
-  ])
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      setLoading(true)
+      try {
+        const dbUsers = await fetchUsers()
+        
+        // Filter to only show internal users, managers, and admins (exclude client users)
+        const teamUsers = dbUsers.filter((dbUser: DatabaseUser) => 
+          dbUser.role === 'admin' || 
+          dbUser.role === 'manager' || 
+          dbUser.role === 'internal'
+        )
+        
+        // Map database users to component format
+        const mappedUsers: User[] = teamUsers.map((dbUser: DatabaseUser) => {
+          // Determine app permissions from tab_permissions
+          const tabPermissions = dbUser.tab_permissions || []
+          const appPermissions = {
+            crm: tabPermissions.includes('crm') || dbUser.role === 'admin',
+            invoicing: tabPermissions.includes('invoicing') || dbUser.role === 'admin',
+            leadGeneration: tabPermissions.includes('lead-generation') || dbUser.role === 'admin',
+            analytics: tabPermissions.includes('analytics') || dbUser.role === 'admin',
+          }
+
+          return {
+            id: dbUser.id,
+            name: dbUser.full_name,
+            email: dbUser.email,
+            role: dbUser.role,
+            status: dbUser.is_active ? 'active' : 'inactive',
+            lastLogin: dbUser.updated_at ? new Date(dbUser.updated_at).toLocaleDateString() : 'Never',
+            appPermissions,
+            avatar: dbUser.profile_picture,
+          }
+        })
+
+        setUsers(mappedUsers)
+      } catch (error) {
+        console.error('Error loading users:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadUsers()
+  }, [])
 
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -123,18 +131,12 @@ export function UserManagementUsers() {
 
   const adminUsers = filteredUsers.filter(u => u.role === 'admin')
   const internalUsers = filteredUsers.filter(u => u.role === 'internal')
-  const clientUsers = filteredUsers.filter(u => u.role === 'user' || u.role === 'manager')
+  const managerUsers = filteredUsers.filter(u => u.role === 'manager')
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage internal users and their app permissions
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Button>
           <Plus className="w-4 h-4 mr-2" />
           Invite User
@@ -168,12 +170,17 @@ export function UserManagementUsers() {
           <CardTitle>All Users ({filteredUsers.length})</CardTitle>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
           <Tabs defaultValue="all" className="w-full">
             <TabsList>
               <TabsTrigger value="all">All ({filteredUsers.length})</TabsTrigger>
               <TabsTrigger value="admin">Admin ({adminUsers.length})</TabsTrigger>
               <TabsTrigger value="internal">Internal ({internalUsers.length})</TabsTrigger>
-              <TabsTrigger value="client">Client ({clientUsers.length})</TabsTrigger>
+              <TabsTrigger value="manager">Managers ({managerUsers.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="all" className="mt-4">
               <UserList users={filteredUsers} getRoleColor={getRoleColor} getStatusColor={getStatusColor} />
@@ -184,10 +191,11 @@ export function UserManagementUsers() {
             <TabsContent value="internal" className="mt-4">
               <UserList users={internalUsers} getRoleColor={getRoleColor} getStatusColor={getStatusColor} />
             </TabsContent>
-            <TabsContent value="client" className="mt-4">
-              <UserList users={clientUsers} getRoleColor={getRoleColor} getStatusColor={getStatusColor} />
+            <TabsContent value="manager" className="mt-4">
+              <UserList users={managerUsers} getRoleColor={getRoleColor} getStatusColor={getStatusColor} />
             </TabsContent>
           </Tabs>
+          )}
         </CardContent>
       </Card>
     </div>

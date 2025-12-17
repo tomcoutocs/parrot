@@ -22,14 +22,7 @@ export function AnalyticsVisualizations() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Visualizations</h1>
-          <p className="text-muted-foreground mt-1">
-            Interactive charts and data visualizations
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <div className="flex items-center justify-end gap-2">
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-40">
               <SelectValue />
@@ -50,7 +43,6 @@ export function AnalyticsVisualizations() {
             Export
           </Button>
         </div>
-      </div>
 
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>

@@ -43,14 +43,7 @@ export function AnalyticsDataExplorer() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Data Explorer</h1>
-          <p className="text-muted-foreground mt-1">
-            Explore and analyze raw data with SQL-like queries
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <div className="flex items-center justify-end gap-2">
           <Button variant="outline">
             <Download className="w-4 h-4 mr-2" />
             Export Data
@@ -60,7 +53,6 @@ export function AnalyticsDataExplorer() {
             New Query
           </Button>
         </div>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Tables Sidebar */}

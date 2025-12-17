@@ -15,12 +15,12 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  MoreVertical
+  MoreVertical,
+  Loader2
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useSession } from '@/components/providers/session-provider'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { Loader2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +29,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
+import { getPendingInvitations, createBulkUserInvitations, cancelInvitation } from '@/lib/database-functions'
+import type { UserInvitation } from '@/lib/supabase'
 
 interface InvitationUser {
   email: string
@@ -55,18 +57,65 @@ export function UserManagementInvitations() {
     { email: '', full_name: '', role: 'internal' }
   ])
   const [sending, setSending] = useState(false)
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([
-    {
-      id: '1',
-      email: 'new.user@company.com',
-      full_name: 'New User',
-      role: 'internal',
-      status: 'pending',
-      invited_by: session?.user?.id || '',
-      created_at: '2024-02-10',
-      expires_at: '2024-02-17',
-    },
-  ])
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadInvitations = async () => {
+      setLoading(true)
+      try {
+        const result = await getPendingInvitations()
+        if (result.success && result.data) {
+          // Filter to only show invitations for internal users, managers, and admins
+          const teamInvitations = result.data.filter((inv: UserInvitation) => 
+            inv.role === 'admin' || 
+            inv.role === 'manager' || 
+            inv.role === 'internal'
+          )
+          
+          // Check for expired invitations and update status if needed
+          const now = new Date()
+          const processedInvitations = teamInvitations.map((inv: UserInvitation) => {
+            const expiresAt = new Date(inv.expires_at)
+            const isExpired = expiresAt < now && inv.status === 'pending'
+            
+            return {
+              ...inv,
+              status: isExpired ? 'expired' : inv.status
+            }
+          })
+          
+          // Map database invitations to component format
+          const mappedInvitations: PendingInvitation[] = processedInvitations.map((inv: UserInvitation) => ({
+            id: inv.id,
+            email: inv.email,
+            full_name: inv.full_name,
+            role: inv.role,
+            status: inv.status,
+            invited_by: inv.invited_by,
+            created_at: new Date(inv.created_at).toLocaleDateString(),
+            expires_at: new Date(inv.expires_at).toLocaleDateString(),
+          }))
+          
+          setPendingInvitations(mappedInvitations)
+        } else if (!result.success) {
+          console.error('Failed to load invitations:', result.error)
+          toastError('Failed to load invitations', {
+            description: result.error || 'Please try again'
+          })
+        }
+      } catch (error) {
+        console.error('Error loading invitations:', error)
+        toastError('Error loading invitations', {
+          description: error instanceof Error ? error.message : 'Please try again'
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadInvitations()
+  }, [])
 
   const handleAddUser = () => {
     setUsers([...users, { email: '', full_name: '', role: 'internal' }])
@@ -113,31 +162,41 @@ export function UserManagementInvitations() {
     setSending(true)
 
     try {
-      const invitations = users.map(user => ({
-        email: user.email,
-        full_name: user.full_name,
-        company_id: null, // Internal users don't need company
-        role: user.role,
-        invited_by: session.user.id,
-        tab_permissions: []
-      }))
+      // Get settings to check if we should auto-assign default permissions
+      const { getUserManagementSettings } = await import('@/lib/database-functions')
+      const settingsResult = await getUserManagementSettings()
+      const autoAssign = settingsResult.data?.auto_assign_default_permissions || false
+      const defaultPerms = settingsResult.data?.default_permissions || {
+        crm: false,
+        invoicing: false,
+        leadGeneration: false,
+        analytics: false,
+      }
 
-      const response = await fetch('/api/invitations/bulk', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          invitations,
-          company_name: 'Internal Team',
-          inviter_name: session.user.name || 'Administrator'
-        })
+      const invitations = users.map(user => {
+        // Apply default permissions if auto-assign is enabled
+        let tabPermissions: string[] = []
+        if (autoAssign) {
+          if (defaultPerms.crm) tabPermissions.push('crm')
+          if (defaultPerms.invoicing) tabPermissions.push('invoicing')
+          if (defaultPerms.leadGeneration) tabPermissions.push('lead-generation')
+          if (defaultPerms.analytics) tabPermissions.push('analytics')
+        }
+
+        return {
+          email: user.email,
+          full_name: user.full_name,
+          company_id: '', // Empty string for internal users (function expects string, not null)
+          role: user.role,
+          invited_by: session.user.id,
+          tab_permissions: tabPermissions
+        }
       })
 
-      const data = await response.json()
+      const result = await createBulkUserInvitations(invitations)
 
-      if (!response.ok) {
-        toastError(data.error || 'Failed to send invitations')
+      if (!result.success) {
+        toastError(result.error || 'Failed to send invitations')
         return
       }
 
@@ -148,7 +207,27 @@ export function UserManagementInvitations() {
       setIsInviteModalOpen(false)
       
       // Refresh pending invitations
-      // TODO: Fetch from API
+      const refreshResult = await getPendingInvitations()
+      if (refreshResult.success && refreshResult.data) {
+        // Filter to only show invitations for internal users, managers, and admins
+        const teamInvitations = refreshResult.data.filter((inv: UserInvitation) => 
+          inv.role === 'admin' || 
+          inv.role === 'manager' || 
+          inv.role === 'internal'
+        )
+        
+        const mappedInvitations: PendingInvitation[] = teamInvitations.map((inv: UserInvitation) => ({
+          id: inv.id,
+          email: inv.email,
+          full_name: inv.full_name,
+          role: inv.role,
+          status: inv.status,
+          invited_by: inv.invited_by,
+          created_at: new Date(inv.created_at).toLocaleDateString(),
+          expires_at: new Date(inv.expires_at).toLocaleDateString(),
+        }))
+        setPendingInvitations(mappedInvitations)
+      }
 
     } catch (error) {
       toastError('Failed to send invitations', {
@@ -159,10 +238,17 @@ export function UserManagementInvitations() {
     }
   }
 
-  const filteredInvitations = pendingInvitations.filter(inv =>
-    inv.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    inv.full_name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Filter invitations - show all pending and expired invitations (not accepted ones)
+  const filteredInvitations = pendingInvitations.filter(inv => {
+    const matchesSearch = 
+      inv.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      inv.full_name.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // Show pending and expired invitations (not accepted ones)
+    const isVisible = inv.status === 'pending' || inv.status === 'expired'
+    
+    return matchesSearch && isVisible
+  })
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -193,13 +279,7 @@ export function UserManagementInvitations() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Invitations</h1>
-          <p className="text-muted-foreground mt-1">
-            Invite new internal users to the platform
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Button onClick={() => setIsInviteModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Invite Users
@@ -233,6 +313,11 @@ export function UserManagementInvitations() {
           <CardTitle>Pending Invitations ({filteredInvitations.length})</CardTitle>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
           <div className="space-y-4">
             {filteredInvitations.map((invitation) => {
               const StatusIcon = getStatusIcon(invitation.status)
@@ -268,14 +353,58 @@ export function UserManagementInvitations() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>Resend Invitation</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">Cancel Invitation</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        // TODO: Implement resend invitation
+                        toastError('Resend invitation functionality coming soon')
+                      }}>
+                        Resend Invitation
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        className="text-destructive"
+                        onClick={async () => {
+                          try {
+                            const result = await cancelInvitation(invitation.id)
+                            if (result.success) {
+                              toastSuccess('Invitation cancelled')
+                              // Refresh invitations
+                              const refreshResult = await getPendingInvitations()
+                              if (refreshResult.success && refreshResult.data) {
+                                // Filter to only show invitations for internal users, managers, and admins
+                                const teamInvitations = refreshResult.data.filter((inv: UserInvitation) => 
+                                  inv.role === 'admin' || 
+                                  inv.role === 'manager' || 
+                                  inv.role === 'internal'
+                                )
+                                
+                                const mappedInvitations: PendingInvitation[] = teamInvitations.map((inv: UserInvitation) => ({
+                                  id: inv.id,
+                                  email: inv.email,
+                                  full_name: inv.full_name,
+                                  role: inv.role,
+                                  status: inv.status,
+                                  invited_by: inv.invited_by,
+                                  created_at: new Date(inv.created_at).toLocaleDateString(),
+                                  expires_at: new Date(inv.expires_at).toLocaleDateString(),
+                                }))
+                                setPendingInvitations(mappedInvitations)
+                              }
+                            } else {
+                              toastError(result.error || 'Failed to cancel invitation')
+                            }
+                          } catch (error) {
+                            toastError('Failed to cancel invitation')
+                          }
+                        }}
+                      >
+                        Cancel Invitation
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               )
             })}
           </div>
+          )}
         </CardContent>
       </Card>
 

@@ -12,13 +12,6 @@ import { CustomizationSettings } from '../components/settings/customization-sett
 export function LeadSettings() {
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-1">
-          Customize your lead generation app to match your business needs
-        </p>
-      </div>
 
       <Tabs defaultValue="general" className="space-y-4">
         <TabsList>

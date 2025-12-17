@@ -84,13 +84,7 @@ export function AnalyticsSavedReports() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Saved Reports</h1>
-          <p className="text-muted-foreground mt-1">
-            Access and manage your saved reports and dashboards
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Button>
           <BarChart3 className="w-4 h-4 mr-2" />
           Create Report

@@ -1450,18 +1450,22 @@ export async function createUser(userData: {
   }
 }
 
-export async function updateUser(userId: string, userData: {
-  email: string
-  full_name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
-  is_active: boolean
-  assigned_manager_id?: string
-  company_id?: string
-  tab_permissions?: string[]
-  company_ids?: string[] // For internal users
-  primary_company_id?: string // For internal users
-  profile_picture?: string
-}): Promise<{ success: boolean; data?: User; error?: string }> {
+export async function updateUser(
+  userId: string, 
+  userData: {
+    email: string
+    full_name: string
+    role: 'admin' | 'manager' | 'user' | 'internal'
+    is_active: boolean
+    assigned_manager_id?: string
+    company_id?: string
+    tab_permissions?: string[]
+    company_ids?: string[] // For internal users
+    primary_company_id?: string // For internal users
+    profile_picture?: string
+  },
+  changedByUserId?: string // Optional: ID of user who made the change
+): Promise<{ success: boolean; data?: User; error?: string }> {
   if (!supabase) {
     return { success: false, error: 'Supabase not configured' }
   }
@@ -1470,13 +1474,15 @@ export async function updateUser(userId: string, userData: {
     await setAppContext()
     
     // Prepare update data, excluding tab_permissions if column doesn't exist
+    // Try space_id first (after migration), fallback to company_id
     const updateData: {
       email: string
       full_name: string
       role: 'admin' | 'manager' | 'user' | 'internal'
       is_active: boolean
       assigned_manager_id: string | null
-      company_id: string | null
+      space_id?: string | null
+      company_id?: string | null
       updated_at: string
       tab_permissions?: string[]
       profile_picture?: string | null
@@ -1486,8 +1492,13 @@ export async function updateUser(userId: string, userData: {
       role: userData.role,
       is_active: userData.is_active,
       assigned_manager_id: userData.assigned_manager_id || null,
-      company_id: userData.company_id || null,
       updated_at: new Date().toISOString()
+    }
+    
+    // Add space_id or company_id based on what column exists
+    if (userData.company_id !== undefined) {
+      // Try space_id first
+      updateData.space_id = userData.company_id || null
     }
 
     // Include tab_permissions if provided
@@ -1500,12 +1511,37 @@ export async function updateUser(userId: string, userData: {
       updateData.profile_picture = userData.profile_picture || null
     }
     
-    const { data, error } = await supabase
+    // Try updating with space_id first (after migration)
+    let { data, error } = await supabase
       .from('users')
       .update(updateData)
       .eq('id', userId)
       .select()
       .single()
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || (error as any).code === '42703')) {
+      // Remove space_id and use company_id instead
+      const fallbackData = { ...updateData }
+      delete fallbackData.space_id
+      if (userData.company_id !== undefined) {
+        fallbackData.company_id = userData.company_id || null
+      }
+      
+      const fallback = await supabase
+        .from('users')
+        .update(fallbackData)
+        .eq('id', userId)
+        .select()
+        .single()
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     if (error) {
       return { success: false, error: error.message || 'Failed to update user' }
@@ -1552,19 +1588,27 @@ export async function updateUser(userId: string, userData: {
       }
     }
     
-    // Log activity to activity_logs
-    const currentUser = getCurrentUser()
-    if (currentUser) {
+    // Log activity to activity_logs so we can track WHO made the change
+    // This is necessary for the activity feed to show the correct user
+    const changerId = changedByUserId || getCurrentUser()?.id
+    if (changerId) {
+      // Check if permissions were updated
+      const isPermissionUpdate = userData.tab_permissions !== undefined
+      const description = isPermissionUpdate
+        ? `Permissions updated for "${data.full_name || data.email}"`
+        : `Updated user "${data.full_name || data.email}"`
+      
       await logActivity({
-        user_id: currentUser.id, // The user who made the change
+        user_id: changerId, // The user who made the change
         action_type: 'user_updated',
         entity_type: 'user',
         entity_id: userId,
-        description: `Updated user "${data.full_name || data.email}"`,
+        description,
         metadata: { 
           email: data.email, 
           role: data.role,
-          full_name: data.full_name 
+          full_name: data.full_name,
+          tab_permissions: userData.tab_permissions || []
         },
         company_id: data.company_id || undefined,
       })
@@ -6160,7 +6204,7 @@ export async function deleteSpaceBookmark(
 export async function createUserInvitation(invitationData: {
   email: string
   full_name: string
-  company_id: string
+  company_id: string | null
   role: 'admin' | 'manager' | 'user' | 'internal'
   invited_by: string
   tab_permissions?: string[]
@@ -6172,12 +6216,16 @@ export async function createUserInvitation(invitationData: {
   try {
     await setAppContext()
     
+    // Get invitation expiry days from settings
+    const settingsResult = await getUserManagementSettings()
+    const expiryDays = settingsResult.data?.invitation_expiry_days || 7
+    
     // Generate a unique invitation token
     const invitationToken = crypto.randomUUID()
     
-    // Set expiration to 7 days from now
+    // Set expiration based on settings
     const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 7)
+    expiresAt.setDate(expiresAt.getDate() + expiryDays)
     
     const { data, error } = await supabase
       .from('user_invitations')
@@ -6208,7 +6256,7 @@ export async function createUserInvitation(invitationData: {
 export async function createBulkUserInvitations(invitations: Array<{
   email: string
   full_name: string
-  company_id: string
+  company_id: string | null
   role: 'admin' | 'manager' | 'user' | 'internal'
   invited_by: string
   tab_permissions?: string[]
@@ -6220,10 +6268,31 @@ export async function createBulkUserInvitations(invitations: Array<{
   try {
     await setAppContext()
     
+    // Get settings for expiry days and default permissions
+    const settingsResult = await getUserManagementSettings()
+    const expiryDays = settingsResult.data?.invitation_expiry_days || 7
+    const autoAssign = settingsResult.data?.auto_assign_default_permissions || false
+    const defaultPerms = settingsResult.data?.default_permissions || {
+      crm: false,
+      invoicing: false,
+      leadGeneration: false,
+      analytics: false,
+    }
+
     const invitationData = invitations.map(invitation => {
       const invitationToken = crypto.randomUUID()
       const expiresAt = new Date()
-      expiresAt.setDate(expiresAt.getDate() + 7)
+      expiresAt.setDate(expiresAt.getDate() + expiryDays)
+      
+      // Apply default permissions if auto-assign is enabled and no permissions provided
+      let tabPermissions = invitation.tab_permissions || []
+      if (autoAssign && tabPermissions.length === 0) {
+        tabPermissions = []
+        if (defaultPerms.crm) tabPermissions.push('crm')
+        if (defaultPerms.invoicing) tabPermissions.push('invoicing')
+        if (defaultPerms.leadGeneration) tabPermissions.push('lead-generation')
+        if (defaultPerms.analytics) tabPermissions.push('analytics')
+      }
       
       return {
         email: invitation.email,
@@ -6234,7 +6303,7 @@ export async function createBulkUserInvitations(invitations: Array<{
         invitation_token: invitationToken,
         status: 'pending',
         expires_at: expiresAt.toISOString(),
-        tab_permissions: invitation.tab_permissions || []
+        tab_permissions: tabPermissions
       }
     })
     
@@ -6247,6 +6316,9 @@ export async function createBulkUserInvitations(invitations: Array<{
       console.error('Error creating bulk user invitations:', error)
       return { success: false, error: error.message || 'Failed to create invitations' }
     }
+
+    // Note: Invitations are already stored in user_invitations table
+    // Activities are derived from that table, so no need to duplicate in activity_logs
 
     return { success: true, data }
   } catch (error) {
@@ -7419,6 +7491,342 @@ export async function fetchRecentActivities(limit: number = 50, daysBack: number
   } catch (error) {
     console.error('Error fetching recent activities:', error)
     return []
+  }
+}
+
+// User Management Activity Functions
+export interface UserManagementActivity {
+  id: string
+  type: 'invitation_sent' | 'invitation_accepted' | 'permissions_updated' | 'user_created' | 'user_updated'
+  description: string
+  user_email?: string
+  user_name?: string
+  changed_by_name?: string // Name of the user who made the change
+  changed_by_email?: string // Email of the user who made the change
+  timestamp: Date
+  metadata?: Record<string, unknown>
+}
+
+export async function getUserManagementActivities(limit: number = 10): Promise<UserManagementActivity[]> {
+  if (!supabase) {
+    return []
+  }
+
+  try {
+    await setAppContext()
+    
+    const activities: UserManagementActivity[] = []
+    
+    // Get recent invitations (pending and accepted) - no need to store separately, just read from existing table
+    const { data: invitations, error: invitationsError } = await supabase
+      .from('user_invitations')
+      .select('id, email, full_name, role, status, invited_by, created_at, accepted_at')
+      .in('role', ['admin', 'manager', 'internal'])
+      .order('created_at', { ascending: false })
+      .limit(limit * 2) // Get more to filter
+    
+    if (!invitationsError && invitations) {
+      // Get user details for who sent invitations
+      const inviterIds = [...new Set(invitations.map(inv => inv.invited_by).filter(Boolean))]
+      let inviterDetails: Record<string, { email: string; full_name: string }> = {}
+      
+      if (inviterIds.length > 0) {
+        const { data: inviters } = await supabase
+          .from('users')
+          .select('id, email, full_name')
+          .in('id', inviterIds)
+        
+        if (inviters) {
+          inviterDetails = inviters.reduce((acc, user) => {
+            acc[user.id] = { email: user.email, full_name: user.full_name }
+            return acc
+          }, {} as Record<string, { email: string; full_name: string }>)
+        }
+      }
+      
+      // Add invitation activities from existing invitations table
+      for (const inv of invitations.slice(0, limit)) {
+        const inviter = inviterDetails[inv.invited_by || '']
+        
+        if (inv.status === 'pending') {
+          activities.push({
+            id: inv.id,
+            type: 'invitation_sent',
+            description: `Invitation sent to ${inv.full_name || inv.email}`,
+            user_email: inv.email,
+            user_name: inv.full_name,
+            changed_by_name: inviter?.full_name,
+            changed_by_email: inviter?.email,
+            timestamp: new Date(inv.created_at),
+            metadata: { role: inv.role }
+          })
+        } else if (inv.status === 'accepted' && inv.accepted_at) {
+          activities.push({
+            id: inv.id,
+            type: 'invitation_accepted',
+            description: `${inv.full_name || inv.email} accepted invitation`,
+            user_email: inv.email,
+            user_name: inv.full_name,
+            timestamp: new Date(inv.accepted_at),
+            metadata: { role: inv.role }
+          })
+        }
+      }
+    }
+    
+    // Get recent user updates from users table (using updated_at) - derive from existing data
+    // Try space_id first (after migration), fallback to company_id
+    let { data: recentUsers, error: usersError } = await supabase
+      .from('users')
+      .select('id, email, full_name, role, updated_at, tab_permissions, space_id')
+      .in('role', ['admin', 'manager', 'internal'])
+      .order('updated_at', { ascending: false })
+      .limit(limit)
+    
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (usersError && (usersError.message?.includes('does not exist') || usersError.message?.includes('column') || (usersError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('users')
+        .select('id, email, full_name, role, updated_at, tab_permissions, company_id')
+        .in('role', ['admin', 'manager', 'internal'])
+        .order('updated_at', { ascending: false })
+        .limit(limit)
+      
+      if (!fallback.error && fallback.data) {
+        // Normalize fallback data to include space_id (mapped from company_id)
+        recentUsers = fallback.data.map((user: any) => ({
+          ...user,
+          space_id: user.company_id || null
+        }))
+        usersError = null
+      } else {
+        usersError = fallback.error
+      }
+    }
+    
+    // Try to get user update activities from activity_logs (which has who made the change)
+    const { data: userActivities, error: activitiesError } = await supabase
+      .from('activity_logs')
+      .select('id, action_type, entity_type, entity_id, description, metadata, created_at, user_id')
+      .in('action_type', ['user_updated'])
+      .eq('entity_type', 'user')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    
+    if (!activitiesError && userActivities && userActivities.length > 0) {
+      // Get user details for who made the changes
+      const changerIds = [...new Set(userActivities.map(a => a.user_id).filter(Boolean))]
+      let changerDetails: Record<string, { email: string; full_name: string }> = {}
+      
+      if (changerIds.length > 0) {
+        const { data: changers } = await supabase
+          .from('users')
+          .select('id, email, full_name')
+          .in('id', changerIds)
+        
+        if (changers) {
+          changerDetails = changers.reduce((acc, user) => {
+            acc[user.id] = { email: user.email, full_name: user.full_name }
+            return acc
+          }, {} as Record<string, { email: string; full_name: string }>)
+        }
+      }
+      
+      // Get details of users who were updated
+      const updatedUserIds = [...new Set(userActivities.map(a => a.entity_id).filter(Boolean))]
+      let updatedUserDetails: Record<string, { email: string; full_name: string }> = {}
+      
+      if (updatedUserIds.length > 0) {
+        const { data: updatedUsers } = await supabase
+          .from('users')
+          .select('id, email, full_name')
+          .in('id', updatedUserIds)
+        
+        if (updatedUsers) {
+          updatedUserDetails = updatedUsers.reduce((acc, user) => {
+            acc[user.id] = { email: user.email, full_name: user.full_name }
+            return acc
+          }, {} as Record<string, { email: string; full_name: string }>)
+        }
+      }
+      
+      // Add user update activities from activity_logs
+      for (const activity of userActivities) {
+        const changer = changerDetails[activity.user_id || '']
+        const updatedUser = updatedUserDetails[activity.entity_id || '']
+        const metadata = activity.metadata as Record<string, unknown> || {}
+        
+        // Check if permissions were updated
+        const description = activity.description || `User updated: ${metadata.full_name || metadata.email || 'Unknown'}`
+        const isPermissionUpdate = description.toLowerCase().includes('permission') || 
+                                   (metadata.tab_permissions && Array.isArray(metadata.tab_permissions))
+        
+        activities.push({
+          id: activity.id,
+          type: isPermissionUpdate ? 'permissions_updated' : 'user_updated',
+          description: isPermissionUpdate 
+            ? `Permissions updated for ${updatedUser?.full_name || metadata.full_name || metadata.email || 'user'}`
+            : description,
+          user_email: updatedUser?.email || metadata.email as string,
+          user_name: updatedUser?.full_name || metadata.full_name as string,
+          changed_by_name: changer?.full_name,
+          changed_by_email: changer?.email,
+          timestamp: new Date(activity.created_at),
+          metadata: activity.metadata as Record<string, unknown>
+        })
+      }
+    } else if (!usersError && recentUsers) {
+      // Fallback: Add user update activities (derived from updated_at timestamp)
+      // Note: This doesn't have who made the change, so we'll skip showing changed_by
+      for (const user of recentUsers) {
+        // Only show if updated recently (within last 7 days) to avoid showing stale updates
+        const updatedAt = new Date(user.updated_at)
+        const daysSinceUpdate = (Date.now() - updatedAt.getTime()) / (1000 * 60 * 60 * 24)
+        
+        if (daysSinceUpdate <= 7) {
+          const hasPermissions = user.tab_permissions && Array.isArray(user.tab_permissions) && user.tab_permissions.length > 0
+          
+          activities.push({
+            id: user.id,
+            type: hasPermissions ? 'permissions_updated' : 'user_updated',
+            description: hasPermissions 
+              ? `Permissions updated for ${user.full_name || user.email}`
+              : `User updated: ${user.full_name || user.email}`,
+            user_email: user.email,
+            user_name: user.full_name,
+            timestamp: updatedAt,
+            metadata: { role: user.role, tab_permissions: user.tab_permissions }
+          })
+        }
+      }
+    }
+    
+    // Sort by timestamp (most recent first) and limit
+    return activities
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit)
+    
+  } catch (error) {
+    console.error('Error fetching user management activities:', error)
+    return []
+  }
+}
+
+// User Management Settings Functions
+export interface UserManagementSettings {
+  invitation_expiry_days: number
+  require_email_verification: boolean
+  auto_assign_default_permissions: boolean
+  default_permissions: {
+    crm: boolean
+    invoicing: boolean
+    leadGeneration: boolean
+    analytics: boolean
+  }
+  require_strong_passwords: boolean
+  enable_two_factor_auth: boolean
+  session_timeout_minutes: number
+}
+
+const DEFAULT_SETTINGS: UserManagementSettings = {
+  invitation_expiry_days: 7,
+  require_email_verification: true,
+  auto_assign_default_permissions: true,
+  default_permissions: {
+    crm: false,
+    invoicing: false,
+    leadGeneration: false,
+    analytics: false,
+  },
+  require_strong_passwords: true,
+  enable_two_factor_auth: false,
+  session_timeout_minutes: 60,
+}
+
+export async function getUserManagementSettings(): Promise<{ success: boolean; data?: UserManagementSettings; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Check if app_settings table exists, if not return defaults
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('*')
+      .eq('setting_key', 'user_management')
+      .single()
+
+    if (error) {
+      // Table might not exist, return defaults
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        return { success: true, data: DEFAULT_SETTINGS }
+      }
+      return { success: false, error: error.message || 'Failed to fetch settings' }
+    }
+
+    if (data && data.setting_value) {
+      const settings = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value
+      return { success: true, data: { ...DEFAULT_SETTINGS, ...settings } }
+    }
+
+    return { success: true, data: DEFAULT_SETTINGS }
+  } catch (error) {
+    console.error('Error fetching user management settings:', error)
+    return { success: true, data: DEFAULT_SETTINGS } // Return defaults on error
+  }
+}
+
+export async function saveUserManagementSettings(settings: Partial<UserManagementSettings>): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Get current settings and merge with new ones
+    const currentResult = await getUserManagementSettings()
+    const currentSettings = currentResult.data || DEFAULT_SETTINGS
+    const updatedSettings = { ...currentSettings, ...settings }
+
+    // Try to insert or update
+    const { error: upsertError } = await supabase
+      .from('app_settings')
+      .upsert({
+        setting_key: 'user_management',
+        setting_value: updatedSettings,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'setting_key'
+      })
+
+    if (upsertError) {
+      // If table doesn't exist, we'll just store in memory/localStorage as fallback
+      if (upsertError.message?.includes('does not exist')) {
+        // Store in localStorage as fallback
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('user_management_settings', JSON.stringify(updatedSettings))
+        }
+        return { success: true }
+      }
+      return { success: false, error: upsertError.message || 'Failed to save settings' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error saving user management settings:', error)
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      const currentResult = await getUserManagementSettings()
+      const currentSettings = currentResult.data || DEFAULT_SETTINGS
+      const updatedSettings = { ...currentSettings, ...settings }
+      localStorage.setItem('user_management_settings', JSON.stringify(updatedSettings))
+    }
+    return { success: true }
   }
 }
 

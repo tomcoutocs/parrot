@@ -13,13 +13,7 @@ export function AutomationWorkflows() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Automation Workflows</h1>
-          <p className="text-muted-foreground mt-1">
-            Create automated sequences to nurture and convert leads
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Button variant="outline">
           <Plus className="w-4 h-4 mr-2" />
           New Workflow

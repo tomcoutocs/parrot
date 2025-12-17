@@ -101,17 +101,9 @@ export function AnalyticsDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Real-time insights and performance metrics
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline">Export</Button>
-          <Button>Create Report</Button>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline">Export</Button>
+        <Button>Create Report</Button>
       </div>
 
       {/* Stats Grid */}

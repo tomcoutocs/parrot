@@ -13,6 +13,9 @@ import {
   TrendingUp,
   ArrowUpRight
 } from 'lucide-react'
+import { fetchUsers, getPendingInvitations, getUserManagementActivities } from '@/lib/database-functions'
+import type { User } from '@/lib/supabase'
+import type { UserManagementActivity } from '@/lib/database-functions'
 
 export function UserManagementDashboard() {
   const [stats, setStats] = useState({
@@ -23,17 +26,63 @@ export function UserManagementDashboard() {
     adminUsers: 0,
     clientUsers: 0,
   })
+  const [activities, setActivities] = useState<UserManagementActivity[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // TODO: Fetch real data from database
-    setStats({
-      totalUsers: 1247,
-      activeUsers: 1156,
-      pendingInvitations: 12,
-      internalUsers: 45,
-      adminUsers: 8,
-      clientUsers: 1184,
-    })
+    const loadData = async () => {
+      setLoading(true)
+      try {
+        // Fetch users, invitations, and activities
+        const [usersData, invitationsResult, activitiesData] = await Promise.all([
+          fetchUsers(),
+          getPendingInvitations(),
+          getUserManagementActivities(5)
+        ])
+
+        const users = usersData || []
+        const invitations = invitationsResult.success ? (invitationsResult.data || []) : []
+
+        // Filter to only show internal users, managers, and admins (exclude client users)
+        const teamUsers = users.filter(u => 
+          u.role === 'admin' || 
+          u.role === 'manager' || 
+          u.role === 'internal'
+        )
+
+        // Filter invitations to only internal/admin/manager roles
+        const teamInvitations = invitations.filter(inv => 
+          inv.role === 'admin' || 
+          inv.role === 'manager' || 
+          inv.role === 'internal'
+        )
+
+        // Calculate stats
+        const activeUsers = teamUsers.filter(u => u.is_active).length
+        const adminUsers = teamUsers.filter(u => u.role === 'admin').length
+        const internalUsers = teamUsers.filter(u => u.role === 'internal').length
+        const managerUsers = teamUsers.filter(u => u.role === 'manager').length
+        const pendingInvitations = teamInvitations.filter(inv => inv.status === 'pending').length
+
+        setStats({
+          totalUsers: teamUsers.length,
+          activeUsers,
+          pendingInvitations,
+          internalUsers,
+          adminUsers,
+          clientUsers: managerUsers, // Renamed to show managers instead
+        })
+        
+        // Set activities
+        setActivities(activitiesData || [])
+      } catch (error) {
+        console.error('Error loading dashboard data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
   }, [])
 
   const statCards = [
@@ -69,16 +118,6 @@ export function UserManagementDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">User Management Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Overview of users, invitations, and permissions
-          </p>
-        </div>
-      </div>
-
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat) => {
@@ -125,7 +164,7 @@ export function UserManagementDashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-blue-600" />
-                  <span>Client Users</span>
+                  <span>Managers</span>
                 </div>
                 <span className="font-medium">{stats.clientUsers}</span>
               </div>
@@ -138,38 +177,79 @@ export function UserManagementDashboard() {
             <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/30">
-                  <UserCheck className="w-4 h-4 text-green-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">New user invited</p>
-                  <p className="text-xs text-muted-foreground">john.doe@company.com</p>
-                  <p className="text-xs text-muted-foreground mt-1">2 hours ago</p>
-                </div>
+            {activities.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">No recent activity</p>
               </div>
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                  <Shield className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Permissions updated</p>
-                  <p className="text-xs text-muted-foreground">Jane Smith - CRM access granted</p>
-                  <p className="text-xs text-muted-foreground mt-1">5 hours ago</p>
-                </div>
+            ) : (
+              <div className="space-y-4">
+                {activities.map((activity) => {
+                  const getActivityIcon = () => {
+                    switch (activity.type) {
+                      case 'invitation_sent':
+                        return <Mail className="w-4 h-4 text-amber-600" />
+                      case 'invitation_accepted':
+                        return <UserCheck className="w-4 h-4 text-green-600" />
+                      case 'permissions_updated':
+                        return <Shield className="w-4 h-4 text-blue-600" />
+                      case 'user_created':
+                        return <UserCheck className="w-4 h-4 text-green-600" />
+                      case 'user_updated':
+                        return <Shield className="w-4 h-4 text-blue-600" />
+                      default:
+                        return <Clock className="w-4 h-4 text-gray-600" />
+                    }
+                  }
+                  
+                  const getActivityBgColor = () => {
+                    switch (activity.type) {
+                      case 'invitation_sent':
+                        return 'bg-amber-100 dark:bg-amber-900/30'
+                      case 'invitation_accepted':
+                        return 'bg-green-100 dark:bg-green-900/30'
+                      case 'permissions_updated':
+                        return 'bg-blue-100 dark:bg-blue-900/30'
+                      case 'user_created':
+                        return 'bg-green-100 dark:bg-green-900/30'
+                      case 'user_updated':
+                        return 'bg-blue-100 dark:bg-blue-900/30'
+                      default:
+                        return 'bg-gray-100 dark:bg-gray-900/30'
+                    }
+                  }
+                  
+                  const formatTimeAgo = (date: Date) => {
+                    const now = new Date()
+                    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+                    
+                    if (diffInSeconds < 60) return 'Just now'
+                    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
+                    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
+                    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`
+                    return date.toLocaleDateString()
+                  }
+                  
+                  return (
+                    <div key={activity.id} className="flex items-start gap-3">
+                      <div className={`p-2 rounded-full ${getActivityBgColor()}`}>
+                        {getActivityIcon()}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{activity.description}</p>
+                        {activity.changed_by_name ? (
+                          <p className="text-xs text-muted-foreground">by {activity.changed_by_name}</p>
+                        ) : activity.changed_by_email ? (
+                          <p className="text-xs text-muted-foreground">by {activity.changed_by_email}</p>
+                        ) : null}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatTimeAgo(activity.timestamp)}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/30">
-                  <Mail className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Invitation sent</p>
-                  <p className="text-xs text-muted-foreground">3 new internal users</p>
-                  <p className="text-xs text-muted-foreground mt-1">1 day ago</p>
-                </div>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>

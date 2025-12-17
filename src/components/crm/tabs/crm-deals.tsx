@@ -90,13 +90,7 @@ export function CRMDeals() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Deals</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your sales pipeline and opportunities
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Button>
           <Plus className="w-4 h-4 mr-2" />
           New Deal
