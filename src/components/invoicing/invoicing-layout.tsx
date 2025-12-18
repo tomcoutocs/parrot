@@ -14,6 +14,7 @@ import {
   Settings,
   Grid3x3,
   LogOut,
+  User,
   ChevronDown,
   HelpCircle,
   ChevronLeft,
@@ -43,6 +44,8 @@ import { InvoicingPayments } from './tabs/invoicing-payments'
 import { InvoicingExpenses } from './tabs/invoicing-expenses'
 import { InvoicingReports } from './tabs/invoicing-reports'
 import { InvoicingSettings } from './tabs/invoicing-settings'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import UserSettingsTab from '@/components/tabs/user-settings-tab'
 
 interface InvoicingLayoutProps {
   activeTab: string
@@ -68,6 +71,7 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
   const [searchTerm, setSearchTerm] = useState("")
   const [supportForm, setSupportForm] = useState<Form | null>(null)
   const [showSupportModal, setShowSupportModal] = useState(false)
+  const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
   const handleSignOut = () => {
@@ -306,6 +310,14 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
                 </DropdownMenuItem>
                 <div className="w-px h-px bg-border mx-2 my-1" />
                 <DropdownMenuItem
+                  onClick={() => setShowUserSettingsModal(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <User className="w-4 h-4" />
+                  <span>User Settings</span>
+                </DropdownMenuItem>
+                <div className="w-px h-px bg-border mx-2 my-1" />
+                <DropdownMenuItem
                   onClick={handleSignOut}
                   className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
                 >
@@ -332,6 +344,21 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
           onFormSubmitted={() => setShowSupportModal(false)}
         />
       )}
+
+      {/* User Settings Modal */}
+      <Dialog open={showUserSettingsModal} onOpenChange={setShowUserSettingsModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>User Settings</DialogTitle>
+            <DialogDescription>
+              Manage your account preferences and settings
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            <UserSettingsTab />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

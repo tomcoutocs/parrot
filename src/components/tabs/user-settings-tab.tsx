@@ -1,15 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { User, Mail, Lock, Key, FileText, Building2, Calendar, Loader2, Sun, Moon, Monitor, Palette, Check, Camera, X } from "lucide-react"
+import { User, Mail, Lock, Key, Loader2, Sun, Moon, Monitor, Palette, Camera, X, Plug, CheckCircle2, XCircle, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { useSession } from "@/components/providers/session-provider"
 import { useTheme } from "@/components/providers/theme-provider"
-import { fetchUserFormSubmissions, fetchForms, uploadProfilePicture } from "@/lib/database-functions"
-import { FormSubmission, Form } from "@/lib/supabase"
+import { uploadProfilePicture } from "@/lib/database-functions"
 import { supabase } from "@/lib/supabase"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { ProfilePictureCropModal } from "@/components/modals/profile-picture-crop-modal"
@@ -18,13 +18,12 @@ export default function UserSettingsTab() {
   const { data: session } = useSession()
   const { theme, setTheme } = useTheme()
   const [sendingResetLink, setSendingResetLink] = useState(false)
-  const [userSubmissions, setUserSubmissions] = useState<FormSubmission[]>([])
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false)
-  const [forms, setForms] = useState<Form[]>([])
   const [profilePicture, setProfilePicture] = useState<string | null>(null)
   const [uploadingPicture, setUploadingPicture] = useState(false)
   const [showCropModal, setShowCropModal] = useState(false)
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [integrations, setIntegrations] = useState<Array<{ id: string; name: string; description: string; connected: boolean; icon?: string }>>([])
+  const [loadingIntegrations, setLoadingIntegrations] = useState(false)
 
   // Load user profile picture
   useEffect(() => {
@@ -49,27 +48,29 @@ export default function UserSettingsTab() {
     loadUserProfile()
   }, [session?.user?.id])
 
-  // Load user form submissions
+  // Load integrations
   useEffect(() => {
-    const loadUserSubmissions = async () => {
+    const loadIntegrations = async () => {
       if (!session?.user?.id) return
       
-      setLoadingSubmissions(true)
+      setLoadingIntegrations(true)
       try {
-        const submissions = await fetchUserFormSubmissions(session.user.id)
-        setUserSubmissions(submissions)
-        
-        // Also load forms to get form titles
-        const formsData = await fetchForms()
-        setForms(formsData)
+        // Mock integrations for now - can be replaced with actual API call
+        const mockIntegrations = [
+          { id: 'google', name: 'Google', description: 'Connect your Google account', connected: false },
+          { id: 'github', name: 'GitHub', description: 'Connect your GitHub account', connected: false },
+          { id: 'slack', name: 'Slack', description: 'Connect your Slack workspace', connected: false },
+          { id: 'microsoft', name: 'Microsoft', description: 'Connect your Microsoft account', connected: false },
+        ]
+        setIntegrations(mockIntegrations)
       } catch (error) {
-        console.error('Error loading user submissions:', error)
+        console.error('Error loading integrations:', error)
       } finally {
-        setLoadingSubmissions(false)
+        setLoadingIntegrations(false)
       }
     }
     
-    loadUserSubmissions()
+    loadIntegrations()
   }, [session?.user?.id])
 
   const handleSendPasswordReset = async () => {
@@ -369,91 +370,100 @@ export default function UserSettingsTab() {
         </CardContent>
       </Card>
 
-      {/* My Form Submissions */}
+      {/* Integrations */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <FileText className="w-4 h-4" />
-            My Form Submissions
+            <Plug className="w-4 h-4" />
+            Integrations
           </CardTitle>
           <CardDescription>
-            View all forms you've submitted across all spaces
+            Connect your accounts and services to enhance your experience
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {loadingSubmissions ? (
+          {loadingIntegrations ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
-          ) : userSubmissions.length === 0 ? (
+          ) : integrations.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>You haven't submitted any forms yet.</p>
+              <Plug className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No integrations available.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {userSubmissions.map((submission) => {
-                const form = forms.find(f => f.id === submission.form_id)
-                const submissionData = submission.submission_data as Record<string, unknown>
-                const company = (submission as any).company as { id: string; name: string } | undefined
-                
-                return (
-                  <div
-                    key={submission.id}
-                    className="p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-sm">
-                          {form?.title || 'Unknown Form'}
-                        </h4>
-                        {form?.description && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {form.description}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="w-3 h-3" />
-                        {submission.submitted_at
-                          ? new Date(submission.submitted_at).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })
-                          : 'Unknown date'}
-                      </div>
+              {integrations.map((integration) => (
+                <div
+                  key={integration.id}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className={`p-2 rounded-lg ${
+                      integration.connected 
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30' 
+                        : 'bg-muted'
+                    }`}>
+                      <Plug className={`w-5 h-5 ${
+                        integration.connected 
+                          ? 'text-emerald-600 dark:text-emerald-400' 
+                          : 'text-muted-foreground'
+                      }`} />
                     </div>
-                    {company && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                        <Building2 className="w-3 h-3" />
-                        <span>Submitted in: {company.name}</span>
-                      </div>
-                    )}
-                    {submissionData && Object.keys(submissionData).length > 0 && (
-                      <div className="mt-2 pt-2 border-t">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                          {Object.entries(submissionData).slice(0, 4).map(([key, value]) => (
-                            <div key={key} className="truncate">
-                              <span className="font-medium text-muted-foreground">{key}:</span>{' '}
-                              <span className="text-foreground">
-                                {typeof value === 'string' ? value : JSON.stringify(value)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        {Object.keys(submissionData).length > 4 && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            +{Object.keys(submissionData).length - 4} more fields
-                          </p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium text-sm">{integration.name}</h4>
+                        {integration.connected ? (
+                          <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Connected
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            <XCircle className="w-3 h-3 mr-1" />
+                            Not Connected
+                          </Badge>
                         )}
                       </div>
-                    )}
+                      <p className="text-xs text-muted-foreground">
+                        {integration.description}
+                      </p>
+                    </div>
                   </div>
-                )
-              })}
+                  <Button
+                    variant={integration.connected ? "outline" : "default"}
+                    size="sm"
+                    onClick={() => {
+                      // Toggle integration connection
+                      setIntegrations(prev => 
+                        prev.map(integ => 
+                          integ.id === integration.id 
+                            ? { ...integ, connected: !integ.connected }
+                            : integ
+                        )
+                      )
+                      toastSuccess(
+                        integration.connected 
+                          ? `${integration.name} disconnected` 
+                          : `${integration.name} connected`
+                      )
+                    }}
+                    className="gap-2"
+                  >
+                    {integration.connected ? (
+                      <>
+                        <XCircle className="w-4 h-4" />
+                        Disconnect
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="w-4 h-4" />
+                        Connect
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

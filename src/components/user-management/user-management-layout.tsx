@@ -15,7 +15,8 @@ import {
   HelpCircle,
   ChevronLeft,
   ChevronRight,
-  Search
+  Search,
+  User
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +38,8 @@ import { UserManagementUsers } from './tabs/user-management-users'
 import { UserManagementInvitations } from './tabs/user-management-invitations'
 import { UserManagementPermissions } from './tabs/user-management-permissions'
 import { UserManagementSettings } from './tabs/user-management-settings'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import UserSettingsTab from '@/components/tabs/user-settings-tab'
 
 interface UserManagementLayoutProps {
   activeTab: string
@@ -59,6 +62,7 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
   const [searchTerm, setSearchTerm] = useState("")
   const [supportForm, setSupportForm] = useState<Form | null>(null)
   const [showSupportModal, setShowSupportModal] = useState(false)
+  const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
   const handleSignOut = () => {
@@ -291,6 +295,14 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
                 </DropdownMenuItem>
                 <div className="w-px h-px bg-border mx-2 my-1" />
                 <DropdownMenuItem
+                  onClick={() => setShowUserSettingsModal(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <User className="w-4 h-4" />
+                  <span>User Settings</span>
+                </DropdownMenuItem>
+                <div className="w-px h-px bg-border mx-2 my-1" />
+                <DropdownMenuItem
                   onClick={handleSignOut}
                   className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
                 >
@@ -317,6 +329,21 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
           onFormSubmitted={() => setShowSupportModal(false)}
         />
       )}
+
+      {/* User Settings Modal */}
+      <Dialog open={showUserSettingsModal} onOpenChange={setShowUserSettingsModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>User Settings</DialogTitle>
+            <DialogDescription>
+              Manage your account preferences and settings
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            <UserSettingsTab />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
