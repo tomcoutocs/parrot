@@ -1,19 +1,40 @@
 "use client"
 
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { getLeadAnalytics } from '@/lib/database-functions'
+import { useSession } from '@/components/providers/session-provider'
 
-const sourceData = [
-  { source: 'Website', leads: 450, conversions: 120 },
-  { source: 'LinkedIn', leads: 320, conversions: 95 },
-  { source: 'Email', leads: 280, conversions: 85 },
-  { source: 'Referral', leads: 150, conversions: 60 },
-  { source: 'Social Media', leads: 120, conversions: 35 },
-]
+export function LeadSourceChart({ dateRange }: { dateRange: { from: Date; to: Date } }) {
+  const { data: session } = useSession()
+  const [sourceData, setSourceData] = useState<Array<{ source: string; leads: number; conversions: number }>>([])
+  const [loading, setLoading] = useState(true)
 
-const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444']
+  useEffect(() => {
+    const loadData = async () => {
+      if (!session?.user?.id) {
+        setLoading(false)
+        return
+      }
 
-export function LeadSourceChart({ dateRange }: { dateRange: any }) {
+      setLoading(true)
+      try {
+        const result = await getLeadAnalytics(dateRange, session.user.company_id)
+
+        if (result.success && result.analytics) {
+          setSourceData(result.analytics.leadsBySource)
+        }
+      } catch (error) {
+        console.error('Error loading lead source data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [session?.user?.id, session?.user?.company_id, dateRange.from?.toISOString(), dateRange.to?.toISOString()])
+
   return (
     <Card>
       <CardHeader>
@@ -21,16 +42,26 @@ export function LeadSourceChart({ dateRange }: { dateRange: any }) {
         <CardDescription>Performance by source</CardDescription>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={350}>
-          <BarChart data={sourceData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="source" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="leads" fill="#3b82f6" name="Leads" />
-            <Bar dataKey="conversions" fill="#10b981" name="Conversions" />
-          </BarChart>
-        </ResponsiveContainer>
+        {loading ? (
+          <div className="flex items-center justify-center h-[350px] text-muted-foreground">
+            Loading chart data...
+          </div>
+        ) : sourceData.length === 0 ? (
+          <div className="flex items-center justify-center h-[350px] text-muted-foreground">
+            No data available for the selected period
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={sourceData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="source" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="leads" fill="#3b82f6" name="Leads" />
+              <Bar dataKey="conversions" fill="#10b981" name="Conversions" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   )

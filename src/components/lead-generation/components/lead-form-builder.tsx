@@ -7,10 +7,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Trash2, GripVertical } from 'lucide-react'
+import { Plus, Trash2, GripVertical, Save } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { createLeadForm } from '@/lib/database-functions'
+import { useSession } from '@/components/providers/session-provider'
+import { toastSuccess, toastError } from '@/lib/toast'
 
-type FieldType = 'text' | 'email' | 'phone' | 'select' | 'textarea' | 'number' | 'checkbox'
+type FieldType = 'text' | 'email' | 'phone' | 'select' | 'textarea' | 'number' | 'checkbox' | 'date' | 'url'
 
 interface FormField {
   id: string
@@ -21,7 +24,13 @@ interface FormField {
   options?: string[]
 }
 
-export function LeadFormBuilder() {
+interface LeadFormBuilderProps {
+  onFormCreated?: () => void
+}
+
+export function LeadFormBuilder({ onFormCreated }: LeadFormBuilderProps = {}) {
+  const { data: session } = useSession()
+  const [formName, setFormName] = useState('')
   const [formTitle, setFormTitle] = useState('New Lead Form')
   const [formDescription, setFormDescription] = useState('')
   const [fields, setFields] = useState<FormField[]>([
@@ -29,6 +38,7 @@ export function LeadFormBuilder() {
     { id: '2', type: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
   ])
   const [aiPersonalization, setAiPersonalization] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   const addField = (type: FieldType) => {
     const newField: FormField = {
@@ -51,6 +61,65 @@ export function LeadFormBuilder() {
     setFields(fields.map(f => f.id === id ? { ...f, ...updates } : f))
   }
 
+  const handleSave = async () => {
+    if (!session?.user?.id) {
+      toastError('You must be logged in to save forms')
+      return
+    }
+
+    if (!formName.trim()) {
+      toastError('Please enter a form name')
+      return
+    }
+
+    if (fields.length === 0) {
+      toastError('Please add at least one field to the form')
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const result = await createLeadForm({
+        space_id: session.user.company_id,
+        name: formName,
+        title: formTitle,
+        description: formDescription || undefined,
+        ai_personalization_enabled: aiPersonalization,
+        fields: fields.map((field, index) => ({
+          field_type: field.type,
+          label: field.label,
+          placeholder: field.placeholder,
+          is_required: field.required,
+          field_order: index,
+          options: field.options || [],
+        })),
+      })
+
+      if (result.success) {
+        toastSuccess('Form saved successfully')
+        // Reset form
+        setFormName('')
+        setFormTitle('New Lead Form')
+        setFormDescription('')
+        setFields([
+          { id: '1', type: 'text', label: 'Full Name', placeholder: 'Enter your full name', required: true },
+          { id: '2', type: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
+        ])
+        // Call callback if provided
+        if (onFormCreated) {
+          onFormCreated()
+        }
+      } else {
+        toastError(result.error || 'Failed to save form')
+      }
+    } catch (error: any) {
+      toastError(error.message || 'Failed to save form')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Form Builder */}
@@ -61,6 +130,14 @@ export function LeadFormBuilder() {
             <CardDescription>Customize your lead capture form</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Form Name *</Label>
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Enter form name (internal)"
+              />
+            </div>
             <div className="space-y-2">
               <Label>Form Title</Label>
               <Input
@@ -113,12 +190,20 @@ export function LeadFormBuilder() {
                     <SelectItem value="textarea">Textarea</SelectItem>
                     <SelectItem value="number">Number</SelectItem>
                     <SelectItem value="checkbox">Checkbox</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="url">URL</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={handleSave} disabled={saving}>
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? 'Saving...' : 'Save Form'}
+              </Button>
+            </div>
             {fields.map((field) => (
               <Card key={field.id} className="p-4">
                 <div className="flex items-start gap-3">

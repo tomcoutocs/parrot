@@ -1,45 +1,71 @@
 "use client"
 
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
+import { fetchLeads, type Lead } from '@/lib/database-functions'
+import { useSession } from '@/components/providers/session-provider'
+import { useRouter } from 'next/navigation'
 
-const recentLeads = [
-  {
-    id: '1',
-    name: 'John Smith',
-    company: 'Acme Corp',
-    email: 'john@acme.com',
-    score: 85,
-    status: 'Qualified',
-    source: 'Website',
-    date: '2 hours ago',
-  },
-  {
-    id: '2',
-    name: 'Sarah Johnson',
-    company: 'TechStart Inc',
-    email: 'sarah@techstart.com',
-    score: 72,
-    status: 'Contacted',
-    source: 'LinkedIn',
-    date: '5 hours ago',
-  },
-  {
-    id: '3',
-    name: 'Mike Davis',
-    company: 'Global Solutions',
-    email: 'mike@global.com',
-    score: 91,
-    status: 'Proposal',
-    source: 'Referral',
-    date: '1 day ago',
-  },
-]
+function formatTimeAgo(date: string): string {
+  const now = new Date()
+  const past = new Date(date)
+  const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000)
+
+  if (diffInSeconds < 60) return 'Just now'
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
+  return `${Math.floor(diffInSeconds / 86400)} days ago`
+}
 
 export function RecentLeads() {
+  const { data: session } = useSession()
+  const router = useRouter()
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadLeads = async () => {
+      if (!session?.user?.id) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      try {
+        const result = await fetchLeads({
+          spaceId: session.user.company_id,
+        })
+
+        if (result.success && result.leads) {
+          // Get the 5 most recent leads
+          setLeads(result.leads.slice(0, 5))
+        }
+      } catch (error) {
+        console.error('Error loading recent leads:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadLeads()
+  }, [session?.user?.id, session?.user?.company_id])
+
+  const getLeadName = (lead: Lead) => {
+    if (lead.first_name || lead.last_name) {
+      return `${lead.first_name || ''} ${lead.last_name || ''}`.trim()
+    }
+    return lead.email || 'Unknown'
+  }
+
+  const getInitials = (lead: Lead) => {
+    const name = getLeadName(lead)
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'L'
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -48,34 +74,44 @@ export function RecentLeads() {
             <CardTitle>Recent Leads</CardTitle>
             <CardDescription>Latest leads added to your pipeline</CardDescription>
           </div>
-          <Button variant="ghost" size="sm">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => router.push('/apps/lead-generation?tab=pipeline')}
+          >
             View All
             <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {recentLeads.map((lead) => (
-            <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback>{lead.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="font-medium">{lead.name}</div>
-                  <div className="text-sm text-muted-foreground">{lead.company}</div>
+        {loading ? (
+          <div className="text-center py-8 text-muted-foreground">Loading leads...</div>
+        ) : leads.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">No leads yet</div>
+        ) : (
+          <div className="space-y-4">
+            {leads.map((lead) => (
+              <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback>{getInitials(lead)}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-medium">{getLeadName(lead)}</div>
+                    <div className="text-sm text-muted-foreground">{lead.email || 'No email'}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={lead.score >= 80 ? 'default' : 'secondary'}>
+                    Score: {lead.score}
+                  </Badge>
+                  <Badge variant="outline">{lead.status}</Badge>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant={lead.score >= 80 ? 'default' : 'secondary'}>
-                  Score: {lead.score}
-                </Badge>
-                <Badge variant="outline">{lead.status}</Badge>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

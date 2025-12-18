@@ -1,66 +1,170 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
-
-const initialStages = {
-  'new': [
-    { id: '1', name: 'John Smith', company: 'Acme Corp', score: 85, source: 'Website' },
-    { id: '2', name: 'Sarah Johnson', company: 'TechStart', score: 72, source: 'LinkedIn' },
-  ],
-  'contacted': [
-    { id: '3', name: 'Mike Davis', company: 'Global Solutions', score: 91, source: 'Referral' },
-  ],
-  'qualified': [
-    { id: '4', name: 'Emily Brown', company: 'Innovate Co', score: 88, source: 'Website' },
-  ],
-  'proposal': [],
-  'closed': [],
-}
+import { fetchLeads, fetchLeadStages, updateLead, createLeadActivity, type Lead, type LeadStage } from '@/lib/database-functions'
+import { useSession } from '@/components/providers/session-provider'
+import { fetchLeadSources } from '@/lib/database-functions'
 
 export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string; filters: any }) {
-  const [stages, setStages] = useState(initialStages)
+  const { data: session } = useSession()
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [stages, setStages] = useState<LeadStage[]>([])
+  const [sources, setSources] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const onDragEnd = (result: DropResult) => {
+  useEffect(() => {
+    const loadData = async () => {
+      if (!session?.user?.id) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      
+      try {
+        // Fetch leads with filters
+        const leadsResult = await fetchLeads({
+          spaceId: session.user.company_id,
+          stageId: filters.status !== 'all' ? undefined : undefined,
+          sourceId: filters.source !== 'all' ? undefined : undefined,
+          searchQuery: searchQuery || undefined,
+          minScore: filters.score !== 'all' && filters.score === 'high' ? 70 : undefined,
+          maxScore: filters.score !== 'all' && filters.score === 'low' ? 69 : undefined,
+        })
+
+        // Fetch stages
+        const stagesResult = await fetchLeadStages(session.user.company_id)
+
+        // Fetch sources
+        const sourcesResult = await fetchLeadSources(session.user.company_id)
+
+        if (leadsResult.success && leadsResult.leads) {
+          setLeads(leadsResult.leads)
+        }
+
+        if (stagesResult.success && stagesResult.stages) {
+          setStages(stagesResult.stages)
+        }
+
+        if (sourcesResult.success && sourcesResult.sources) {
+          setSources(sourcesResult.sources)
+        }
+      } catch (error) {
+        console.error('Error loading lead data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [session?.user?.id, session?.user?.company_id, searchQuery, filters.source, filters.score, filters.status])
+
+  // Group leads by stage
+  const leadsByStage = useMemo(() => {
+    const grouped: Record<string, Lead[]> = {}
+    
+    // Initialize all stages
+    stages.forEach(stage => {
+      grouped[stage.id] = []
+    })
+
+    // Group leads by stage_id
+    leads.forEach(lead => {
+      const stageId = lead.stage_id || 'unassigned'
+      if (!grouped[stageId]) {
+        grouped[stageId] = []
+      }
+      grouped[stageId].push(lead)
+    })
+
+    return grouped
+  }, [leads, stages])
+
+  const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return
 
     const { source, destination, draggableId } = result
 
     if (source.droppableId === destination.droppableId) return
 
-    const sourceStage = stages[source.droppableId as keyof typeof stages]
-    const destStage = stages[destination.droppableId as keyof typeof stages]
-    const lead = sourceStage.find(l => l.id === draggableId)
+    // Find the lead being moved
+    const sourceLeads = leadsByStage[source.droppableId] || []
+    const lead = sourceLeads.find(l => l.id === draggableId)
 
     if (!lead) return
 
-    const newSourceStage = sourceStage.filter(l => l.id !== draggableId)
-    const newDestStage = [...destStage]
-    newDestStage.splice(destination.index, 0, lead)
-
-    setStages({
-      ...stages,
-      [source.droppableId]: newSourceStage,
-      [destination.droppableId]: newDestStage,
+    // Update lead stage in database
+    const updateResult = await updateLead(lead.id, {
+      stage_id: destination.droppableId,
+      status: stages.find(s => s.id === destination.droppableId)?.name.toLowerCase().replace(' ', '_') || 'new',
     })
+
+    if (updateResult.success) {
+      // Update local state
+      setLeads(prevLeads =>
+        prevLeads.map(l =>
+          l.id === lead.id
+            ? { ...l, stage_id: destination.droppableId }
+            : l
+        )
+      )
+
+      // Log activity
+      await createLeadActivity({
+        lead_id: lead.id,
+        activity_type: 'stage_changed',
+        description: `Moved to ${stages.find(s => s.id === destination.droppableId)?.name || 'new stage'}`,
+        activity_data: {
+          from_stage: source.droppableId,
+          to_stage: destination.droppableId,
+        },
+      })
+    }
   }
 
-  const stageConfig = [
-    { id: 'new', title: 'New', color: 'bg-blue-500' },
-    { id: 'contacted', title: 'Contacted', color: 'bg-yellow-500' },
-    { id: 'qualified', title: 'Qualified', color: 'bg-purple-500' },
-    { id: 'proposal', title: 'Proposal', color: 'bg-gray-500' },
-    { id: 'closed', title: 'Closed', color: 'bg-green-500' },
-  ]
+  const getLeadName = (lead: Lead) => {
+    if (lead.first_name || lead.last_name) {
+      return `${lead.first_name || ''} ${lead.last_name || ''}`.trim()
+    }
+    return lead.email || 'Unknown'
+  }
+
+  const getInitials = (lead: Lead) => {
+    const name = getLeadName(lead)
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'L'
+  }
+
+  const getSourceName = (sourceId?: string) => {
+    if (!sourceId) return 'Unknown'
+    const source = sources.find(s => s.id === sourceId)
+    return source?.name || 'Unknown'
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-muted-foreground">Loading leads...</div>
+      </div>
+    )
+  }
+
+  if (stages.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-muted-foreground">No stages configured. Please create stages first.</div>
+      </div>
+    )
+  }
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {stageConfig.map((stage) => {
-          const stageLeads = stages[stage.id as keyof typeof stages]
+        {stages.map((stage) => {
+          const stageLeads = leadsByStage[stage.id] || []
           return (
             <Droppable key={stage.id} droppableId={stage.id}>
               {(provided) => (
@@ -72,7 +176,7 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                   <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-medium">{stage.title}</CardTitle>
+                        <CardTitle className="text-sm font-medium">{stage.name}</CardTitle>
                         <Badge variant="secondary">{stageLeads.length}</Badge>
                       </div>
                     </CardHeader>
@@ -84,7 +188,7 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`p-3 rounded-lg border bg-card hover:shadow-md transition-shadow ${
+                              className={`p-3 rounded-lg border bg-card hover:shadow-md transition-shadow cursor-move ${
                                 snapshot.isDragging ? 'shadow-lg' : ''
                               }`}
                             >
@@ -92,12 +196,12 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                                 <div className="flex items-center gap-2">
                                   <Avatar className="h-8 w-8">
                                     <AvatarFallback className="text-xs">
-                                      {lead.name.split(' ').map(n => n[0]).join('')}
+                                      {getInitials(lead)}
                                     </AvatarFallback>
                                   </Avatar>
                                   <div>
-                                    <div className="font-medium text-sm">{lead.name}</div>
-                                    <div className="text-xs text-muted-foreground">{lead.company}</div>
+                                    <div className="font-medium text-sm">{getLeadName(lead)}</div>
+                                    <div className="text-xs text-muted-foreground">{lead.email || 'No email'}</div>
                                   </div>
                                 </div>
                               </div>
@@ -105,7 +209,7 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                                 <Badge variant={lead.score >= 80 ? 'default' : 'secondary'} className="text-xs">
                                   {lead.score}
                                 </Badge>
-                                <span className="text-xs text-muted-foreground">{lead.source}</span>
+                                <span className="text-xs text-muted-foreground">{getSourceName(lead.source_id)}</span>
                               </div>
                             </div>
                           )}

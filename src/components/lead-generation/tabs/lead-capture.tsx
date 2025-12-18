@@ -1,22 +1,74 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Code, Link2, QrCode, FileText } from 'lucide-react'
+import { Plus, Code, Link2, QrCode, FileText, Trash2, Edit } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LeadFormBuilder } from '../components/lead-form-builder'
 import { EmbedCode } from '../components/embed-code'
 import { FormTemplates } from '../components/form-templates'
+import { fetchLeadForms, type LeadForm } from '@/lib/database-functions'
+import { useSession } from '@/components/providers/session-provider'
+import { Badge } from '@/components/ui/badge'
 
 export function LeadCapture() {
+  const { data: session } = useSession()
   const [activeForm, setActiveForm] = useState<string | null>(null)
+  const [forms, setForms] = useState<LeadForm[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showFormBuilder, setShowFormBuilder] = useState(false)
+
+  const userId = session?.user?.id
+  const companyId = session?.user?.company_id
+
+  useEffect(() => {
+    const loadForms = async () => {
+      if (!userId) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      try {
+        const result = await fetchLeadForms(companyId)
+
+        if (result.success && result.forms) {
+          setForms(result.forms)
+        }
+      } catch (error) {
+        console.error('Error loading forms:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadForms()
+  }, [userId, companyId])
+
+  const handleFormCreated = () => {
+    const loadForms = async () => {
+      if (!session?.user?.id) return
+
+      const result = await fetchLeadForms(session.user.company_id)
+      if (result.success && result.forms) {
+        setForms(result.forms)
+      }
+      setShowFormBuilder(false)
+    }
+
+    loadForms()
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-end">
-        <Button variant="outline">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Lead Capture Forms</h2>
+          <p className="text-muted-foreground">Create and manage lead capture forms</p>
+        </div>
+        <Button variant="outline" onClick={() => setShowFormBuilder(true)}>
           <Plus className="w-4 h-4 mr-2" />
           New Form
         </Button>
@@ -30,17 +82,82 @@ export function LeadCapture() {
         </TabsList>
 
         <TabsContent value="forms" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Form Builder</CardTitle>
-              <CardDescription>
-                Create custom lead capture forms with AI-powered personalization
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <LeadFormBuilder />
-            </CardContent>
-          </Card>
+          {showFormBuilder ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Form Builder</CardTitle>
+                <CardDescription>
+                  Create custom lead capture forms with AI-powered personalization
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LeadFormBuilder onFormCreated={handleFormCreated} />
+                <div className="mt-4">
+                  <Button variant="outline" onClick={() => setShowFormBuilder(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading forms...</div>
+              ) : forms.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <FileText className="w-12 h-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4">No forms created yet</p>
+                    <Button onClick={() => setShowFormBuilder(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Your First Form
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {forms.map((form) => (
+                    <Card key={form.id} className="hover:shadow-md transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <CardTitle className="text-lg">{form.name}</CardTitle>
+                            <CardDescription className="mt-1">{form.title}</CardDescription>
+                          </div>
+                          <Badge variant={form.is_active ? 'default' : 'secondary'}>
+                            {form.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {form.description && (
+                          <p className="text-sm text-muted-foreground mb-4">{form.description}</p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setActiveForm(form.id)
+                              // Switch to embed tab
+                              const embedTab = document.querySelector('[value="embed"]') as HTMLElement
+                              if (embedTab) embedTab.click()
+                            }}
+                          >
+                            <Code className="w-4 h-4 mr-2" />
+                            Get Code
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="templates" className="space-y-4">

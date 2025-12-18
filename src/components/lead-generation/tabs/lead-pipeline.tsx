@@ -7,6 +7,7 @@ import { Plus, Filter, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { LeadKanbanBoard } from '../components/lead-kanban-board'
 import { LeadFilters } from '../components/lead-filters'
+import CreateLeadModal from '@/components/modals/create-lead-modal'
 
 export function LeadPipeline() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -15,16 +16,28 @@ export function LeadPipeline() {
     score: 'all',
     status: 'all',
   })
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const handleLeadCreated = () => {
+    setRefreshKey(prev => prev + 1)
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-end">
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => setIsCreateModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Add Lead
         </Button>
       </div>
+
+      <CreateLeadModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onLeadCreated={handleLeadCreated}
+      />
 
       {/* Filters and Search */}
       <Card>
@@ -49,7 +62,7 @@ export function LeadPipeline() {
       </Card>
 
       {/* Kanban Board */}
-      <LeadKanbanBoard searchQuery={searchQuery} filters={filters} />
+      <LeadKanbanBoard key={refreshKey} searchQuery={searchQuery} filters={filters} />
     </div>
   )
 }

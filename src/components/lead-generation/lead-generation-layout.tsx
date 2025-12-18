@@ -8,6 +8,7 @@ import {
   Users, 
   FileText, 
   Zap, 
+  Target,
   BarChart3, 
   Settings, 
   Plus,
@@ -40,6 +41,7 @@ import { LeadGenerationDashboard } from './tabs/lead-generation-dashboard'
 import { LeadPipeline } from './tabs/lead-pipeline'
 import { LeadCapture } from './tabs/lead-capture'
 import { AutomationWorkflows } from './tabs/automation-workflows'
+import { LeadCampaigns } from './tabs/lead-campaigns'
 import { LeadAnalytics } from './tabs/lead-analytics'
 import { LeadSettings } from './tabs/lead-settings'
 
@@ -53,6 +55,7 @@ const navigationItems = [
   { id: 'pipeline', label: 'Pipeline', icon: Users },
   { id: 'capture', label: 'Capture', icon: FileText },
   { id: 'automation', label: 'Automation', icon: Zap },
+  { id: 'campaigns', label: 'Campaigns', icon: Target },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -150,6 +153,8 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
         return <LeadCapture />
       case 'automation':
         return <AutomationWorkflows />
+      case 'campaigns':
+        return <LeadCampaigns />
       case 'analytics':
         return <LeadAnalytics />
       case 'settings':

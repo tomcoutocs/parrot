@@ -7830,3 +7830,2096 @@ export async function saveUserManagementSettings(settings: Partial<UserManagemen
   }
 }
 
+// ============================================================================
+// LEAD GENERATION DATABASE FUNCTIONS
+// ============================================================================
+
+// Lead Types
+export interface Lead {
+  id: string
+  user_id: string
+  space_id?: string
+  company_id?: string
+  assigned_to?: string
+  first_name?: string
+  last_name?: string
+  email?: string
+  phone?: string
+  job_title?: string
+  stage_id?: string
+  source_id?: string
+  score: number
+  status: string
+  form_id?: string
+  form_submission_data?: Record<string, any>
+  custom_fields?: Record<string, any>
+  notes?: string
+  tags?: string[]
+  budget?: number
+  authority?: boolean
+  need?: string
+  timeline?: string
+  enriched_data?: Record<string, any>
+  social_profiles?: Record<string, any>
+  converted_to_customer: boolean
+  customer_id?: string
+  conversion_date?: string
+  conversion_value?: number
+  metadata?: Record<string, any>
+  created_at: string
+  updated_at: string
+  last_contacted_at?: string
+  last_activity_at?: string
+}
+
+export interface LeadForm {
+  id: string
+  user_id: string
+  space_id?: string
+  name: string
+  description?: string
+  title: string
+  thank_you_message?: string
+  redirect_url?: string
+  ai_personalization_enabled: boolean
+  is_active: boolean
+  embed_code?: string
+  form_settings?: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadFormField {
+  id: string
+  form_id: string
+  field_type: string
+  label: string
+  placeholder?: string
+  is_required: boolean
+  field_order: number
+  options?: any[]
+  validation_rules?: Record<string, any>
+  field_settings?: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadStage {
+  id: string
+  user_id: string
+  space_id?: string
+  name: string
+  description?: string
+  stage_order: number
+  color?: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadSource {
+  id: string
+  user_id: string
+  space_id?: string
+  name: string
+  type: string
+  description?: string
+  utm_source?: string
+  utm_medium?: string
+  utm_campaign?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadActivity {
+  id: string
+  lead_id: string
+  user_id?: string
+  activity_type: string
+  description: string
+  activity_data?: Record<string, any>
+  created_at: string
+}
+
+export interface LeadWorkflow {
+  id: string
+  user_id: string
+  space_id?: string
+  name: string
+  description?: string
+  is_active: boolean
+  workflow_settings?: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadCampaign {
+  id: string
+  user_id: string
+  space_id?: string
+  name: string
+  description?: string
+  campaign_type: string
+  status: string
+  start_date?: string
+  end_date?: string
+  budget?: number
+  spent: number
+  campaign_settings?: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadCompany {
+  id: string
+  user_id: string
+  space_id?: string
+  name: string
+  website?: string
+  industry?: string
+  company_size?: string
+  phone?: string
+  address?: string
+  description?: string
+  tags?: string[]
+  company_data?: Record<string, any>
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ============================================================================
+// LEAD FUNCTIONS
+// ============================================================================
+
+// Fetch leads with filters
+export async function fetchLeads(filters?: {
+  spaceId?: string
+  stageId?: string
+  sourceId?: string
+  status?: string
+  searchQuery?: string
+  assignedTo?: string
+  minScore?: number
+  maxScore?: number
+}): Promise<{ success: boolean; leads?: Lead[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('leads')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+
+    if (filters?.spaceId) {
+      query = query.eq('space_id', filters.spaceId)
+    }
+
+    if (filters?.stageId) {
+      query = query.eq('stage_id', filters.stageId)
+    }
+
+    if (filters?.sourceId) {
+      query = query.eq('source_id', filters.sourceId)
+    }
+
+    if (filters?.status) {
+      query = query.eq('status', filters.status)
+    }
+
+    if (filters?.assignedTo) {
+      query = query.eq('assigned_to', filters.assignedTo)
+    }
+
+    if (filters?.minScore !== undefined) {
+      query = query.gte('score', filters.minScore)
+    }
+
+    if (filters?.maxScore !== undefined) {
+      query = query.lte('score', filters.maxScore)
+    }
+
+    if (filters?.searchQuery) {
+      query = query.or(`first_name.ilike.%${filters.searchQuery}%,last_name.ilike.%${filters.searchQuery}%,email.ilike.%${filters.searchQuery}%,phone.ilike.%${filters.searchQuery}%`)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, leads: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch leads' }
+  }
+}
+
+// Create a new lead
+export async function createLead(leadData: {
+  space_id?: string
+  company_id?: string
+  assigned_to?: string
+  first_name?: string
+  last_name?: string
+  email?: string
+  phone?: string
+  job_title?: string
+  stage_id?: string
+  source_id?: string
+  score?: number
+  status?: string
+  form_id?: string
+  form_submission_data?: Record<string, any>
+  custom_fields?: Record<string, any>
+  notes?: string
+  tags?: string[]
+  budget?: number
+  authority?: boolean
+  need?: string
+  timeline?: string
+}): Promise<{ success: boolean; lead?: Lead; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('leads')
+      .insert({
+        user_id: currentUser.id,
+        space_id: leadData.space_id || currentUser.companyId || null,
+        company_id: leadData.company_id || null,
+        assigned_to: leadData.assigned_to || null,
+        first_name: leadData.first_name || null,
+        last_name: leadData.last_name || null,
+        email: leadData.email || null,
+        phone: leadData.phone || null,
+        job_title: leadData.job_title || null,
+        stage_id: leadData.stage_id || null,
+        source_id: leadData.source_id || null,
+        score: leadData.score || 0,
+        status: leadData.status || 'new',
+        form_id: leadData.form_id || null,
+        form_submission_data: leadData.form_submission_data || {},
+        custom_fields: leadData.custom_fields || {},
+        notes: leadData.notes || null,
+        tags: leadData.tags || [],
+        budget: leadData.budget || null,
+        authority: leadData.authority || null,
+        need: leadData.need || null,
+        timeline: leadData.timeline || null,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    // Log activity
+    if (data) {
+      await supabase.from('lead_activities').insert({
+        lead_id: data.id,
+        user_id: currentUser.id,
+        activity_type: 'form_submitted',
+        description: 'Lead created',
+        activity_data: { source: 'manual' }
+      })
+    }
+
+    return { success: true, lead: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create lead' }
+  }
+}
+
+// Update a lead
+export async function updateLead(
+  leadId: string,
+  updates: Partial<Lead>
+): Promise<{ success: boolean; lead?: Lead; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('leads')
+      .update(updates)
+      .eq('id', leadId)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, lead: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update lead' }
+  }
+}
+
+// Delete a lead
+export async function deleteLead(leadId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', leadId)
+      .eq('user_id', currentUser.id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete lead' }
+  }
+}
+
+// ============================================================================
+// LEAD STAGES FUNCTIONS
+// ============================================================================
+
+// Fetch lead stages
+export async function fetchLeadStages(spaceId?: string): Promise<{ success: boolean; stages?: LeadStage[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_stages')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('stage_order', { ascending: true })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    // If no stages exist, create default stages
+    if (!data || data.length === 0) {
+      const defaultStages = await createDefaultStages(currentUser.id, spaceId || currentUser.companyId)
+      return { success: true, stages: defaultStages }
+    }
+
+    return { success: true, stages: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch lead stages' }
+  }
+}
+
+// Create default stages
+async function createDefaultStages(userId: string, spaceId?: string): Promise<LeadStage[]> {
+  if (!supabase) return []
+
+  const defaultStages = [
+    { name: 'New', stage_order: 0, color: '#3b82f6', is_default: true },
+    { name: 'Contacted', stage_order: 1, color: '#eab308', is_default: true },
+    { name: 'Qualified', stage_order: 2, color: '#a855f7', is_default: true },
+    { name: 'Proposal', stage_order: 3, color: '#6b7280', is_default: true },
+    { name: 'Negotiation', stage_order: 4, color: '#f59e0b', is_default: true },
+    { name: 'Closed Won', stage_order: 5, color: '#10b981', is_default: true },
+    { name: 'Closed Lost', stage_order: 6, color: '#ef4444', is_default: true },
+  ]
+
+  const { data } = await supabase
+    .from('lead_stages')
+    .insert(
+      defaultStages.map(stage => ({
+        user_id: userId,
+        space_id: spaceId || null,
+        ...stage,
+      }))
+    )
+    .select()
+
+  return data || []
+}
+
+// Create a lead stage
+export async function createLeadStage(stageData: {
+  space_id?: string
+  name: string
+  description?: string
+  stage_order?: number
+  color?: string
+  is_default?: boolean
+}): Promise<{ success: boolean; stage?: LeadStage; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_stages')
+      .insert({
+        user_id: currentUser.id,
+        space_id: stageData.space_id || currentUser.companyId || null,
+        name: stageData.name,
+        description: stageData.description || null,
+        stage_order: stageData.stage_order ?? 0,
+        color: stageData.color || null,
+        is_default: stageData.is_default || false,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, stage: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create lead stage' }
+  }
+}
+
+// Update a lead stage
+export async function updateLeadStage(
+  stageId: string,
+  updates: Partial<LeadStage>
+): Promise<{ success: boolean; stage?: LeadStage; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_stages')
+      .update(updates)
+      .eq('id', stageId)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, stage: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update lead stage' }
+  }
+}
+
+// ============================================================================
+// LEAD SOURCES FUNCTIONS
+// ============================================================================
+
+// Fetch lead sources
+export async function fetchLeadSources(spaceId?: string): Promise<{ success: boolean; sources?: LeadSource[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_sources')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, sources: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch lead sources' }
+  }
+}
+
+// Create a lead source
+export async function createLeadSource(sourceData: {
+  space_id?: string
+  name: string
+  type: string
+  description?: string
+  utm_source?: string
+  utm_medium?: string
+  utm_campaign?: string
+}): Promise<{ success: boolean; source?: LeadSource; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_sources')
+      .insert({
+        user_id: currentUser.id,
+        space_id: sourceData.space_id || currentUser.companyId || null,
+        name: sourceData.name,
+        type: sourceData.type,
+        description: sourceData.description || null,
+        utm_source: sourceData.utm_source || null,
+        utm_medium: sourceData.utm_medium || null,
+        utm_campaign: sourceData.utm_campaign || null,
+        is_active: true,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, source: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create lead source' }
+  }
+}
+
+// ============================================================================
+// LEAD FORMS FUNCTIONS
+// ============================================================================
+
+// Fetch lead forms
+export async function fetchLeadForms(spaceId?: string): Promise<{ success: boolean; forms?: LeadForm[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_forms')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, forms: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch lead forms' }
+  }
+}
+
+// Create a lead form
+export async function createLeadForm(formData: {
+  space_id?: string
+  name: string
+  title: string
+  description?: string
+  thank_you_message?: string
+  redirect_url?: string
+  ai_personalization_enabled?: boolean
+  form_settings?: Record<string, any>
+  fields?: Array<{
+    field_type: string
+    label: string
+    placeholder?: string
+    is_required: boolean
+    field_order: number
+    options?: any[]
+    validation_rules?: Record<string, any>
+  }>
+}): Promise<{ success: boolean; form?: LeadForm; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    // Create the form
+    const { data: form, error: formError } = await supabase
+      .from('lead_forms')
+      .insert({
+        user_id: currentUser.id,
+        space_id: formData.space_id || currentUser.companyId || null,
+        name: formData.name,
+        title: formData.title,
+        description: formData.description || null,
+        thank_you_message: formData.thank_you_message || null,
+        redirect_url: formData.redirect_url || null,
+        ai_personalization_enabled: formData.ai_personalization_enabled || false,
+        form_settings: formData.form_settings || {},
+        is_active: true,
+      })
+      .select()
+      .single()
+
+    if (formError || !form) {
+      return { success: false, error: formError?.message || 'Failed to create form' }
+    }
+
+    // Create form fields if provided
+    if (formData.fields && formData.fields.length > 0) {
+      const { error: fieldsError } = await supabase
+        .from('lead_form_fields')
+        .insert(
+          formData.fields.map(field => ({
+            form_id: form.id,
+            field_type: field.field_type,
+            label: field.label,
+            placeholder: field.placeholder || null,
+            is_required: field.is_required,
+            field_order: field.field_order,
+            options: field.options || [],
+            validation_rules: field.validation_rules || {},
+          }))
+        )
+
+      if (fieldsError) {
+        console.error('Error creating form fields:', fieldsError)
+        // Continue anyway - form is created
+      }
+    }
+
+    return { success: true, form }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create lead form' }
+  }
+}
+
+// Fetch form fields
+export async function fetchLeadFormFields(formId: string): Promise<{ success: boolean; fields?: LeadFormField[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_form_fields')
+      .select('*')
+      .eq('form_id', formId)
+      .order('field_order', { ascending: true })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, fields: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch form fields' }
+  }
+}
+
+// ============================================================================
+// LEAD ACTIVITIES FUNCTIONS
+// ============================================================================
+
+// Create a lead activity
+export async function createLeadActivity(activityData: {
+  lead_id: string
+  activity_type: string
+  description: string
+  activity_data?: Record<string, any>
+}): Promise<{ success: boolean; activity?: LeadActivity; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_activities')
+      .insert({
+        lead_id: activityData.lead_id,
+        user_id: currentUser.id,
+        activity_type: activityData.activity_type,
+        description: activityData.description,
+        activity_data: activityData.activity_data || {},
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, activity: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create lead activity' }
+  }
+}
+
+// Fetch lead activities
+export async function fetchLeadActivities(leadId: string): Promise<{ success: boolean; activities?: LeadActivity[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_activities')
+      .select('*')
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, activities: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch lead activities' }
+  }
+}
+
+// ============================================================================
+// LEAD STATISTICS FUNCTIONS
+// ============================================================================
+
+// Get lead statistics
+export async function getLeadStatistics(spaceId?: string): Promise<{
+  success: boolean
+  stats?: {
+    totalLeads: number
+    qualifiedLeads: number
+    conversionRate: number
+    activeCampaigns: number
+    leadsThisMonth: number
+    leadsLastMonth: number
+  }
+  error?: string
+}> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const targetSpaceId = spaceId || currentUser.companyId
+
+    // Build base query
+    let baseQuery = supabase
+      .from('leads')
+      .select('id, status, score, created_at', { count: 'exact' })
+      .eq('user_id', currentUser.id)
+
+    if (targetSpaceId) {
+      baseQuery = baseQuery.eq('space_id', targetSpaceId)
+    }
+
+    // Get total leads
+    const { count: totalLeads } = await baseQuery
+
+    // Get qualified leads (status = 'qualified' or score >= 70)
+    const { count: qualifiedLeads } = await baseQuery
+      .or('status.eq.qualified,score.gte.70')
+
+    // Get converted leads
+    const { count: convertedLeads } = await baseQuery
+      .eq('converted_to_customer', true)
+
+    // Get leads this month
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
+
+    const { count: leadsThisMonth } = await baseQuery
+      .gte('created_at', startOfMonth.toISOString())
+
+    // Get leads last month
+    const startOfLastMonth = new Date(startOfMonth)
+    startOfLastMonth.setMonth(startOfLastMonth.getMonth() - 1)
+    const endOfLastMonth = new Date(startOfMonth)
+    endOfLastMonth.setDate(0)
+    endOfLastMonth.setHours(23, 59, 59, 999)
+
+    const { count: leadsLastMonth } = await baseQuery
+      .gte('created_at', startOfLastMonth.toISOString())
+      .lte('created_at', endOfLastMonth.toISOString())
+
+    // Get active campaigns
+    let campaignQuery = supabase
+      .from('lead_campaigns')
+      .select('id', { count: 'exact' })
+      .eq('user_id', currentUser.id)
+      .eq('status', 'active')
+
+    if (targetSpaceId) {
+      campaignQuery = campaignQuery.eq('space_id', targetSpaceId)
+    }
+
+    const { count: activeCampaigns } = await campaignQuery
+
+    const conversionRate = totalLeads && totalLeads > 0
+      ? ((convertedLeads || 0) / totalLeads * 100)
+      : 0
+
+    return {
+      success: true,
+      stats: {
+        totalLeads: totalLeads || 0,
+        qualifiedLeads: qualifiedLeads || 0,
+        conversionRate: Math.round(conversionRate * 10) / 10,
+        activeCampaigns: activeCampaigns || 0,
+        leadsThisMonth: leadsThisMonth || 0,
+        leadsLastMonth: leadsLastMonth || 0,
+      },
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch lead statistics' }
+  }
+}
+
+// ============================================================================
+// LEAD WORKFLOWS FUNCTIONS
+// ============================================================================
+
+// Fetch lead workflows
+export async function fetchLeadWorkflows(spaceId?: string): Promise<{ success: boolean; workflows?: LeadWorkflow[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_workflows')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, workflows: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch workflows' }
+  }
+}
+
+// Create a lead workflow
+export async function createLeadWorkflow(workflowData: {
+  space_id?: string
+  name: string
+  description?: string
+  is_active?: boolean
+  workflow_settings?: Record<string, any>
+  triggers?: Array<{
+    trigger_type: string
+    trigger_conditions: Record<string, any>
+  }>
+  actions?: Array<{
+    action_type: string
+    action_config: Record<string, any>
+    action_order: number
+    delay_seconds?: number
+  }>
+}): Promise<{ success: boolean; workflow?: LeadWorkflow; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    // Create the workflow
+    const { data: workflow, error: workflowError } = await supabase
+      .from('lead_workflows')
+      .insert({
+        user_id: currentUser.id,
+        space_id: workflowData.space_id || currentUser.companyId || null,
+        name: workflowData.name,
+        description: workflowData.description || null,
+        is_active: workflowData.is_active ?? true,
+        workflow_settings: workflowData.workflow_settings || {},
+      })
+      .select()
+      .single()
+
+    if (workflowError || !workflow) {
+      return { success: false, error: workflowError?.message || 'Failed to create workflow' }
+    }
+
+    // Create triggers if provided
+    if (workflowData.triggers && workflowData.triggers.length > 0) {
+      const { error: triggersError } = await supabase
+        .from('lead_workflow_triggers')
+        .insert(
+          workflowData.triggers.map((trigger, index) => ({
+            workflow_id: workflow.id,
+            trigger_type: trigger.trigger_type,
+            trigger_conditions: trigger.trigger_conditions,
+            trigger_order: index,
+          }))
+        )
+
+      if (triggersError) {
+        console.error('Error creating workflow triggers:', triggersError)
+      }
+    }
+
+    // Create actions if provided
+    if (workflowData.actions && workflowData.actions.length > 0) {
+      const { error: actionsError } = await supabase
+        .from('lead_workflow_actions')
+        .insert(
+          workflowData.actions.map(action => ({
+            workflow_id: workflow.id,
+            action_type: action.action_type,
+            action_config: action.action_config,
+            action_order: action.action_order,
+            delay_seconds: action.delay_seconds || 0,
+          }))
+        )
+
+      if (actionsError) {
+        console.error('Error creating workflow actions:', actionsError)
+      }
+    }
+
+    return { success: true, workflow }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create workflow' }
+  }
+}
+
+// Update a lead workflow
+export async function updateLeadWorkflow(
+  workflowId: string,
+  updates: Partial<LeadWorkflow>
+): Promise<{ success: boolean; workflow?: LeadWorkflow; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_workflows')
+      .update(updates)
+      .eq('id', workflowId)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, workflow: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update workflow' }
+  }
+}
+
+// Delete a lead workflow
+export async function deleteLeadWorkflow(workflowId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('lead_workflows')
+      .delete()
+      .eq('id', workflowId)
+      .eq('user_id', currentUser.id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete workflow' }
+  }
+}
+
+// Fetch workflow triggers
+export async function fetchWorkflowTriggers(workflowId: string): Promise<{ success: boolean; triggers?: any[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_workflow_triggers')
+      .select('*')
+      .eq('workflow_id', workflowId)
+      .order('trigger_order', { ascending: true })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, triggers: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch workflow triggers' }
+  }
+}
+
+// Fetch workflow actions
+export async function fetchWorkflowActions(workflowId: string): Promise<{ success: boolean; actions?: any[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_workflow_actions')
+      .select('*')
+      .eq('workflow_id', workflowId)
+      .order('action_order', { ascending: true })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, actions: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch workflow actions' }
+  }
+}
+
+// ============================================================================
+// LEAD CAMPAIGNS FUNCTIONS
+// ============================================================================
+
+// Fetch lead campaigns
+export async function fetchLeadCampaigns(spaceId?: string): Promise<{ success: boolean; campaigns?: LeadCampaign[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_campaigns')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, campaigns: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch campaigns' }
+  }
+}
+
+// Create a lead campaign
+export async function createLeadCampaign(campaignData: {
+  space_id?: string
+  name: string
+  description?: string
+  campaign_type: string
+  status?: string
+  start_date?: string
+  end_date?: string
+  budget?: number
+  campaign_settings?: Record<string, any>
+}): Promise<{ success: boolean; campaign?: LeadCampaign; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_campaigns')
+      .insert({
+        user_id: currentUser.id,
+        space_id: campaignData.space_id || currentUser.companyId || null,
+        name: campaignData.name,
+        description: campaignData.description || null,
+        campaign_type: campaignData.campaign_type,
+        status: campaignData.status || 'draft',
+        start_date: campaignData.start_date || null,
+        end_date: campaignData.end_date || null,
+        budget: campaignData.budget || null,
+        spent: 0,
+        campaign_settings: campaignData.campaign_settings || {},
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, campaign: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create campaign' }
+  }
+}
+
+// Update a lead campaign
+export async function updateLeadCampaign(
+  campaignId: string,
+  updates: Partial<LeadCampaign>
+): Promise<{ success: boolean; campaign?: LeadCampaign; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_campaigns')
+      .update(updates)
+      .eq('id', campaignId)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, campaign: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update campaign' }
+  }
+}
+
+// Delete a lead campaign
+export async function deleteLeadCampaign(campaignId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('lead_campaigns')
+      .delete()
+      .eq('id', campaignId)
+      .eq('user_id', currentUser.id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete campaign' }
+  }
+}
+
+// ============================================================================
+// LEAD ANALYTICS FUNCTIONS
+// ============================================================================
+
+// Get lead analytics data
+export async function getLeadAnalytics(dateRange: { from: Date; to: Date }, spaceId?: string): Promise<{
+  success: boolean
+  analytics?: {
+    totalLeads: number
+    conversionRate: number
+    averageScore: number
+    leadsBySource: Array<{ source: string; leads: number; conversions: number }>
+    leadsByStage: Array<{ stage: string; count: number }>
+  }
+  error?: string
+}> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const targetSpaceId = spaceId || currentUser.companyId
+
+    // Build base query
+    let baseQuery = supabase
+      .from('leads')
+      .select('id, score, source_id, stage_id, converted_to_customer, created_at')
+      .eq('user_id', currentUser.id)
+      .gte('created_at', dateRange.from.toISOString())
+      .lte('created_at', dateRange.to.toISOString())
+
+    if (targetSpaceId) {
+      baseQuery = baseQuery.eq('space_id', targetSpaceId)
+    }
+
+    const { data: leads, error: leadsError } = await baseQuery
+
+    if (leadsError) {
+      return { success: false, error: leadsError.message }
+    }
+
+    // Calculate metrics
+    const totalLeads = leads?.length || 0
+    const convertedLeads = leads?.filter(l => l.converted_to_customer).length || 0
+    const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads * 100) : 0
+    const averageScore = totalLeads > 0
+      ? Math.round((leads?.reduce((sum, l) => sum + (l.score || 0), 0) || 0) / totalLeads)
+      : 0
+
+    // Get leads by source
+    const sourceMap = new Map<string, { leads: number; conversions: number }>()
+    leads?.forEach(lead => {
+      const sourceId = lead.source_id || 'unknown'
+      const current = sourceMap.get(sourceId) || { leads: 0, conversions: 0 }
+      current.leads++
+      if (lead.converted_to_customer) {
+        current.conversions++
+      }
+      sourceMap.set(sourceId, current)
+    })
+
+    // Fetch source names
+    const sourceIds = Array.from(sourceMap.keys()).filter(id => id !== 'unknown')
+    let sourcesData: any[] = []
+    if (sourceIds.length > 0) {
+      const { data: sources } = await supabase
+        .from('lead_sources')
+        .select('id, name')
+        .in('id', sourceIds)
+      
+      sourcesData = sources || []
+    }
+
+    const leadsBySource = Array.from(sourceMap.entries()).map(([sourceId, data]) => {
+      const source = sourcesData.find(s => s.id === sourceId)
+      return {
+        source: source?.name || 'Unknown',
+        leads: data.leads,
+        conversions: data.conversions,
+      }
+    })
+
+    // Get leads by stage
+    const stageMap = new Map<string, number>()
+    leads?.forEach(lead => {
+      const stageId = lead.stage_id || 'unassigned'
+      stageMap.set(stageId, (stageMap.get(stageId) || 0) + 1)
+    })
+
+    // Fetch stage names
+    const stageIds = Array.from(stageMap.keys()).filter(id => id !== 'unassigned')
+    let stagesData: any[] = []
+    if (stageIds.length > 0) {
+      const { data: stages } = await supabase
+        .from('lead_stages')
+        .select('id, name')
+        .in('id', stageIds)
+      
+      stagesData = stages || []
+    }
+
+    const leadsByStage = Array.from(stageMap.entries()).map(([stageId, count]) => {
+      const stage = stagesData.find(s => s.id === stageId)
+      return {
+        stage: stage?.name || 'Unassigned',
+        count,
+      }
+    })
+
+    return {
+      success: true,
+      analytics: {
+        totalLeads,
+        conversionRate: Math.round(conversionRate * 10) / 10,
+        averageScore,
+        leadsBySource,
+        leadsByStage,
+      },
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch analytics' }
+  }
+}
+
+// ============================================================================
+// LEAD GENERATION SETTINGS FUNCTIONS
+// ============================================================================
+
+export interface LeadGenerationSettings {
+  company_name?: string
+  default_email?: string
+  timezone?: string
+  auto_assign_leads?: boolean
+  email_notifications?: boolean
+  default_stage_id?: string
+  default_source_id?: string
+}
+
+export async function getLeadGenerationSettings(): Promise<{ success: boolean; data?: LeadGenerationSettings; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('*')
+      .eq('setting_key', 'lead_generation')
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        return { success: true, data: {} }
+      }
+      return { success: false, error: error.message || 'Failed to fetch settings' }
+    }
+
+    if (data && data.setting_value) {
+      const settings = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value
+      return { success: true, data: settings }
+    }
+
+    return { success: true, data: {} }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch settings' }
+  }
+}
+
+export async function saveLeadGenerationSettings(settings: Partial<LeadGenerationSettings>): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Get current settings and merge with new ones
+    const currentResult = await getLeadGenerationSettings()
+    const currentSettings = currentResult.data || {}
+    const updatedSettings = { ...currentSettings, ...settings }
+
+    // Try to insert or update
+    const { error: upsertError } = await supabase
+      .from('app_settings')
+      .upsert({
+        setting_key: 'lead_generation',
+        setting_value: updatedSettings,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'setting_key'
+      })
+
+    if (upsertError) {
+      if (upsertError.message?.includes('does not exist')) {
+        // Store in localStorage as fallback
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lead_generation_settings', JSON.stringify(updatedSettings))
+        }
+        return { success: true }
+      }
+      return { success: false, error: upsertError.message || 'Failed to save settings' }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error saving lead generation settings:', error)
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      const currentResult = await getLeadGenerationSettings()
+      const currentSettings = currentResult.data || {}
+      const updatedSettings = { ...currentSettings, ...settings }
+      localStorage.setItem('lead_generation_settings', JSON.stringify(updatedSettings))
+    }
+    return { success: true }
+  }
+}
+
+// ============================================================================
+// LEAD SCORING RULES FUNCTIONS
+// ============================================================================
+
+export interface LeadScoringRule {
+  id: string
+  user_id: string
+  space_id?: string
+  name: string
+  description?: string
+  is_active: boolean
+  criteria_type: string
+  condition: string
+  value: string
+  points: number
+  rule_settings?: Record<string, any>
+  rule_order: number
+  created_at: string
+  updated_at: string
+}
+
+// Fetch lead scoring rules
+export async function fetchLeadScoringRules(spaceId?: string): Promise<{ success: boolean; rules?: LeadScoringRule[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_scoring_rules')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('is_active', true)
+      .order('rule_order', { ascending: true })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, rules: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch scoring rules' }
+  }
+}
+
+// Create a lead scoring rule
+export async function createLeadScoringRule(ruleData: {
+  space_id?: string
+  name: string
+  description?: string
+  criteria_type: string
+  condition: string
+  value: string
+  points: number
+  is_active?: boolean
+  rule_settings?: Record<string, any>
+  rule_order?: number
+}): Promise<{ success: boolean; rule?: LeadScoringRule; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_scoring_rules')
+      .insert({
+        user_id: currentUser.id,
+        space_id: ruleData.space_id || currentUser.companyId || null,
+        name: ruleData.name,
+        description: ruleData.description || null,
+        criteria_type: ruleData.criteria_type,
+        condition: ruleData.condition,
+        value: ruleData.value,
+        points: ruleData.points,
+        is_active: ruleData.is_active ?? true,
+        rule_settings: ruleData.rule_settings || {},
+        rule_order: ruleData.rule_order ?? 0,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, rule: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create scoring rule' }
+  }
+}
+
+// Update a lead scoring rule
+export async function updateLeadScoringRule(
+  ruleId: string,
+  updates: Partial<LeadScoringRule>
+): Promise<{ success: boolean; rule?: LeadScoringRule; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_scoring_rules')
+      .update(updates)
+      .eq('id', ruleId)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, rule: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update scoring rule' }
+  }
+}
+
+// Delete a lead scoring rule
+export async function deleteLeadScoringRule(ruleId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('lead_scoring_rules')
+      .delete()
+      .eq('id', ruleId)
+      .eq('user_id', currentUser.id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete scoring rule' }
+  }
+}
+
+// ============================================================================
+// LEAD INTEGRATIONS FUNCTIONS
+// ============================================================================
+
+// Fetch lead integrations
+export async function fetchLeadIntegrations(spaceId?: string): Promise<{ success: boolean; integrations?: any[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_integrations')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, integrations: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch integrations' }
+  }
+}
+
+// Update or create a lead integration
+export async function upsertLeadIntegration(integrationData: {
+  space_id?: string
+  integration_type: string
+  integration_name: string
+  is_active: boolean
+  credentials?: Record<string, any>
+  integration_settings?: Record<string, any>
+}): Promise<{ success: boolean; integration?: any; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    // Check if integration exists
+    let query = supabase
+      .from('lead_integrations')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .eq('integration_type', integrationData.integration_type)
+      .eq('integration_name', integrationData.integration_name)
+
+    if (integrationData.space_id || currentUser.companyId) {
+      query = query.eq('space_id', integrationData.space_id || currentUser.companyId)
+    }
+
+    const { data: existing } = await query.single()
+
+    const integrationPayload = {
+      user_id: currentUser.id,
+      space_id: integrationData.space_id || currentUser.companyId || null,
+      integration_type: integrationData.integration_type,
+      integration_name: integrationData.integration_name,
+      is_active: integrationData.is_active,
+      credentials: integrationData.credentials || {},
+      integration_settings: integrationData.integration_settings || {},
+    }
+
+    let result
+    if (existing) {
+      // Update existing
+      const { data, error } = await supabase
+        .from('lead_integrations')
+        .update(integrationPayload)
+        .eq('id', existing.id)
+        .select()
+        .single()
+      
+      result = { data, error }
+    } else {
+      // Create new
+      const { data, error } = await supabase
+        .from('lead_integrations')
+        .insert(integrationPayload)
+        .select()
+        .single()
+      
+      result = { data, error }
+    }
+
+    if (result.error) {
+      return { success: false, error: result.error.message }
+    }
+
+    return { success: true, integration: result.data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to save integration' }
+  }
+}
+
+// ============================================================================
+// NOTIFICATION SETTINGS FUNCTIONS
+// ============================================================================
+
+export interface LeadNotificationSettings {
+  new_lead_alerts?: boolean
+  high_score_leads?: boolean
+  workflow_triggers?: boolean
+  daily_summary?: boolean
+  high_score_threshold?: number
+}
+
+export async function getLeadNotificationSettings(): Promise<{ success: boolean; data?: LeadNotificationSettings; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('*')
+      .eq('setting_key', 'lead_notifications')
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        return { success: true, data: {} }
+      }
+      return { success: false, error: error.message || 'Failed to fetch settings' }
+    }
+
+    if (data && data.setting_value) {
+      const settings = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value
+      return { success: true, data: settings }
+    }
+
+    return { success: true, data: {} }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch notification settings' }
+  }
+}
+
+export async function saveLeadNotificationSettings(settings: Partial<LeadNotificationSettings>): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const currentResult = await getLeadNotificationSettings()
+    const currentSettings = currentResult.data || {}
+    const updatedSettings = { ...currentSettings, ...settings }
+
+    const { error: upsertError } = await supabase
+      .from('app_settings')
+      .upsert({
+        setting_key: 'lead_notifications',
+        setting_value: updatedSettings,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'setting_key'
+      })
+
+    if (upsertError) {
+      if (upsertError.message?.includes('does not exist')) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lead_notification_settings', JSON.stringify(updatedSettings))
+        }
+        return { success: true }
+      }
+      return { success: false, error: upsertError.message || 'Failed to save settings' }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error saving notification settings:', error)
+    if (typeof window !== 'undefined') {
+      const currentResult = await getLeadNotificationSettings()
+      const currentSettings = currentResult.data || {}
+      const updatedSettings = { ...currentSettings, ...settings }
+      localStorage.setItem('lead_notification_settings', JSON.stringify(updatedSettings))
+    }
+    return { success: true }
+  }
+}
+
+// ============================================================================
+// CUSTOMIZATION SETTINGS FUNCTIONS
+// ============================================================================
+
+export interface LeadCustomizationSettings {
+  primary_color?: string
+  logo_url?: string
+  company_name?: string
+  default_thank_you_message?: string
+  default_redirect_url?: string
+  default_stages_template?: string
+}
+
+export async function getLeadCustomizationSettings(): Promise<{ success: boolean; data?: LeadCustomizationSettings; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('*')
+      .eq('setting_key', 'lead_customization')
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        return { success: true, data: {} }
+      }
+      return { success: false, error: error.message || 'Failed to fetch settings' }
+    }
+
+    if (data && data.setting_value) {
+      const settings = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value
+      return { success: true, data: settings }
+    }
+
+    return { success: true, data: {} }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch customization settings' }
+  }
+}
+
+export async function saveLeadCustomizationSettings(settings: Partial<LeadCustomizationSettings>): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const currentResult = await getLeadCustomizationSettings()
+    const currentSettings = currentResult.data || {}
+    const updatedSettings = { ...currentSettings, ...settings }
+
+    const { error: upsertError } = await supabase
+      .from('app_settings')
+      .upsert({
+        setting_key: 'lead_customization',
+        setting_value: updatedSettings,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'setting_key'
+      })
+
+    if (upsertError) {
+      if (upsertError.message?.includes('does not exist')) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('lead_customization_settings', JSON.stringify(updatedSettings))
+        }
+        return { success: true }
+      }
+      return { success: false, error: upsertError.message || 'Failed to save settings' }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error saving customization settings:', error)
+    if (typeof window !== 'undefined') {
+      const currentResult = await getLeadCustomizationSettings()
+      const currentSettings = currentResult.data || {}
+      const updatedSettings = { ...currentSettings, ...settings }
+      localStorage.setItem('lead_customization_settings', JSON.stringify(updatedSettings))
+    }
+    return { success: true }
+  }
+}
+
