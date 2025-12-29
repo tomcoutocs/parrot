@@ -10,12 +10,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, full_name, company_id, role, invited_by, tab_permissions, company_name, inviter_name } = body
 
-    if (!email || !full_name || !company_id || !role || !invited_by) {
+    if (!email || !full_name || !role || !invited_by) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
+    // company_id can be null for internal/admin users
 
     const result = await createUserInvitation({
       email,

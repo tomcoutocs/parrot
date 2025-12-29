@@ -6201,6 +6201,15 @@ export async function deleteSpaceBookmark(
 }
 
 // User Invitation System Functions
+// Helper function to map database response (space_id) to include company_id for backward compatibility
+function mapInvitationData(data: any): UserInvitation {
+  return {
+    ...data,
+    company_id: data.space_id || data.company_id || null,
+    space_id: data.space_id || data.company_id || null
+  }
+}
+
 export async function createUserInvitation(invitationData: {
   email: string
   full_name: string
@@ -6232,7 +6241,7 @@ export async function createUserInvitation(invitationData: {
       .insert({
         email: invitationData.email,
         full_name: invitationData.full_name,
-        company_id: invitationData.company_id,
+        space_id: invitationData.company_id,
         role: invitationData.role,
         invited_by: invitationData.invited_by,
         invitation_token: invitationToken,
@@ -6247,7 +6256,7 @@ export async function createUserInvitation(invitationData: {
       return { success: false, error: error.message || 'Failed to create invitation' }
     }
 
-    return { success: true, data }
+    return { success: true, data: mapInvitationData(data) }
   } catch (error) {
     return { success: false, error: 'Failed to create invitation' }
   }
@@ -6297,7 +6306,7 @@ export async function createBulkUserInvitations(invitations: Array<{
       return {
         email: invitation.email,
         full_name: invitation.full_name,
-        company_id: invitation.company_id,
+        space_id: invitation.company_id,
         role: invitation.role,
         invited_by: invitation.invited_by,
         invitation_token: invitationToken,
@@ -6320,7 +6329,7 @@ export async function createBulkUserInvitations(invitations: Array<{
     // Note: Invitations are already stored in user_invitations table
     // Activities are derived from that table, so no need to duplicate in activity_logs
 
-    return { success: true, data }
+    return { success: true, data: data?.map(mapInvitationData) || [] }
   } catch (error) {
     console.error('Error creating bulk user invitations:', error)
     return { success: false, error: 'Failed to create invitations' }
@@ -6351,7 +6360,7 @@ export async function getInvitationByToken(token: string): Promise<{ success: bo
       return { success: false, error: 'Invitation has expired' }
     }
 
-    return { success: true, data }
+    return { success: true, data: mapInvitationData(data) }
   } catch (error) {
     return { success: false, error: 'Failed to get invitation' }
   }
@@ -6374,12 +6383,13 @@ export async function acceptInvitation(token: string, password: string): Promise
     const invitation = invitationResult.data
 
     // Create the user
+    const spaceId = invitation.space_id || invitation.company_id
     const userData = {
       email: invitation.email,
       full_name: invitation.full_name,
       role: invitation.role,
       password: password,
-      company_id: invitation.company_id,
+      company_id: spaceId || undefined, // Convert null to undefined
       tab_permissions: invitation.tab_permissions
     }
 
@@ -6424,7 +6434,7 @@ export async function getPendingInvitations(companyId?: string): Promise<{ succe
       .order('created_at', { ascending: false })
 
     if (companyId) {
-      query = query.eq('company_id', companyId)
+      query = query.eq('space_id', companyId)
     }
 
     const { data, error } = await query
@@ -6433,7 +6443,7 @@ export async function getPendingInvitations(companyId?: string): Promise<{ succe
       return { success: false, error: error.message || 'Failed to fetch invitations' }
     }
 
-    return { success: true, data }
+    return { success: true, data: data?.map(mapInvitationData) || [] }
   } catch (error) {
     return { success: false, error: 'Failed to fetch invitations' }
   }

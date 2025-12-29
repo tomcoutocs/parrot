@@ -334,7 +334,8 @@ export interface UserInvitation {
   id: string
   email: string
   full_name: string
-  company_id: string
+  space_id: string | null
+  company_id?: string | null // Deprecated: kept for backward compatibility, use space_id
   role: 'admin' | 'manager' | 'user' | 'internal'
   invited_by: string
   invitation_token: string

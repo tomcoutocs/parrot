@@ -26,7 +26,7 @@ export interface BulkInvitationEmailData extends InvitationEmailData {
   id: string
   email: string
   full_name: string
-  company_id: string
+  company_id: string | null
   role: string
   invited_by: string
   invitation_token: string

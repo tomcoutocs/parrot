@@ -27,12 +27,13 @@ export async function POST(request: NextRequest) {
 
     // Validate each invitation
     for (const invitation of invitations) {
-      if (!invitation.email || !invitation.full_name || !invitation.company_id || !invitation.role || !invitation.invited_by) {
+      if (!invitation.email || !invitation.full_name || !invitation.role || !invitation.invited_by) {
         return NextResponse.json(
           { error: 'Missing required fields in one or more invitations' },
           { status: 400 }
         )
       }
+      // company_id can be null for internal/admin users
     }
 
     const result = await createBulkUserInvitations(invitations)
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
         id: invitation.id,
         email: invitation.email,
         full_name: invitation.full_name,
-        company_id: invitation.company_id,
+        company_id: invitation.space_id || invitation.company_id || null,
         invited_by: invitation.invited_by,
         invitation_token: invitation.invitation_token,
         expires_at: invitation.expires_at,
