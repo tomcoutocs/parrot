@@ -95,7 +95,7 @@ export default function UserInvitationModal({ open, onOpenChange, companies, sel
       const invitations = users.map(user => ({
         email: user.email,
         full_name: user.full_name,
-        company_id: selectedCompany || null, // Allow null for internal/admin users
+        company_id: selectedCompany && selectedCompany.trim() !== '' ? selectedCompany : null, // Convert empty string to null
         role: user.role,
         invited_by: session.user.id,
         tab_permissions: defaultTabPermissions

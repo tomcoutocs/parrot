@@ -6236,12 +6236,17 @@ export async function createUserInvitation(invitationData: {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + expiryDays)
     
+    // Convert empty string to null for space_id (UUID field)
+    const spaceId = invitationData.company_id && invitationData.company_id.trim() !== '' 
+      ? invitationData.company_id 
+      : null
+
     const { data, error } = await supabase
       .from('user_invitations')
       .insert({
         email: invitationData.email,
         full_name: invitationData.full_name,
-        space_id: invitationData.company_id,
+        space_id: spaceId,
         role: invitationData.role,
         invited_by: invitationData.invited_by,
         invitation_token: invitationToken,
@@ -6303,10 +6308,15 @@ export async function createBulkUserInvitations(invitations: Array<{
         if (defaultPerms.analytics) tabPermissions.push('analytics')
       }
       
+      // Convert empty string to null for space_id (UUID field)
+      const spaceId = invitation.company_id && invitation.company_id.trim() !== '' 
+        ? invitation.company_id 
+        : null
+
       return {
         email: invitation.email,
         full_name: invitation.full_name,
-        space_id: invitation.company_id,
+        space_id: spaceId,
         role: invitation.role,
         invited_by: invitation.invited_by,
         invitation_token: invitationToken,
