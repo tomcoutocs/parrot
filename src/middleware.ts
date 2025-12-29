@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Set this to 'false' to disable the password lock
-const ENABLE_PASSWORD_LOCK = process.env.ENABLE_PASSWORD_LOCK !== 'false'
+const ENABLE_PASSWORD_LOCK = false
 
 export function middleware(request: NextRequest) {
   // Skip password lock if disabled
