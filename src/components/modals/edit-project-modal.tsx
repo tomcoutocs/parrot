@@ -66,7 +66,7 @@ export default function EditProjectModal({
       setDescription(project.description || '')
       setStatus(project.status)
       setManagerId(project.manager_id || 'none')
-      setCompanyId(project.company_id || '')
+      setCompanyId(((project as any).space_id || project.company_id) || '')
     }
   }, [project])
 

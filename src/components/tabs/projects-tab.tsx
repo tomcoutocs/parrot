@@ -938,7 +938,7 @@ export default function ProjectsTab({
   // Memoize filtered projects by current space (company)
   const filteredProjects = useMemo(() => 
     projects.filter(project => 
-      currentSpaceId ? project.company_id === currentSpaceId : true
+      currentSpaceId ? ((project as any).space_id || project.company_id) === currentSpaceId : true
     ),
     [projects, currentSpaceId]
   )
@@ -1001,7 +1001,7 @@ export default function ProjectsTab({
   // Handle space change - auto-select first project
   useEffect(() => {
     if (currentSpaceId && projects.length > 0 && !selectedProject) {
-      const firstProjectInSpace = projects.find(p => p.company_id === currentSpaceId)
+      const firstProjectInSpace = projects.find(p => ((p as any).space_id || p.company_id) === currentSpaceId)
       if (firstProjectInSpace) {
         handleProjectChange(firstProjectInSpace.id)
       }

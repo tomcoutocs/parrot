@@ -29,7 +29,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
-import { getPendingInvitations, createBulkUserInvitations, cancelInvitation } from '@/lib/database-functions'
+import { getPendingInvitations, cancelInvitation } from '@/lib/database-functions'
+import { fetchCompaniesOptimized } from '@/lib/optimized-database-functions'
 import type { UserInvitation } from '@/lib/supabase'
 
 interface InvitationUser {
@@ -59,6 +60,7 @@ export function UserManagementInvitations() {
   const [sending, setSending] = useState(false)
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [loading, setLoading] = useState(true)
+  const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([])
 
   useEffect(() => {
     const loadInvitations = async () => {
@@ -186,16 +188,29 @@ export function UserManagementInvitations() {
         return {
           email: user.email,
           full_name: user.full_name,
-          company_id: '', // Empty string for internal users (function expects string, not null)
+          company_id: null, // null for internal/admin users (no space assignment)
           role: user.role,
           invited_by: session.user.id,
           tab_permissions: tabPermissions
         }
       })
 
-      const result = await createBulkUserInvitations(invitations)
+      // Use the API route which handles email sending
+      const response = await fetch('/api/invitations/bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invitations,
+          company_name: 'Parrot Portal', // Default company name for internal users
+          inviter_name: session.user.name || 'Administrator'
+        }),
+      })
 
-      if (!result.success) {
+      const result = await response.json()
+
+      if (!response.ok) {
         toastError(result.error || 'Failed to send invitations')
         return
       }

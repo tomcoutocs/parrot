@@ -171,7 +171,8 @@ export interface Project {
   description?: string
   created_by: string
   manager_id?: string | null
-  company_id?: string
+  company_id?: string // Deprecated: kept for backward compatibility, use space_id
+  space_id?: string
   status: 'active' | 'archived' | 'completed'
   position?: number
   created_at: string

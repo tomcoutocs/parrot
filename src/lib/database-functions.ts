@@ -432,15 +432,15 @@ export async function createTask(taskData: Omit<Task, 'id' | 'created_at' | 'upd
       return null
     }
 
-    // Fetch project to get company_id
+    // Fetch project to get space_id
     let companyId: string | undefined = undefined
     if (taskData.project_id) {
       const { data: projectData } = await supabase
         .from('projects')
-        .select('company_id')
+        .select('space_id')
         .eq('id', taskData.project_id)
         .single()
-      companyId = projectData?.company_id || undefined
+      companyId = projectData?.space_id || undefined
     }
 
     // Log activity to activity_logs
@@ -482,11 +482,12 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
 
   try {
     // Explicitly define the fields to insert to avoid any unexpected fields
-    const insertData = {
+    const projectDataWithSpace = projectData as Project
+    const insertData: any = {
       name: projectData.name,
       description: projectData.description,
       manager_id: projectData.manager_id,
-      company_id: projectData.company_id,
+      space_id: projectDataWithSpace.space_id || projectData.company_id || undefined,
       status: projectData.status,
       created_by: projectData.created_by || userId,
       created_at: new Date().toISOString(),
@@ -497,8 +498,8 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
     if (!insertData.name || insertData.name.trim() === '') {
       return { success: false, error: 'Project name is required' }
     }
-    if (!insertData.company_id) {
-      return { success: false, error: 'Company ID is required' }
+    if (!insertData.space_id) {
+      return { success: false, error: 'Space ID is required' }
     }
     if (!insertData.created_by) {
       return { success: false, error: 'Created by user ID is required' }
@@ -526,7 +527,7 @@ export async function createProject(projectData: Omit<Project, 'id' | 'created_a
       entity_id: data.id,
       description: `Created project "${data.name}"`,
       metadata: { name: data.name, status: data.status },
-      company_id: data.company_id,
+      company_id: (data as any).space_id || (data as any).company_id || undefined,
       project_id: data.id,
     })
     
@@ -578,7 +579,7 @@ export async function updateProject(projectId: string, projectData: Partial<Proj
     // Get current project data for activity log
     const { data: currentProject } = await supabase
       .from('projects')
-      .select('name, company_id')
+      .select('name, space_id')
       .eq('id', projectId)
       .single()
     
@@ -609,7 +610,7 @@ export async function updateProject(projectId: string, projectData: Partial<Proj
           project_name: data.name || currentProject?.name,
           updated_fields: Object.keys(projectData)
         },
-        company_id: data.company_id || currentProject?.company_id,
+        company_id: (data as any).space_id || (currentProject as any)?.space_id || (data as any).company_id || (currentProject as any)?.company_id || undefined,
         project_id: projectId,
       })
     }
@@ -631,7 +632,7 @@ export async function archiveProject(projectId: string): Promise<{ success: bool
     // Get project data for activity log
     const { data: project } = await supabase
       .from('projects')
-      .select('name, company_id')
+      .select('name, space_id')
       .eq('id', projectId)
       .single()
     
@@ -657,7 +658,7 @@ export async function archiveProject(projectId: string): Promise<{ success: bool
         entity_id: projectId,
         description: `Archived project "${project.name}"`,
         metadata: { project_name: project.name },
-        company_id: project.company_id,
+        company_id: project.space_id || undefined,
         project_id: projectId,
       })
     }
@@ -735,7 +736,7 @@ export async function deleteProject(projectId: string, currentUserId?: string): 
     // Get project data before deletion for activity log
     const { data: project } = await supabase
       .from('projects')
-      .select('name, company_id')
+      .select('name, space_id')
       .eq('id', projectId)
       .single()
     
@@ -771,7 +772,7 @@ export async function deleteProject(projectId: string, currentUserId?: string): 
         entity_id: projectId,
         description: `Deleted project "${project.name}"`,
         metadata: { project_name: project.name },
-        company_id: project.company_id,
+        company_id: project.space_id || undefined,
         project_id: projectId,
       })
     }
@@ -2480,7 +2481,7 @@ export async function createDefaultOnboardingProject(
       {
         name: 'Onboarding',
         description: 'Default onboarding project',
-        company_id: spaceId, // Database column is still company_id
+        space_id: spaceId,
         status: 'active',
         manager_id: null,
         created_by: userId
@@ -2842,23 +2843,10 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
 
     // Delete related data in the correct order (cascading deletion)
     // 1. Delete activity logs for tasks in projects belonging to this space
-    // Try space_id first (after migration), fallback to company_id
-    let { data: projects } = await supabase
+    const { data: projects } = await supabase
       .from('projects')
       .select('id')
       .eq('space_id', spaceId)
-
-    // If space_id column doesn't exist (migration not run), try company_id
-    if (!projects || projects.length === 0) {
-      const fallback = await supabase
-        .from('projects')
-        .select('id')
-        .eq('company_id', spaceId)
-      
-      if (!fallback.error && fallback.data) {
-        projects = fallback.data
-      }
-    }
 
     if (projects && projects.length > 0) {
       const projectIds = projects.map(p => p.id)
@@ -6237,6 +6225,8 @@ export async function createUserInvitation(invitationData: {
     expiresAt.setDate(expiresAt.getDate() + expiryDays)
     
     // Convert empty string to null for space_id (UUID field)
+    // Note: The space_id column must be nullable in the database for this to work
+    // Run the migration: make_user_invitations_space_id_nullable.sql
     const spaceId = invitationData.company_id && invitationData.company_id.trim() !== '' 
       ? invitationData.company_id 
       : null
@@ -6309,6 +6299,8 @@ export async function createBulkUserInvitations(invitations: Array<{
       }
       
       // Convert empty string to null for space_id (UUID field)
+      // Note: The space_id column must be nullable in the database for this to work
+      // Run the migration: make_user_invitations_space_id_nullable.sql
       const spaceId = invitation.company_id && invitation.company_id.trim() !== '' 
         ? invitation.company_id 
         : null

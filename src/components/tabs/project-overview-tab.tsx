@@ -110,7 +110,8 @@ export default function ProjectOverviewTab() {
       const tasksWithCompany = allTasks
         .map(task => {
           const project = allProjects.find(p => p.id === task.project_id)
-          const company = project ? allCompanies.find(c => c.id === project.company_id) : undefined
+          const projectSpaceId = project ? ((project as any).space_id || project.company_id) : undefined
+          const company = projectSpaceId ? allCompanies.find(c => c.id === projectSpaceId) : undefined
           return {
             ...task,
             company: company ? {

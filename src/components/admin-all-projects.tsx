@@ -31,8 +31,9 @@ export function AdminAllProjects() {
   const handleProjectClick = (project: ProjectWithCompany) => {
     // Navigate to projects tab with the selected project and space
     // Use window.location to ensure full navigation and state reset
-    if (project.company_id) {
-      window.location.href = `/dashboard?tab=projects&projectId=${project.id}&space=${project.company_id}`
+    const projectSpaceId = (project as any).space_id || project.company_id
+    if (projectSpaceId) {
+      window.location.href = `/dashboard?tab=projects&projectId=${project.id}&space=${projectSpaceId}`
     } else {
       window.location.href = `/dashboard?tab=projects&projectId=${project.id}`
     }
