@@ -16,7 +16,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  User
+  User,
+  Activity
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +39,7 @@ import { UserManagementUsers } from './tabs/user-management-users'
 import { UserManagementInvitations } from './tabs/user-management-invitations'
 import { UserManagementPermissions } from './tabs/user-management-permissions'
 import { UserManagementSettings } from './tabs/user-management-settings'
+import { UserManagementActivity } from './tabs/user-management-activity'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 
@@ -51,6 +53,7 @@ const navigationItems = [
   { id: 'users', label: 'Users', icon: Users },
   { id: 'invitations', label: 'Invitations', icon: Mail },
   { id: 'permissions', label: 'Permissions', icon: Shield },
+  { id: 'activity', label: 'Activity Feed', icon: Activity },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
@@ -150,6 +153,8 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
         return <UserManagementInvitations />
       case 'permissions':
         return <UserManagementPermissions />
+      case 'activity':
+        return <UserManagementActivity />
       case 'settings':
         return <UserManagementSettings />
       default:

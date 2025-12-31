@@ -1739,11 +1739,40 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
     }
     
     // Get user info before deleting for activity log
-    const { data: userToDelete, error: fetchError } = await supabase
+    // Try space_id first (after migration), fallback to company_id for backward compatibility
+    let userToDelete: any = null
+    let fetchError: any = null
+    
+    let { data, error: selectError } = await supabase
       .from('users')
-      .select('id, email, full_name, company_id')
+      .select('id, email, full_name, space_id')
       .eq('id', userId)
       .single()
+    
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (selectError && (selectError.message?.includes('does not exist') || selectError.message?.includes('column') || (selectError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('users')
+        .select('id, email, full_name, company_id')
+        .eq('id', userId)
+        .single()
+      
+      if (!fallback.error && fallback.data) {
+        // Normalize fallback data to include space_id (mapped from company_id)
+        userToDelete = {
+          ...fallback.data,
+          space_id: fallback.data.company_id || null
+        }
+        fetchError = null
+      } else {
+        fetchError = fallback.error
+      }
+    } else if (!selectError && data) {
+      userToDelete = data
+      fetchError = null
+    } else {
+      fetchError = selectError
+    }
     
     if (fetchError || !userToDelete) {
       return { success: false, error: fetchError?.message || 'User not found' }
@@ -1839,7 +1868,8 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
           deleted_user_email: userToDelete.email,
           deleted_user_name: userToDelete.full_name 
         },
-        company_id: userToDelete.company_id || undefined,
+        space_id: userToDelete.space_id || undefined,
+        company_id: userToDelete.company_id || undefined, // Fallback for backward compatibility
       })
     }
 
@@ -2967,10 +2997,25 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
     }
 
     // 6. Delete projects (cascade should handle tasks, but we'll be explicit)
-    const { error: projectsError } = await supabase
+    // Try space_id first (after migration), fallback to company_id for backward compatibility
+    let { error: projectsError } = await supabase
       .from('projects')
       .delete()
-      .eq('company_id', spaceId)
+      .eq('space_id', spaceId)
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (projectsError && (projectsError.message?.includes('does not exist') || projectsError.message?.includes('column') || (projectsError as any).code === '42703')) {
+      const fallback = await supabase
+        .from('projects')
+        .delete()
+        .eq('company_id', spaceId)
+      
+      if (!fallback.error) {
+        projectsError = null
+      } else {
+        projectsError = fallback.error
+      }
+    }
 
     if (projectsError) {
       console.error('Error deleting projects:', projectsError)
@@ -2993,10 +3038,25 @@ export async function deleteSpace(spaceId: string): Promise<{ success: boolean; 
 
     // 8. Delete form_submissions (if table exists)
     try {
-      const { error: formSubmissionsError } = await supabase
+      // Try space_id first (after migration), fallback to company_id for backward compatibility
+      let { error: formSubmissionsError } = await supabase
         .from('form_submissions')
         .delete()
-        .eq('company_id', spaceId)
+        .eq('space_id', spaceId)
+
+      // If space_id column doesn't exist (migration not run), try company_id
+      if (formSubmissionsError && (formSubmissionsError.message?.includes('does not exist') || formSubmissionsError.message?.includes('column') || (formSubmissionsError as any).code === '42703')) {
+        const fallback = await supabase
+          .from('form_submissions')
+          .delete()
+          .eq('company_id', spaceId)
+        
+        if (!fallback.error) {
+          formSubmissionsError = null
+        } else {
+          formSubmissionsError = fallback.error
+        }
+      }
 
       if (formSubmissionsError && !formSubmissionsError.message.includes('does not exist')) {
         console.warn('Error deleting form submissions:', formSubmissionsError)
@@ -3366,32 +3426,95 @@ export async function submitForm(formId: string, submissionData: Record<string, 
     }
     
     // Use database function to bypass PostgREST checks that might reference forms.company_id
-    const { data, error: rpcError } = await supabase.rpc('submit_form_submission', {
+    // Try space_id parameter first (after migration), fallback to company_id for backward compatibility
+    let rpcData = null
+    let rpcError = null
+    
+    // Helper function to check if error is meaningful
+    const hasMeaningfulRpcError = (err: any): boolean => {
+      if (!err) return false
+      const errorStr = JSON.stringify(err)
+      if (errorStr === '{}' || errorStr === 'null' || errorStr === 'undefined') {
+        return false
+      }
+      return !!(err.message || err.code || err.details || err.hint)
+    }
+
+    // Try with p_space_id first (after migration)
+    const spaceResult = await supabase.rpc('submit_form_submission', {
       p_form_id: formId,
       p_user_id: userId,
       p_submission_data: submissionData,
-      p_company_id: spaceId || null
+      p_space_id: spaceId || null
     })
-
-    if (rpcError) {
-      console.error('Error calling submit_form_submission function:', {
-        message: rpcError.message,
-        details: rpcError.details,
-        hint: rpcError.hint,
-        code: rpcError.code,
-        fullError: JSON.stringify(rpcError, null, 2)
+    
+    // If we got data back, treat as success (even if there's an empty error object)
+    if (spaceResult.data) {
+      rpcData = spaceResult.data
+      rpcError = null
+    } else if (spaceResult.error && hasMeaningfulRpcError(spaceResult.error)) {
+      // Only set error if it's meaningful
+      rpcError = spaceResult.error
+      
+      // Try with p_company_id as fallback (backward compatibility)
+      const companyResult = await supabase.rpc('submit_form_submission', {
+        p_form_id: formId,
+        p_user_id: userId,
+        p_submission_data: submissionData,
+        p_company_id: spaceId || null
       })
       
-      // Fallback to direct insert if function doesn't exist
+      // If we got data back from fallback, treat as success
+      if (companyResult.data) {
+        rpcData = companyResult.data
+        rpcError = null
+      } else if (companyResult.error && hasMeaningfulRpcError(companyResult.error)) {
+        rpcError = companyResult.error
+      }
+    }
+
+    // If RPC failed with a meaningful error OR returned no data, fallback to direct insert
+    if ((rpcError && hasMeaningfulRpcError(rpcError)) || !rpcData) {
+      if (rpcError && hasMeaningfulRpcError(rpcError)) {
+        console.warn('RPC function failed, falling back to direct insert:', {
+          message: rpcError.message,
+          details: rpcError.details,
+          hint: rpcError.hint,
+          code: rpcError.code
+        })
+      } else if (!rpcData) {
+        console.log('RPC function returned no data, falling back to direct insert...')
+      }
+      
+      // Fallback to direct insert if function doesn't exist or failed
       console.log('Falling back to direct insert...')
-      const { error: insertError } = await supabase
+      // Try space_id first (after migration), fallback to company_id for backward compatibility
+      let { error: insertError } = await supabase
         .from('form_submissions')
         .insert({
           form_id: formId,
           user_id: userId,
           submission_data: submissionData,
-          company_id: spaceId || null
+          space_id: spaceId || null
         })
+
+      // If space_id column doesn't exist (migration not run), try company_id
+      if (insertError && (insertError.message?.includes('does not exist') || insertError.message?.includes('column') || (insertError as any).code === '42703')) {
+        const fallback = await supabase
+          .from('form_submissions')
+          .insert({
+            form_id: formId,
+            user_id: userId,
+            submission_data: submissionData,
+            company_id: spaceId || null
+          })
+        
+        if (!fallback.error) {
+          insertError = null
+        } else {
+          insertError = fallback.error
+        }
+      }
 
       if (insertError) {
         console.error('Error inserting form submission:', {
@@ -3469,8 +3592,8 @@ export async function submitForm(formId: string, submissionData: Record<string, 
     }
 
     // Function call succeeded - data is now the UUID of the inserted row
-    if (data) {
-      const submissionId = typeof data === 'string' ? data : String(data)
+    if (rpcData) {
+      const submissionId = typeof rpcData === 'string' ? rpcData : String(rpcData)
       // Construct submission object with the returned ID
       const submission: FormSubmission = {
         id: submissionId,
@@ -3611,15 +3734,36 @@ export async function fetchUserFormSubmissions(userId: string): Promise<FormSubm
     console.log('Fetching user form submissions:', userId)
     
     // Try with the foreign key relationship first
+    // Try space_id foreign key first (after migration), fallback to company_id for backward compatibility
     let { data, error } = await supabase
       .from('form_submissions')
       .select(`
         *,
         form:forms(id, title, description),
-        company:companies!form_submissions_company_id_fkey(id, name)
+        company:spaces!form_submissions_space_id_fkey(id, name)
       `)
       .eq('user_id', userId)
       .order('submitted_at', { ascending: false })
+
+    // If space_id foreign key doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('foreign key') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('form_submissions')
+        .select(`
+          *,
+          form:forms(id, title, description),
+          company:companies!form_submissions_company_id_fkey(id, name)
+        `)
+        .eq('user_id', userId)
+        .order('submitted_at', { ascending: false })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     // Helper function to check if error is meaningful
     const hasMeaningfulError = (err: any): boolean => {
@@ -3853,15 +3997,36 @@ export async function fetchFormSubmissions(formId: string): Promise<FormSubmissi
 
   try {
     console.log('Fetching form submissions:', formId)
-    const { data, error } = await supabase
+    // Try space_id foreign key first (after migration), fallback to company_id for backward compatibility
+    let { data, error } = await supabase
       .from('form_submissions')
       .select(`
         *,
         user:users!form_submissions_user_id_fkey(id, full_name, email),
-        company:companies!form_submissions_company_id_fkey(id, name)
+        company:spaces!form_submissions_space_id_fkey(id, name)
       `)
       .eq('form_id', formId)
       .order('submitted_at', { ascending: false })
+
+    // If space_id foreign key doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('foreign key') || (error as any).code === '42703')) {
+      const fallback = await supabase
+        .from('form_submissions')
+        .select(`
+          *,
+          user:users!form_submissions_user_id_fkey(id, full_name, email),
+          company:companies!form_submissions_company_id_fkey(id, name)
+        `)
+        .eq('form_id', formId)
+        .order('submitted_at', { ascending: false })
+      
+      if (!fallback.error) {
+        data = fallback.data
+        error = null
+      } else {
+        error = fallback.error
+      }
+    }
 
     console.log('Form submissions query result:', { data, error })
 

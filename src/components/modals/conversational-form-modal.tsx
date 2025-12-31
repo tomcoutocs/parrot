@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from '@/components/providers/session-provider'
+import { useTheme } from '@/components/providers/theme-provider'
 import { submitForm } from '@/lib/database-functions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +79,7 @@ export default function ConversationalFormModal({
   theme 
 }: ConversationalFormModalProps) {
   const { data: session } = useSession()
+  const { resolvedTheme } = useTheme()
   const [formData, setFormData] = useState<Record<string, unknown>>({})
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -108,13 +110,19 @@ export default function ConversationalFormModal({
       console.log('Using theme prop:', theme)
     }
     
+    // Determine if we should use dark mode defaults
+    // Only use dark mode if no custom theme is provided (parsedTheme or theme prop)
+    const hasCustomTheme = parsedTheme?.backgroundColor || parsedTheme?.textColor || theme?.backgroundColor || theme?.textColor
+    const isDarkMode = resolvedTheme === 'dark' && !hasCustomTheme
+    
     // Ensure all theme properties have defaults
+    // Use dark mode colors if in dark mode and no custom theme is provided
     const finalTheme = {
-      primaryColor: parsedTheme?.primaryColor || '#f97316',
-      backgroundColor: parsedTheme?.backgroundColor || '#ffffff',
-      textColor: parsedTheme?.textColor || '#000000',
-      fontFamily: parsedTheme?.fontFamily || 'inherit',
-      buttonColor: parsedTheme?.buttonColor || parsedTheme?.primaryColor || '#f97316'
+      primaryColor: parsedTheme?.primaryColor || theme?.primaryColor || '#f97316',
+      backgroundColor: parsedTheme?.backgroundColor || theme?.backgroundColor || (isDarkMode ? '#1f2937' : '#ffffff'),
+      textColor: parsedTheme?.textColor || theme?.textColor || (isDarkMode ? '#f3f4f6' : '#000000'),
+      fontFamily: parsedTheme?.fontFamily || theme?.fontFamily || 'inherit',
+      buttonColor: parsedTheme?.buttonColor || theme?.buttonColor || parsedTheme?.primaryColor || theme?.primaryColor || '#f97316'
     }
     console.log('Final form theme:', finalTheme)
     return finalTheme
@@ -705,7 +713,7 @@ export default function ConversationalFormModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] p-0 border-0 overflow-hidden" style={{
+      <DialogContent className="sm:max-w-[700px] p-0 border-0 overflow-hidden !bg-transparent" style={{
         backgroundColor: formTheme.backgroundColor,
         color: formTheme.textColor,
         fontFamily: formTheme.fontFamily

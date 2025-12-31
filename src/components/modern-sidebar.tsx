@@ -117,7 +117,6 @@ export function ModernSidebar({
     { id: "all-users", label: "All Users", icon: Users },
     { id: "calendar", label: "Calendar", icon: Calendar },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
-    { id: "team", label: "Team", icon: Users },
     { id: "forms", label: "Forms", icon: FileText },
   ]
 

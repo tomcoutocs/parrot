@@ -192,9 +192,36 @@ export default function AppsPage() {
     },
   ]
 
-  // Set availability based on user role - admin-only apps are unavailable for non-admins
+  // Check if user has permission for an app (has at least one tab permission)
+  const hasAppPermission = (appId: string): boolean => {
+    if (!session?.user) return false
+    if (session.user.role === 'admin') return true // Admins have all permissions
+    
+    const tabPermissions = session.user.tab_permissions || []
+    
+    // Check for new format (app:tab) - user needs at least one tab permission
+    const hasAnyTab = tabPermissions.some(perm => perm.startsWith(`${appId}:`))
+    
+    // Check for old format (just app name) - grants all tabs
+    const hasAppLevel = tabPermissions.includes(appId)
+    
+    return hasAnyTab || hasAppLevel
+  }
+
+  // Set availability based on user role and permissions
   const apps = allApps.map(app => {
-    if (app.adminOnly && session?.user?.role !== 'admin') {
+    // Admin-only apps require admin role AND app permission
+    if (app.adminOnly) {
+      if (session?.user?.role !== 'admin') {
+        return { ...app, available: false }
+      }
+      // Even admins need explicit permission (unless they have all permissions)
+      if (!hasAppPermission(app.id)) {
+        return { ...app, available: false }
+      }
+    }
+    // For non-admin-only apps, check permissions
+    if (!hasAppPermission(app.id)) {
       return { ...app, available: false }
     }
     return app

@@ -22,7 +22,6 @@ const AdminAllProjects = dynamic(() => import("./admin-all-projects").then(m => 
 const AdminAllTasks = dynamic(() => import("./admin-all-tasks").then(m => ({ default: m.AdminAllTasks })), { ssr: false })
 const AdminDashboard = dynamic(() => import("./admin-dashboard").then(m => ({ default: m.AdminDashboard })), { ssr: false })
 const AdminAnalytics = dynamic(() => import("./admin-analytics").then(m => ({ default: m.AdminAnalytics })), { ssr: false })
-const AdminTeam = dynamic(() => import("./admin-team").then(m => ({ default: m.AdminTeam })), { ssr: false })
 const AdminAllUsers = dynamic(() => import("./admin-all-users").then(m => ({ default: m.AdminAllUsers })), { ssr: false })
 const ModernOverviewTab = dynamic(() => import("./modern-overview-tab").then(m => ({ default: m.ModernOverviewTab })), { ssr: false })
 const ModernDashboardTab = dynamic(() => import("./modern-dashboard-tab").then(m => ({ default: m.ModernDashboardTab })), { ssr: false })
@@ -113,7 +112,7 @@ export function ModernDashboardLayout({
     // When in a space, "admin" tab shows space users in client mode
     if (activeTab === "admin" && !currentSpaceId) {
       setViewMode("admin")
-      setAdminView("team") // Set adminView to "team" to show AdminTeam component
+      setAdminView("all-users") // Show all users view instead of team
       return
     }
     
@@ -406,7 +405,7 @@ export function ModernDashboardLayout({
     }
     
     // Map admin views to existing tabs for URL/routing
-    // All admin views use "spaces" tab (which is the admin dashboard) except team which uses "admin" tab
+    // All admin views use "spaces" tab (which is the admin dashboard)
     const tabMap: Record<string, string> = {
       dashboard: "spaces",
       projects: "spaces", // Use spaces tab for admin projects view (shows AdminAllProjects)
@@ -414,7 +413,6 @@ export function ModernDashboardLayout({
       calendar: "spaces", // Use spaces tab for admin calendar view
       "all-users": "spaces", // Use spaces tab for admin all users view
       analytics: "spaces", // Use spaces tab for admin analytics view
-      team: "admin", // Use admin tab for team view
     }
     const mappedTab = tabMap[view] || "spaces"
     
@@ -522,8 +520,7 @@ export function ModernDashboardLayout({
                   {adminView === "calendar" && "Calendar"}
                   {adminView === "all-users" && "All Users"}
                   {adminView === "analytics" && "Analytics"}
-                  {adminView === "team" && "Team"}
-                  {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics", "team"].includes(adminView) && "Admin Dashboard"}
+                  {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics"].includes(adminView) && "Admin Dashboard"}
                 </h2>
               </div>
             ) : activeTab === "user-dashboard" ? (
@@ -672,8 +669,7 @@ export function ModernDashboardLayout({
                 {adminView === "calendar" && <ModernCalendarTab activeSpace={null} />}
                 {adminView === "all-users" && <AdminAllUsers />}
                 {adminView === "analytics" && <AdminAnalytics />}
-                {adminView === "team" && <AdminTeam />}
-                {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics", "team"].includes(adminView) && children}
+                {!["projects", "dashboard", "tasks", "calendar", "all-users", "analytics"].includes(adminView) && children}
               </>
             ) : (
               <>
