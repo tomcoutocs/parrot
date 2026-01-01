@@ -137,6 +137,29 @@ export function AnalyticsLayout({ activeTab, onTabChange }: AnalyticsLayoutProps
     }
   }, [session?.user?.id])
 
+  // Check if user has permission for a specific tab
+  const hasTabPermission = (tabId: string): boolean => {
+    if (!session?.user) return false
+    if (session.user.role === 'admin') return true // Admins have all permissions
+    
+    const tabPermissions = session.user.tab_permissions || []
+    const permissionKey = `analytics:${tabId}`
+    
+    // Check for new format (app:tab) or old format (just app name)
+    return tabPermissions.includes(permissionKey) || tabPermissions.includes('analytics')
+  }
+
+  // Filter navigation items based on permissions
+  const filteredNavigationItems = navigationItems.filter(item => hasTabPermission(item.id))
+
+  // If current tab is not accessible, redirect to first accessible tab
+  useEffect(() => {
+    if (!hasTabPermission(activeTab) && filteredNavigationItems.length > 0) {
+      onTabChange(filteredNavigationItems[0].id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, session?.user?.tab_permissions])
+
   // Get current tab display name
   const getTabDisplayName = () => {
     const tab = navigationItems.find(item => item.id === activeTab)
@@ -213,7 +236,7 @@ export function AnalyticsLayout({ activeTab, onTabChange }: AnalyticsLayoutProps
           )}
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {navigationItems.map((item) => {
+          {filteredNavigationItems.map((item) => {
             const Icon = item.icon
             const isActive = activeTab === item.id
             return (
