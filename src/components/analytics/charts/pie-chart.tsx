@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 interface PieChartProps {
   data: Array<{ name: string; value: number }>
   colors?: string[]
+  total?: number // Optional total for percentage calculation
 }
 
 const MODERN_COLORS = [
@@ -20,16 +21,35 @@ const MODERN_COLORS = [
   '#6366f1', // indigo
 ]
 
-const CustomTooltip = ({ active, payload }: any) => {
+const CustomTooltip = ({ active, payload, total }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0]
-    const total = data.payload.payload.reduce((sum: number, item: any) => sum + item.value, 0)
-    const percent = ((data.value / total) * 100).toFixed(1)
+    // Calculate total from payload array if available, otherwise use provided total
+    let calculatedTotal = total
+    if (!calculatedTotal && Array.isArray(payload)) {
+      calculatedTotal = payload.reduce((sum: number, item: any) => {
+        return sum + (item.value || 0)
+      }, 0)
+    }
+    // Fallback: try to get total from payload structure
+    if (!calculatedTotal && data.payload) {
+      if (Array.isArray(data.payload.payload)) {
+        calculatedTotal = data.payload.payload.reduce((sum: number, item: any) => sum + (item.value || 0), 0)
+      } else if (Array.isArray(data.payload)) {
+        calculatedTotal = data.payload.reduce((sum: number, item: any) => sum + (item.value || 0), 0)
+      }
+    }
+    // Final fallback: use the value itself if we can't calculate
+    if (!calculatedTotal || calculatedTotal === 0) {
+      calculatedTotal = data.value || 1
+    }
+    
+    const percent = ((data.value / calculatedTotal) * 100).toFixed(1)
     
     return (
       <div className="bg-background border border-border rounded-lg shadow-lg p-3 z-50">
         <p className="font-medium mb-1 text-foreground">{data.name}</p>
-        <p className="text-sm text-foreground" style={{ color: data.payload.fill }}>
+        <p className="text-sm text-foreground" style={{ color: data.payload?.fill || data.color }}>
           Value: <span className="font-semibold">{data.value.toLocaleString()}</span>
         </p>
         <p className="text-sm text-muted-foreground">
@@ -71,7 +91,7 @@ const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name
   )
 }
 
-export function AnalyticsPieChart({ data, colors = MODERN_COLORS }: PieChartProps) {
+export function AnalyticsPieChart({ data, colors = MODERN_COLORS, total }: PieChartProps) {
   if (!data || data.length === 0) {
     return (
       <div className="h-96 flex items-center justify-center text-muted-foreground">
@@ -79,6 +99,9 @@ export function AnalyticsPieChart({ data, colors = MODERN_COLORS }: PieChartProp
       </div>
     )
   }
+
+  // Calculate total from data if not provided
+  const calculatedTotal = total || data.reduce((sum, item) => sum + (item.value || 0), 0)
 
   return (
     <div className="w-full h-full">
@@ -116,7 +139,7 @@ export function AnalyticsPieChart({ data, colors = MODERN_COLORS }: PieChartProp
               />
             ))}
           </Pie>
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip total={calculatedTotal} />} />
           <Legend 
             verticalAlign="bottom"
             height={36}

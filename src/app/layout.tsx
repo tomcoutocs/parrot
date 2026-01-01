@@ -5,6 +5,8 @@ import { SessionProvider } from '@/components/providers/session-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import { Analytics } from '@vercel/analytics/react'
 import { Toaster } from 'sonner'
+import { TrackingProvider } from '@/components/analytics/tracking-provider'
+import '@/lib/analytics-tracking' // Initialize global tracking
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -35,7 +37,9 @@ export default function RootLayout({
       >
         <SessionProvider>
           <ThemeProvider>
-            {children}
+            <TrackingProvider>
+              {children}
+            </TrackingProvider>
           </ThemeProvider>
         </SessionProvider>
         <Toaster 

@@ -9621,6 +9621,193 @@ export async function saveLeadGenerationSettings(settings: Partial<LeadGeneratio
 }
 
 // ============================================================================
+// ANALYTICS SETTINGS FUNCTIONS
+// ============================================================================
+
+export interface AnalyticsSettings {
+  tracking: {
+    pageViewTracking: boolean
+    userBehaviorTracking: boolean
+    sessionRecording: boolean
+    ipAddressTracking: boolean
+  }
+  dataRetention: {
+    retentionPeriod: '3_months' | '6_months' | '1_year' | '2_years' | 'unlimited'
+    autoArchiveOldData: boolean
+  }
+  reports: {
+    defaultTimezone: 'utc' | 'est' | 'pst' | 'cst'
+    dateFormat: 'mm_dd_yyyy' | 'dd_mm_yyyy' | 'yyyy_mm_dd'
+    autoRefreshReports: boolean
+  }
+  export: {
+    defaultExportFormat: 'pdf' | 'csv' | 'excel' | 'json'
+  }
+}
+
+const DEFAULT_ANALYTICS_SETTINGS: AnalyticsSettings = {
+  tracking: {
+    pageViewTracking: true,
+    userBehaviorTracking: true,
+    sessionRecording: false,
+    ipAddressTracking: true,
+  },
+  dataRetention: {
+    retentionPeriod: '2_years',
+    autoArchiveOldData: true,
+  },
+  reports: {
+    defaultTimezone: 'utc',
+    dateFormat: 'mm_dd_yyyy',
+    autoRefreshReports: false,
+  },
+  export: {
+    defaultExportFormat: 'pdf',
+  },
+}
+
+export async function getAnalyticsSettings(): Promise<{ success: boolean; data?: AnalyticsSettings; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('*')
+      .eq('setting_key', 'analytics')
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        // Try localStorage fallback
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('analytics_settings')
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored)
+              return { success: true, data: { ...DEFAULT_ANALYTICS_SETTINGS, ...parsed } }
+            } catch {
+              // Invalid JSON, return defaults
+            }
+          }
+        }
+        return { success: true, data: DEFAULT_ANALYTICS_SETTINGS }
+      }
+      return { success: false, error: error.message || 'Failed to fetch settings' }
+    }
+
+    if (data && data.setting_value) {
+      const settings = typeof data.setting_value === 'string' 
+        ? JSON.parse(data.setting_value) 
+        : data.setting_value
+      return { success: true, data: { ...DEFAULT_ANALYTICS_SETTINGS, ...settings } }
+    }
+
+    return { success: true, data: DEFAULT_ANALYTICS_SETTINGS }
+  } catch (error: any) {
+    // Try localStorage fallback
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('analytics_settings')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          return { success: true, data: { ...DEFAULT_ANALYTICS_SETTINGS, ...parsed } }
+        } catch {
+          // Invalid JSON, return defaults
+        }
+      }
+    }
+    return { success: true, data: DEFAULT_ANALYTICS_SETTINGS }
+  }
+}
+
+export async function saveAnalyticsSettings(settings: Partial<AnalyticsSettings>): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Get current settings and merge with new ones
+    const currentResult = await getAnalyticsSettings()
+    const currentSettings = currentResult.data || DEFAULT_ANALYTICS_SETTINGS
+    
+    // Deep merge settings
+    const updatedSettings: AnalyticsSettings = {
+      tracking: { ...currentSettings.tracking, ...(settings.tracking || {}) },
+      dataRetention: { ...currentSettings.dataRetention, ...(settings.dataRetention || {}) },
+      reports: { ...currentSettings.reports, ...(settings.reports || {}) },
+      export: { ...currentSettings.export, ...(settings.export || {}) },
+    }
+
+    // Try to insert or update
+    const { error: upsertError } = await supabase
+      .from('app_settings')
+      .upsert({
+        setting_key: 'analytics',
+        setting_value: updatedSettings,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'setting_key'
+      })
+
+    if (upsertError) {
+      if (upsertError.message?.includes('does not exist')) {
+        // Store in localStorage as fallback
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('analytics_settings', JSON.stringify(updatedSettings))
+            console.log('Analytics settings saved to localStorage (database unavailable):', updatedSettings)
+          } catch (e) {
+            console.error('Failed to save to localStorage:', e)
+            return { success: false, error: 'Failed to save settings to localStorage' }
+          }
+        }
+        return { success: true }
+      }
+      return { success: false, error: upsertError.message || 'Failed to save settings' }
+    }
+
+    // Also save to localStorage for quick access and backup
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('analytics_settings', JSON.stringify(updatedSettings))
+        console.log('Analytics settings saved to database and localStorage:', updatedSettings)
+      } catch (e) {
+        console.warn('Failed to save to localStorage:', e)
+      }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error saving analytics settings:', error)
+    // Fallback to localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const currentResult = await getAnalyticsSettings()
+        const currentSettings = currentResult.data || DEFAULT_ANALYTICS_SETTINGS
+        const updatedSettings: AnalyticsSettings = {
+          tracking: { ...currentSettings.tracking, ...(settings.tracking || {}) },
+          dataRetention: { ...currentSettings.dataRetention, ...(settings.dataRetention || {}) },
+          reports: { ...currentSettings.reports, ...(settings.reports || {}) },
+          export: { ...currentSettings.export, ...(settings.export || {}) },
+        }
+        localStorage.setItem('analytics_settings', JSON.stringify(updatedSettings))
+        console.log('Analytics settings saved to localStorage (error fallback):', updatedSettings)
+      } catch (e) {
+        console.error('Failed to save to localStorage:', e)
+        return { success: false, error: 'Failed to save settings' }
+      }
+    }
+    return { success: true }
+  }
+}
+
+// ============================================================================
 // LEAD SCORING RULES FUNCTIONS
 // ============================================================================
 

@@ -203,3 +203,133 @@ export async function getFormSubmissionsStats(): Promise<{
   }
 }
 
+// Get tracking data for reports
+export async function getTrackingData(dateRange?: { from: Date; to: Date }): Promise<{
+  pageViews: Array<{ date: string; count: number; path: string }>
+  userBehaviors: Array<{ type: string; count: number; date: string }>
+  sessions: Array<{ date: string; count: number; avgDuration: number }>
+  devices: Array<{ device: string; count: number }>
+  browsers: Array<{ browser: string; count: number }>
+}> {
+  if (!supabase) {
+    return {
+      pageViews: [],
+      userBehaviors: [],
+      sessions: [],
+      devices: [],
+      browsers: [],
+    }
+  }
+
+  try {
+    const to = dateRange?.to || new Date()
+    const from = dateRange?.from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+
+    // Fetch page views
+    const { data: pageViews } = await supabase
+      .from('analytics_page_views')
+      .select('view_timestamp, page_path')
+      .gte('view_timestamp', from.toISOString())
+      .lte('view_timestamp', to.toISOString())
+
+    // Fetch user behaviors
+    const { data: behaviors } = await supabase
+      .from('analytics_user_behaviors')
+      .select('event_type, created_at')
+      .gte('created_at', from.toISOString())
+      .lte('created_at', to.toISOString())
+
+    // Fetch sessions
+    const { data: sessions } = await supabase
+      .from('analytics_sessions')
+      .select('session_start, duration_seconds, device_type, browser')
+      .gte('session_start', from.toISOString())
+      .lte('session_start', to.toISOString())
+
+    // Process page views
+    const pageViewsMap = new Map<string, Map<string, number>>()
+    pageViews?.forEach(view => {
+      const date = new Date(view.view_timestamp).toISOString().split('T')[0]
+      const path = view.page_path || 'unknown'
+      if (!pageViewsMap.has(date)) {
+        pageViewsMap.set(date, new Map())
+      }
+      const pathMap = pageViewsMap.get(date)!
+      pathMap.set(path, (pathMap.get(path) || 0) + 1)
+    })
+    const pageViewsData = Array.from(pageViewsMap.entries()).flatMap(([date, pathMap]) =>
+      Array.from(pathMap.entries()).map(([path, count]) => ({ date, count, path }))
+    )
+
+    // Process user behaviors
+    const behaviorsMap = new Map<string, Map<string, number>>()
+    behaviors?.forEach(behavior => {
+      const date = new Date(behavior.created_at).toISOString().split('T')[0]
+      const type = behavior.event_type || 'unknown'
+      if (!behaviorsMap.has(date)) {
+        behaviorsMap.set(date, new Map())
+      }
+      const typeMap = behaviorsMap.get(date)!
+      typeMap.set(type, (typeMap.get(type) || 0) + 1)
+    })
+    const userBehaviorsData = Array.from(behaviorsMap.entries()).flatMap(([date, typeMap]) =>
+      Array.from(typeMap.entries()).map(([type, count]) => ({ type, count, date }))
+    )
+
+    // Process sessions
+    const sessionsMap = new Map<string, { count: number; totalDuration: number }>()
+    sessions?.forEach(session => {
+      const date = new Date(session.session_start).toISOString().split('T')[0]
+      const existing = sessionsMap.get(date) || { count: 0, totalDuration: 0 }
+      sessionsMap.set(date, {
+        count: existing.count + 1,
+        totalDuration: existing.totalDuration + (session.duration_seconds || 0),
+      })
+    })
+    const sessionsData = Array.from(sessionsMap.entries()).map(([date, data]) => ({
+      date,
+      count: data.count,
+      avgDuration: data.count > 0 ? Math.floor(data.totalDuration / data.count) : 0,
+    }))
+
+    // Process devices
+    const devicesMap = new Map<string, number>()
+    sessions?.forEach(session => {
+      const device = session.device_type || 'unknown'
+      devicesMap.set(device, (devicesMap.get(device) || 0) + 1)
+    })
+    const devicesData = Array.from(devicesMap.entries()).map(([device, count]) => ({
+      device,
+      count,
+    }))
+
+    // Process browsers
+    const browsersMap = new Map<string, number>()
+    sessions?.forEach(session => {
+      const browser = session.browser || 'unknown'
+      browsersMap.set(browser, (browsersMap.get(browser) || 0) + 1)
+    })
+    const browsersData = Array.from(browsersMap.entries()).map(([browser, count]) => ({
+      browser,
+      count,
+    }))
+
+    return {
+      pageViews: pageViewsData,
+      userBehaviors: userBehaviorsData,
+      sessions: sessionsData,
+      devices: devicesData,
+      browsers: browsersData,
+    }
+  } catch (error) {
+    console.error('Error fetching tracking data:', error)
+    return {
+      pageViews: [],
+      userBehaviors: [],
+      sessions: [],
+      devices: [],
+      browsers: [],
+    }
+  }
+}
+

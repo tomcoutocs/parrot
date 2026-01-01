@@ -47,6 +47,10 @@ export function AnalyticsDataExplorer() {
     { id: 'form_submissions', name: 'Form Submissions', description: 'Form submission counts and metadata' },
     { id: 'saved_reports', name: 'Saved Reports', description: 'User saved report configurations' },
     { id: 'project_members', name: 'Project Members', description: 'Project team member assignments' },
+    { id: 'page_views', name: 'Page Views', description: 'Page view tracking data' },
+    { id: 'user_behaviors', name: 'User Behaviors', description: 'Click, scroll, and interaction tracking' },
+    { id: 'sessions', name: 'Sessions', description: 'User session recordings' },
+    { id: 'ip_tracking', name: 'IP Tracking', description: 'IP address and location data' },
   ]
 
   useEffect(() => {
@@ -199,6 +203,90 @@ export function AnalyticsDataExplorer() {
           tableColumns = ['project', 'member', 'role', 'created']
           break
         }
+        case 'page_views': {
+          if (!supabase) break
+          const { data: views } = await supabase
+            .from('analytics_page_views')
+            .select('id, page_path, page_title, view_timestamp, user:users!analytics_page_views_user_id_fkey(full_name)')
+            .order('view_timestamp', { ascending: false })
+            .limit(100)
+          
+          tableData = (views || []).map(view => ({
+            id: view.id,
+            path: view.page_path || 'N/A',
+            title: view.page_title || 'N/A',
+            user: (view.user as any)?.full_name || 'Anonymous',
+            viewed: view.view_timestamp ? new Date(view.view_timestamp).toLocaleString() : 'N/A',
+          }))
+          tableColumns = ['path', 'title', 'user', 'viewed']
+          break
+        }
+        case 'user_behaviors': {
+          if (!supabase) break
+          const { data: behaviors } = await supabase
+            .from('analytics_user_behaviors')
+            .select('id, event_type, element_type, element_text, page_path, created_at, user:users!analytics_user_behaviors_user_id_fkey(full_name)')
+            .order('created_at', { ascending: false })
+            .limit(100)
+          
+          tableData = (behaviors || []).map(behavior => ({
+            id: behavior.id,
+            type: behavior.event_type || 'N/A',
+            element: behavior.element_type || 'N/A',
+            text: (behavior.element_text || '').substring(0, 50) || 'N/A',
+            page: behavior.page_path || 'N/A',
+            user: (behavior.user as any)?.full_name || 'Anonymous',
+            time: behavior.created_at ? new Date(behavior.created_at).toLocaleString() : 'N/A',
+          }))
+          tableColumns = ['type', 'element', 'text', 'page', 'user', 'time']
+          break
+        }
+        case 'sessions': {
+          if (!supabase) break
+          const { data: sessions } = await supabase
+            .from('analytics_sessions')
+            .select('id, session_start, duration_seconds, page_count, interaction_count, click_count, scroll_count, device_type, browser, browser_version, entry_page, exit_page, engagement_score, is_bounce, user:users!analytics_sessions_user_id_fkey(full_name)')
+            .order('session_start', { ascending: false })
+            .limit(100)
+          
+          tableData = (sessions || []).map(session => ({
+            id: session.id,
+            user: (session.user as any)?.full_name || 'Anonymous',
+            start: session.session_start ? new Date(session.session_start).toLocaleString() : 'N/A',
+            duration: session.duration_seconds ? `${Math.floor(session.duration_seconds / 60)}m ${session.duration_seconds % 60}s` : 'N/A',
+            pages: session.page_count || 0,
+            interactions: session.interaction_count || 0,
+            clicks: session.click_count || 0,
+            scrolls: session.scroll_count || 0,
+            entry: session.entry_page || 'N/A',
+            exit: session.exit_page || 'N/A',
+            engagement: session.engagement_score ? `${Math.round(session.engagement_score)}%` : 'N/A',
+            bounce: session.is_bounce ? 'Yes' : 'No',
+            device: session.device_type || 'N/A',
+            browser: session.browser_version ? `${session.browser} ${session.browser_version}` : (session.browser || 'N/A'),
+          }))
+          tableColumns = ['user', 'start', 'duration', 'pages', 'clicks', 'scrolls', 'entry', 'exit', 'engagement', 'bounce', 'device', 'browser']
+          break
+        }
+        case 'ip_tracking': {
+          if (!supabase) break
+          const { data: ips } = await supabase
+            .from('analytics_ip_tracking')
+            .select('id, ip_address, country, city, page_path, created_at, user:users!analytics_ip_tracking_user_id_fkey(full_name)')
+            .order('created_at', { ascending: false })
+            .limit(100)
+          
+          tableData = (ips || []).map(ip => ({
+            id: ip.id,
+            ip: ip.ip_address || 'N/A',
+            location: [ip.city, ip.country].filter(Boolean).join(', ') || 'Unknown',
+            page: ip.page_path || 'N/A',
+            user: (ip.user as any)?.full_name || 'Anonymous',
+            time: ip.created_at ? new Date(ip.created_at).toLocaleString() : 'N/A',
+          }))
+          tableColumns = ['ip', 'location', 'page', 'user', 'time']
+          break
+        }
       }
 
       setData(tableData)
@@ -254,12 +342,12 @@ export function AnalyticsDataExplorer() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Tables Sidebar */}
-        <Card>
-          <CardHeader>
+        <Card className="flex flex-col max-h-[calc(100vh-12rem)]">
+          <CardHeader className="flex-shrink-0">
             <CardTitle>Data Tables</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
+          <CardContent className="flex-1 overflow-hidden min-h-0">
+            <div className="space-y-2 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent pr-2 -mr-2">
               {tables.map((table) => (
                 <button
                   key={table.id}
@@ -283,8 +371,8 @@ export function AnalyticsDataExplorer() {
 
         {/* Data Table */}
         <div className="lg:col-span-3">
-          <Card>
-            <CardHeader>
+          <Card className="max-h-[calc(100vh-12rem)] flex flex-col">
+            <CardHeader className="flex-shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle>{tables.find(t => t.id === selectedTable)?.name || 'Data'}</CardTitle>
                 <div className="flex items-center gap-2">
@@ -300,7 +388,7 @@ export function AnalyticsDataExplorer() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-y-auto overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
               {loading ? (
                 <div className="flex items-center justify-center h-64">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />

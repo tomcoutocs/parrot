@@ -45,9 +45,14 @@ const availableFields: ReportField[] = [
   { id: 'tasks', name: 'Tasks', type: 'metric', selected: false },
   { id: 'submissions', name: 'Form Submissions', type: 'metric', selected: false },
   { id: 'activities', name: 'Activities', type: 'metric', selected: false },
+  { id: 'page_views', name: 'Page Views', type: 'metric', selected: false },
+  { id: 'user_behaviors', name: 'User Behaviors', type: 'metric', selected: false },
+  { id: 'sessions', name: 'Sessions', type: 'metric', selected: false },
   { id: 'date', name: 'Date', type: 'dimension', selected: false },
   { id: 'status', name: 'Status', type: 'dimension', selected: false },
   { id: 'role', name: 'User Role', type: 'dimension', selected: false },
+  { id: 'device', name: 'Device Type', type: 'dimension', selected: false },
+  { id: 'browser', name: 'Browser', type: 'dimension', selected: false },
 ]
 
 function EditableTableRow({ 
