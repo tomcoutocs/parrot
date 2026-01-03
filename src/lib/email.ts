@@ -55,6 +55,15 @@ export interface WelcomeEmailData {
   loginUrl: string
 }
 
+export interface InvoiceEmailData {
+  to: string
+  clientName: string
+  invoiceNumber: string
+  amount: number
+  currency: string
+  hostedLink: string
+}
+
 // Email sending function for single invitation using Resend
 export async function sendInvitationEmail(data: InvitationEmailData): Promise<EmailResult> {
   try {
@@ -532,6 +541,131 @@ The Parrot Team`
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
+    }
+  }
+}
+
+// Email sending function for invoices
+export async function sendInvoiceEmail(data: InvoiceEmailData): Promise<EmailResult> {
+  try {
+    if (!process.env.RESEND_API_KEY || !resend) {
+      console.warn('⚠️ RESEND_API_KEY not configured, falling back to mock email')
+      console.log('📧 Mock invoice email sent:', {
+        to: data.to,
+        subject: `Invoice ${data.invoiceNumber} from Parrot Portal`,
+        invoiceNumber: data.invoiceNumber,
+        amount: `${data.currency} ${data.amount}`,
+        hostedLink: data.hostedLink,
+      })
+      return { success: true }
+    }
+
+    const fromEmail = process.env.FROM_EMAIL
+    if (!fromEmail) {
+      console.error('❌ FROM_EMAIL not configured')
+      return {
+        success: false,
+        error: 'Email configuration error: FROM_EMAIL not set'
+      }
+    }
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Invoice ${data.invoiceNumber}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f4; margin: 0; padding: 0;">
+          <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f4f4f4;">
+            <tr>
+              <td align="center" style="padding: 20px 0;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="padding: 40px 30px;">
+                      <h1 style="color: #2563eb; margin: 0 0 20px 0; font-size: 24px; font-weight: 600;">Invoice ${data.invoiceNumber}</h1>
+                      <p style="font-size: 16px; margin: 0 0 20px 0; color: #333333;">Hello ${data.clientName},</p>
+                      <p style="font-size: 16px; margin: 0 0 30px 0; color: #666666;">
+                        Please find your invoice attached. You can view and pay it online using the link below.
+                      </p>
+                      <div style="background-color: #f9fafb; border-radius: 6px; padding: 20px; margin: 20px 0;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                          <span style="color: #666666;">Invoice Number:</span>
+                          <strong style="color: #333333;">${data.invoiceNumber}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                          <span style="color: #666666;">Amount Due:</span>
+                          <strong style="color: #2563eb; font-size: 18px;">${data.currency} ${data.amount.toLocaleString()}</strong>
+                        </div>
+                      </div>
+                      <table role="presentation" style="margin: 30px auto;">
+                        <tr>
+                          <td>
+                            <a href="${data.hostedLink}" 
+                               style="background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 16px;">
+                              View & Pay Invoice
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="font-size: 14px; color: #666666; margin: 30px 0 0 0; line-height: 1.6;">
+                        If the button doesn't work, copy and paste this link into your browser:<br>
+                        <a href="${data.hostedLink}" style="color: #2563eb; word-break: break-all; text-decoration: underline;">${data.hostedLink}</a>
+                      </p>
+                      <p style="font-size: 14px; color: #666666; margin: 20px 0 0 0;">
+                        Thank you for your business!
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `
+
+    const emailText = `Hello ${data.clientName},
+
+Please find your invoice ${data.invoiceNumber} for ${data.currency} ${data.amount.toLocaleString()}.
+
+View and pay your invoice online:
+${data.hostedLink}
+
+Thank you for your business!
+
+Best regards,
+Parrot Portal`
+
+    const result = await resend.emails.send({
+      from: fromEmail,
+      to: [data.to],
+      subject: `Invoice ${data.invoiceNumber} from Parrot Portal`,
+      html: emailHtml,
+      text: emailText,
+    })
+
+    if (result.error) {
+      console.error('Resend API error:', result.error)
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email'
+      }
+    }
+
+    console.log('📧 Invoice email sent successfully:', {
+      id: result.data?.id,
+      to: data.to,
+      invoiceNumber: data.invoiceNumber,
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error sending invoice email:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send invoice email'
     }
   }
 }

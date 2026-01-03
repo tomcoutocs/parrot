@@ -10,6 +10,10 @@ interface ReportConfig {
   selectedFields: string[]
   xAxisLabel?: string
   yAxisLabel?: string
+  filters?: {
+    spaceId?: string
+    userId?: string
+  }
 }
 
 const AVAILABLE_METRICS = [
@@ -18,6 +22,11 @@ const AVAILABLE_METRICS = [
   { id: 'tasks', name: 'Tasks', description: 'Total tasks and completed tasks' },
   { id: 'submissions', name: 'Form Submissions', description: 'Form submission count' },
   { id: 'activities', name: 'Activities', description: 'Activity log count' },
+  { id: 'invoices', name: 'Invoices', description: 'Total invoices and paid invoices' },
+  { id: 'revenue', name: 'Revenue', description: 'Total revenue and outstanding invoices' },
+  { id: 'payments', name: 'Payments', description: 'Total payment transactions' },
+  { id: 'clients', name: 'Clients', description: 'Total clients count' },
+  { id: 'expenses', name: 'Expenses', description: 'Total expenses amount' },
 ]
 
 const SYSTEM_PROMPT = `You are an AI assistant that helps users create analytics reports from natural language requests.
@@ -36,7 +45,11 @@ When a user requests a report, extract the following information and return ONLY
   "dateRange": "last_30_days" | "last_7_days" | "last_90_days" | "today" | "yesterday" | "custom",
   "selectedFields": ["array", "of", "metric", "ids"],
   "xAxisLabel": "optional x-axis label",
-  "yAxisLabel": "optional y-axis label"
+  "yAxisLabel": "optional y-axis label",
+  "filters": {
+    "spaceId": "optional space/company ID if user mentions specific space/company",
+    "userId": "optional user ID if user mentions specific user/person"
+  }
 }
 
 Rules:
@@ -45,11 +58,18 @@ Rules:
 - If user mentions "tasks", "todo", "work items" -> include "tasks"
 - If user mentions "forms", "submissions" -> include "submissions"
 - If user mentions "activity", "actions", "events" -> include "activities"
+- If user mentions "invoices", "billing", "invoicing" -> include "invoices"
+- If user mentions "revenue", "income", "earnings", "money earned" -> include "revenue"
+- If user mentions "payments", "transactions", "money received" -> include "payments"
+- If user mentions "clients", "customers" -> include "clients"
+- If user mentions "expenses", "costs", "spending", "money spent" -> include "expenses"
 - Chart type: "bar chart" or "bars" -> "bar", "line chart" or "trend" -> "line", "pie chart" or "distribution" -> "pie", "table" or "list" -> "table"
 - Date range: "last week" -> "last_7_days", "last month" -> "last_30_days", "last 3 months" -> "last_90_days", "today" -> "today"
+- Filters: If user mentions "for [space/company name]" or "for [user name]" -> include in filters object. Use the exact name mentioned, the system will match it.
 - Default to "bar" chart type if not specified
 - Default to "last_30_days" if date range not specified
 - Always include at least one metric
+- Filters are optional - only include if user explicitly mentions filtering by space or user
 - Return ONLY the JSON, no markdown, no explanation, no code blocks`
 
 export async function POST(request: NextRequest) {
@@ -154,6 +174,10 @@ export async function POST(request: NextRequest) {
         : ['users'],
       xAxisLabel: reportConfig.xAxisLabel?.substring(0, 50),
       yAxisLabel: reportConfig.yAxisLabel?.substring(0, 50),
+      filters: reportConfig.filters ? {
+        spaceId: reportConfig.filters.spaceId || undefined,
+        userId: reportConfig.filters.userId || undefined,
+      } : undefined,
     }
 
     // Ensure at least one field is selected

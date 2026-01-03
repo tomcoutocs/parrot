@@ -2442,6 +2442,34 @@ export async function createSpace(spaceData: {
       return { success: false, error: error.message || 'Failed to create space' }
     }
 
+    // Automatically create a corresponding client in the billing app
+    if (data && data.id) {
+      try {
+        const { error: clientError } = await supabase
+          .from('clients')
+          .insert({
+            space_id: data.id,
+            name: spaceData.name,
+            email: null, // Space doesn't have email, can be added later
+            phone: spaceData.phone || null,
+            address: spaceData.address || null,
+            tax_id: null, // Can be added later
+            notes: spaceData.description || null,
+            is_active: true,
+          })
+
+        if (clientError) {
+          // Log error but don't fail space creation if client creation fails
+          console.warn('Failed to create client for space:', clientError.message)
+        } else {
+          console.log('Client created successfully for space:', data.id)
+        }
+      } catch (clientErr) {
+        // Log error but don't fail space creation if client creation fails
+        console.warn('Error creating client for space:', clientErr)
+      }
+    }
+
     console.log('Space created successfully:', data)
     return { success: true, data }
   } catch (error) {

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSession } from '@/components/providers/session-provider'
+import { getInvoices, type Invoice } from '@/lib/invoicing-functions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +17,8 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  Eye
+  Eye,
+  Loader2
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -25,66 +28,41 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-
-interface Invoice {
-  id: string
-  invoiceNumber: string
-  client: string
-  amount: number
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
-  dueDate: string
-  issueDate: string
-  description: string
-}
+import { CreateInvoiceModal } from '@/components/modals/create-invoice-modal'
+import { toastSuccess, toastError } from '@/lib/toast'
 
 export function InvoicingInvoices() {
+  const { data: session } = useSession()
   const [searchTerm, setSearchTerm] = useState('')
-  const [invoices] = useState<Invoice[]>([
-    {
-      id: '1',
-      invoiceNumber: 'INV-2024-001',
-      client: 'Acme Corp',
-      amount: 5000,
-      status: 'paid',
-      dueDate: '2024-02-15',
-      issueDate: '2024-02-01',
-      description: 'Monthly subscription - February',
-    },
-    {
-      id: '2',
-      invoiceNumber: 'INV-2024-002',
-      client: 'TechStart Inc',
-      amount: 3500,
-      status: 'sent',
-      dueDate: '2024-02-20',
-      issueDate: '2024-02-05',
-      description: 'Web development services',
-    },
-    {
-      id: '3',
-      invoiceNumber: 'INV-2024-003',
-      client: 'GlobalTech',
-      amount: 12000,
-      status: 'overdue',
-      dueDate: '2024-02-10',
-      issueDate: '2024-01-25',
-      description: 'Q1 consulting services',
-    },
-    {
-      id: '4',
-      invoiceNumber: 'INV-2024-004',
-      client: 'StartupXYZ',
-      amount: 2500,
-      status: 'draft',
-      dueDate: '2024-02-25',
-      issueDate: '2024-02-10',
-      description: 'Logo design package',
-    },
-  ])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+
+  // Get space_id from session
+  const spaceId = session?.user?.company_id || null
+
+  const loadInvoices = useCallback(async () => {
+    setLoading(true)
+    try {
+      const result = await getInvoices(spaceId || undefined)
+      if (result.success && result.data) {
+        setInvoices(result.data)
+      }
+    } catch (error) {
+      console.error('Error loading invoices:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [spaceId])
+
+  // Fetch invoices
+  useEffect(() => {
+    loadInvoices()
+  }, [loadInvoices])
 
   const filteredInvoices = invoices.filter(invoice =>
-    invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.client.toLowerCase().includes(searchTerm.toLowerCase())
+    invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    invoice.client_name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const getStatusColor = (status: string) => {
@@ -126,11 +104,22 @@ export function InvoicingInvoices() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-end">
-        <Button>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           New Invoice
         </Button>
       </div>
+
+      {/* Create Invoice Modal */}
+      <CreateInvoiceModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onInvoiceCreated={() => {
+          loadInvoices()
+          setIsCreateModalOpen(false)
+        }}
+        spaceId={spaceId}
+      />
 
       {/* Search and Filters */}
       <Card>
@@ -159,40 +148,47 @@ export function InvoicingInvoices() {
           <CardTitle>All Invoices ({filteredInvoices.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList>
-              <TabsTrigger value="all">All ({filteredInvoices.length})</TabsTrigger>
-              <TabsTrigger value="paid">Paid ({paidInvoices.length})</TabsTrigger>
-              <TabsTrigger value="sent">Sent ({sentInvoices.length})</TabsTrigger>
-              <TabsTrigger value="overdue">Overdue ({overdueInvoices.length})</TabsTrigger>
-              <TabsTrigger value="draft">Draft ({draftInvoices.length})</TabsTrigger>
-            </TabsList>
-            <TabsContent value="all" className="mt-4">
-              <InvoiceList invoices={filteredInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
-            </TabsContent>
-            <TabsContent value="paid" className="mt-4">
-              <InvoiceList invoices={paidInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
-            </TabsContent>
-            <TabsContent value="sent" className="mt-4">
-              <InvoiceList invoices={sentInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
-            </TabsContent>
-            <TabsContent value="overdue" className="mt-4">
-              <InvoiceList invoices={overdueInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
-            </TabsContent>
-            <TabsContent value="draft" className="mt-4">
-              <InvoiceList invoices={draftInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} />
-            </TabsContent>
-          </Tabs>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <Tabs defaultValue="all" className="w-full">
+              <TabsList>
+                <TabsTrigger value="all">All ({filteredInvoices.length})</TabsTrigger>
+                <TabsTrigger value="paid">Paid ({paidInvoices.length})</TabsTrigger>
+                <TabsTrigger value="sent">Sent ({sentInvoices.length})</TabsTrigger>
+                <TabsTrigger value="overdue">Overdue ({overdueInvoices.length})</TabsTrigger>
+                <TabsTrigger value="draft">Draft ({draftInvoices.length})</TabsTrigger>
+              </TabsList>
+              <TabsContent value="all" className="mt-4">
+                <InvoiceList invoices={filteredInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} loadInvoices={loadInvoices} />
+              </TabsContent>
+              <TabsContent value="paid" className="mt-4">
+                <InvoiceList invoices={paidInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} loadInvoices={loadInvoices} />
+              </TabsContent>
+              <TabsContent value="sent" className="mt-4">
+                <InvoiceList invoices={sentInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} loadInvoices={loadInvoices} />
+              </TabsContent>
+              <TabsContent value="overdue" className="mt-4">
+                <InvoiceList invoices={overdueInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} loadInvoices={loadInvoices} />
+              </TabsContent>
+              <TabsContent value="draft" className="mt-4">
+                <InvoiceList invoices={draftInvoices} getStatusColor={getStatusColor} getStatusIcon={getStatusIcon} loadInvoices={loadInvoices} />
+              </TabsContent>
+            </Tabs>
+          )}
         </CardContent>
       </Card>
     </div>
   )
 }
 
-function InvoiceList({ invoices, getStatusColor, getStatusIcon }: { 
+function InvoiceList({ invoices, getStatusColor, getStatusIcon, loadInvoices }: { 
   invoices: Invoice[], 
   getStatusColor: (status: string) => string,
-  getStatusIcon: (status: string) => any
+  getStatusIcon: (status: string) => any,
+  loadInvoices: () => Promise<void>
 }) {
   if (invoices.length === 0) {
     return <div className="text-center py-8 text-muted-foreground">No invoices found</div>
@@ -213,22 +209,30 @@ function InvoiceList({ invoices, getStatusColor, getStatusIcon }: {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-medium">{invoice.invoiceNumber}</h3>
+                  <h3 className="font-medium">{invoice.invoice_number}</h3>
                   <Badge className={getStatusColor(invoice.status)}>
                     <StatusIcon className="w-3 h-3 mr-1" />
                     {invoice.status}
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground mb-1">{invoice.client}</p>
+                <p className="text-sm text-muted-foreground mb-1">{invoice.client_name}</p>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <span>Issued: {invoice.issueDate}</span>
-                  <span>Due: {invoice.dueDate}</span>
-                  <span className="font-medium text-foreground">${invoice.amount.toLocaleString()}</span>
+                  <span>Issued: {new Date(invoice.issue_date).toLocaleDateString()}</span>
+                  <span>Due: {new Date(invoice.due_date).toLocaleDateString()}</span>
+                  <span className="font-medium text-foreground">{invoice.currency} {invoice.total_amount.toLocaleString()}</span>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  if (invoice.hosted_link_token) {
+                    window.open(`/invoice/${invoice.hosted_link_token}`, '_blank')
+                  }
+                }}
+              >
                 <Eye className="w-4 h-4 mr-2" />
                 View
               </Button>
@@ -239,11 +243,46 @@ function InvoiceList({ invoices, getStatusColor, getStatusIcon }: {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      try {
+                        const { sendInvoice } = await import('@/lib/invoicing-functions')
+                        const result = await sendInvoice(invoice.id)
+                        if (result.success) {
+                          toastSuccess('Invoice sent successfully')
+                          loadInvoices()
+                        } else {
+                          toastError(result.error || 'Failed to send invoice')
+                        }
+                      } catch (err) {
+                        console.error('Error sending invoice:', err)
+                        toastError('Failed to send invoice')
+                      }
+                    }}
+                  >
                     <Send className="w-4 h-4 mr-2" />
                     Send Invoice
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/invoices/${invoice.id}/generate-pdf`)
+                        if (!response.ok) throw new Error('Failed to generate PDF')
+                        const blob = await response.blob()
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `invoice-${invoice.invoice_number}.pdf`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        window.URL.revokeObjectURL(url)
+                      } catch (err) {
+                        console.error('Error downloading PDF:', err)
+                        toastError('Failed to download PDF')
+                      }
+                    }}
+                  >
                     <Download className="w-4 h-4 mr-2" />
                     Download PDF
                   </DropdownMenuItem>

@@ -22,6 +22,10 @@ interface ReportConfig {
   selectedFields: string[]
   xAxisLabel?: string
   yAxisLabel?: string
+  filters?: {
+    spaceId?: string
+    userId?: string
+  }
 }
 
 interface AIReportAgentProps {

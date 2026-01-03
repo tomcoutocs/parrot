@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 import { 
   Loader2,
   Plus, 
@@ -19,7 +20,19 @@ import {
   PieChart,
   Table,
   TrendingUp,
-  Sparkles
+  Sparkles,
+  GripVertical,
+  X,
+  Users,
+  FolderKanban,
+  CheckSquare,
+  FileText,
+  Activity,
+  Receipt,
+  DollarSign,
+  CreditCard,
+  Building2,
+  TrendingDown
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAnalyticsStats } from '@/lib/analytics-functions'
@@ -31,6 +44,11 @@ import { AnalyticsLineChart } from '../charts/line-chart'
 import { AnalyticsPieChart } from '../charts/pie-chart'
 import { AIReportAgent } from '../ai-report-agent'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { fetchCompaniesOptimized } from '@/lib/simplified-database-functions'
+import { fetchUsersOptimized } from '@/lib/simplified-database-functions'
+import type { Company, User } from '@/lib/supabase'
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
+import { useDebouncedCallback } from '@/hooks/use-debounce'
 
 interface ReportField {
   id: string
@@ -39,12 +57,47 @@ interface ReportField {
   selected: boolean
 }
 
+// Icon mapping for metrics
+const getFieldIcon = (id: string) => {
+  const iconMap: Record<string, any> = {
+    users: Users,
+    projects: FolderKanban,
+    tasks: CheckSquare,
+    submissions: FileText,
+    activities: Activity,
+    invoices: Receipt,
+    revenue: DollarSign,
+    payments: CreditCard,
+    clients: Building2,
+    expenses: TrendingDown,
+    page_views: BarChart3,
+    user_behaviors: Activity,
+    sessions: Activity,
+    date: Calendar,
+    status: Filter,
+    role: Users,
+    device: BarChart3,
+    browser: BarChart3,
+  }
+  return iconMap[id] || BarChart3
+}
+
+// Neutral color for all fields (matching dimensions)
+const getFieldColor = () => {
+  return 'bg-muted/50 text-foreground border-border'
+}
+
 const availableFields: ReportField[] = [
   { id: 'users', name: 'Users', type: 'metric', selected: false },
   { id: 'projects', name: 'Projects', type: 'metric', selected: false },
   { id: 'tasks', name: 'Tasks', type: 'metric', selected: false },
   { id: 'submissions', name: 'Form Submissions', type: 'metric', selected: false },
   { id: 'activities', name: 'Activities', type: 'metric', selected: false },
+  { id: 'invoices', name: 'Invoices', type: 'metric', selected: false },
+  { id: 'revenue', name: 'Revenue', type: 'metric', selected: false },
+  { id: 'payments', name: 'Payments', type: 'metric', selected: false },
+  { id: 'clients', name: 'Clients', type: 'metric', selected: false },
+  { id: 'expenses', name: 'Expenses', type: 'metric', selected: false },
   { id: 'page_views', name: 'Page Views', type: 'metric', selected: false },
   { id: 'user_behaviors', name: 'User Behaviors', type: 'metric', selected: false },
   { id: 'sessions', name: 'Sessions', type: 'metric', selected: false },
@@ -131,6 +184,11 @@ export function AnalyticsReports() {
   const [yAxisLabel, setYAxisLabel] = useState('')
   const [reportLabels, setReportLabels] = useState<Record<number, string>>({})
   const [showAIAgent, setShowAIAgent] = useState(false)
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string>('all')
+  const [selectedUserId, setSelectedUserId] = useState<string>('all')
+  const [spaces, setSpaces] = useState<Company[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [loadingFilters, setLoadingFilters] = useState(false)
 
   const handleFieldToggle = (fieldId: string) => {
     setSelectedFields(prev => 
@@ -140,14 +198,97 @@ export function AnalyticsReports() {
     )
   }
 
+  const handleDragEnd = (result: DropResult) => {
+    const { destination, source, draggableId } = result
+
+    if (!destination) return
+
+    // Handle dragging from available to selected
+    if (source.droppableId === 'available-fields' && destination.droppableId === 'selected-fields') {
+      if (!selectedFields.includes(draggableId)) {
+        setSelectedFields(prev => [...prev, draggableId])
+      }
+      return
+    }
+
+    // Handle removing from selected
+    if (source.droppableId === 'selected-fields' && destination.droppableId === 'available-fields') {
+      setSelectedFields(prev => prev.filter(id => id !== draggableId))
+      return
+    }
+
+    // Handle reordering selected fields
+    if (source.droppableId === 'selected-fields' && destination.droppableId === 'selected-fields') {
+      if (source.index === destination.index) return
+      
+      const newFields = Array.from(selectedFields)
+      const [removed] = newFields.splice(source.index, 1)
+      newFields.splice(destination.index, 0, removed)
+      setSelectedFields(newFields)
+    }
+  }
+
+  // Load spaces and users for filters
+  useEffect(() => {
+    const loadFilters = async () => {
+      setLoadingFilters(true)
+      try {
+        const [spacesData, usersData] = await Promise.all([
+          fetchCompaniesOptimized(),
+          fetchUsersOptimized()
+        ])
+        setSpaces(spacesData.filter(s => s.is_active))
+        setUsers(usersData.filter(u => u.is_active !== false))
+      } catch (error) {
+        console.error('Error loading filters:', error)
+      } finally {
+        setLoadingFilters(false)
+      }
+    }
+    loadFilters()
+  }, [])
+
   const [reportData, setReportData] = useState<any[]>([])
   const [generating, setGenerating] = useState(false)
+  const isInitialMount = useRef(true)
+  const skipAutoGenerate = useRef(false)
 
-  const handleGenerateReport = async () => {
+  const handleGenerateReport = useCallback(async () => {
     setGenerating(true)
     try {
-      // Generate report based on selections
-      const analyticsData = await getAnalyticsStats()
+      // Calculate date range
+      const to = new Date()
+      let from = new Date()
+      switch (dateRange) {
+        case 'today':
+          from = new Date(to.setHours(0, 0, 0, 0))
+          break
+        case 'yesterday':
+          from = new Date(to)
+          from.setDate(from.getDate() - 1)
+          from.setHours(0, 0, 0, 0)
+          to.setDate(to.getDate() - 1)
+          to.setHours(23, 59, 59, 999)
+          break
+        case 'last_7_days':
+          from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+          break
+        case 'last_30_days':
+          from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+          break
+        case 'last_90_days':
+          from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+          break
+        default:
+          from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      }
+
+      // Generate report based on selections with filters
+      const analyticsData = await getAnalyticsStats(
+        { from, to },
+        selectedSpaceId && selectedSpaceId !== 'all' ? selectedSpaceId : undefined,
+        selectedUserId && selectedUserId !== 'all' ? selectedUserId : undefined
+      )
       
       // Build report data based on selected fields
       const data: any[] = []
@@ -187,6 +328,41 @@ export function AnalyticsReports() {
           change: 0,
         })
       }
+      if (selectedFields.includes('invoices')) {
+        data.push({
+          metric: 'Total Invoices',
+          value: analyticsData.totalInvoices,
+          change: analyticsData.paidInvoices,
+        })
+      }
+      if (selectedFields.includes('revenue')) {
+        data.push({
+          metric: 'Total Revenue',
+          value: analyticsData.totalRevenue,
+          change: analyticsData.outstandingInvoices,
+        })
+      }
+      if (selectedFields.includes('payments')) {
+        data.push({
+          metric: 'Total Payments',
+          value: analyticsData.totalPayments,
+          change: 0,
+        })
+      }
+      if (selectedFields.includes('clients')) {
+        data.push({
+          metric: 'Total Clients',
+          value: analyticsData.totalClients,
+          change: 0,
+        })
+      }
+      if (selectedFields.includes('expenses')) {
+        data.push({
+          metric: 'Total Expenses',
+          value: analyticsData.totalExpenses,
+          change: 0,
+        })
+      }
       
       setReportData(data)
     } catch (error) {
@@ -194,7 +370,40 @@ export function AnalyticsReports() {
     } finally {
       setGenerating(false)
     }
-  }
+  }, [selectedFields, dateRange, chartType, selectedSpaceId, selectedUserId])
+
+  // Debounced version for live preview (500ms delay)
+  const debouncedGenerateReport = useDebouncedCallback(handleGenerateReport, 500)
+
+  // Auto-generate report when configuration changes
+  useEffect(() => {
+    // Skip on initial mount
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      // Generate initial report after a short delay
+      setTimeout(() => {
+        if (selectedFields.length > 0) {
+          handleGenerateReport()
+        }
+      }, 300)
+      return
+    }
+
+    // Skip if we're manually skipping (e.g., loading saved report)
+    if (skipAutoGenerate.current) {
+      skipAutoGenerate.current = false
+      return
+    }
+
+    // Only generate if we have selected fields
+    if (selectedFields.length === 0) {
+      setReportData([])
+      return
+    }
+
+    // Trigger debounced generation
+    debouncedGenerateReport()
+  }, [selectedFields, dateRange, chartType, selectedSpaceId, selectedUserId, debouncedGenerateReport, handleGenerateReport])
 
   // Load saved report if report ID is in URL
   useEffect(() => {
@@ -207,6 +416,7 @@ export function AnalyticsReports() {
 
   const loadSavedReport = async (reportId: string) => {
     try {
+      skipAutoGenerate.current = true // Skip auto-generation during load
       const reports = await getSavedReports()
       const report = reports.find(r => r.id === reportId)
       if (report) {
@@ -215,8 +425,15 @@ export function AnalyticsReports() {
         setChartType(report.chartType)
         setSelectedFields(report.selectedFields)
         setFilters(report.filters || {})
-        // Generate the report automatically
-        handleGenerateReport()
+        // Load saved filters
+        if (report.filters) {
+          setSelectedSpaceId(report.filters.spaceId || 'all')
+          setSelectedUserId(report.filters.userId || 'all')
+        }
+        // Generate the report automatically after state updates
+        setTimeout(() => {
+          handleGenerateReport()
+        }, 100)
       }
     } catch (error) {
       console.error('Error loading saved report:', error)
@@ -236,6 +453,15 @@ export function AnalyticsReports() {
 
     setSaving(true)
     try {
+      // Build filters object, only including non-empty values
+      const reportFilters: Record<string, string> = { ...filters }
+      if (selectedSpaceId && selectedSpaceId !== 'all') {
+        reportFilters.spaceId = selectedSpaceId
+      }
+      if (selectedUserId && selectedUserId !== 'all') {
+        reportFilters.userId = selectedUserId
+      }
+
       const result = await saveReport({
         name: reportName,
         description: `Report with ${selectedFields.length} metric${selectedFields.length !== 1 ? 's' : ''}`,
@@ -243,7 +469,7 @@ export function AnalyticsReports() {
         dateRange,
         chartType,
         selectedFields,
-        filters,
+        filters: reportFilters,
       })
 
       if (result.success) {
@@ -265,71 +491,79 @@ export function AnalyticsReports() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Modern Header */}
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={() => setShowAIAgent(true)}
-          className="gap-2"
-        >
-          <Sparkles className="w-4 h-4" />
-          AI Assistant
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+            <BarChart3 className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Report Builder</h2>
+            <p className="text-sm text-muted-foreground">Create custom analytics reports with drag & drop</p>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowAIAgent(true)}
+            className="gap-2 border-primary/20 hover:bg-primary/5"
+          >
+            <Sparkles className="w-4 h-4" />
+            AI Assistant
+          </Button>
           <Button 
-            variant="outline" 
             onClick={handleSaveReport}
             disabled={saving || !reportName.trim() || selectedFields.length === 0}
+            className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
           >
             {saving ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Saving...
               </>
             ) : (
               <>
-                <Save className="w-4 h-4 mr-2" />
+                <Save className="w-4 h-4" />
                 Save Report
               </>
-            )}
-          </Button>
-          <Button onClick={handleGenerateReport} disabled={generating || selectedFields.length === 0}>
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              'Generate Report'
             )}
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Report Builder Sidebar */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Report Builder</CardTitle>
-            <CardDescription>Configure your report</CardDescription>
+        {/* Modern Report Builder Sidebar */}
+        <Card className="lg:col-span-1 border-2 shadow-lg">
+          <CardHeader className="border-b bg-card">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-1.5 rounded-md bg-primary/10">
+                <GripVertical className="w-4 h-4 text-primary" />
+              </div>
+              Configuration
+            </CardTitle>
+            <CardDescription>Drag metrics to build your report</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 p-6">
             {/* Report Name */}
             <div className="space-y-2">
-              <Label htmlFor="report-name">Report Name</Label>
+              <Label htmlFor="report-name" className="text-sm font-semibold">Report Name</Label>
               <Input
                 id="report-name"
                 placeholder="My Custom Report"
                 value={reportName}
                 onChange={(e) => setReportName(e.target.value)}
+                className="border-2 focus:border-primary"
               />
             </div>
 
             {/* Date Range */}
             <div className="space-y-2">
-              <Label htmlFor="date-range">Date Range</Label>
+              <Label htmlFor="date-range" className="text-sm font-semibold flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                Date Range
+              </Label>
               <Select value={dateRange} onValueChange={setDateRange}>
-                <SelectTrigger>
+                <SelectTrigger className="border-2">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -341,6 +575,58 @@ export function AnalyticsReports() {
                   <SelectItem value="custom">Custom Range</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Filters Section */}
+            <div className="space-y-4 p-4 rounded-lg bg-muted/30 border border-dashed">
+              <div className="flex items-center gap-2 mb-3">
+                <Filter className="w-4 h-4 text-muted-foreground" />
+                <Label className="text-sm font-semibold">Filters</Label>
+              </div>
+              
+              {/* Space Filter */}
+              <div className="space-y-2">
+                <Label htmlFor="space-filter" className="text-xs text-muted-foreground">Space</Label>
+                <Select 
+                  value={selectedSpaceId} 
+                  onValueChange={setSelectedSpaceId}
+                  disabled={loadingFilters}
+                >
+                  <SelectTrigger className="border-2 h-9">
+                    <SelectValue placeholder="All Spaces" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Spaces</SelectItem>
+                    {spaces.map(space => (
+                      <SelectItem key={space.id} value={space.id}>
+                        {space.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* User Filter */}
+              <div className="space-y-2">
+                <Label htmlFor="user-filter" className="text-xs text-muted-foreground">User</Label>
+                <Select 
+                  value={selectedUserId} 
+                  onValueChange={setSelectedUserId}
+                  disabled={loadingFilters}
+                >
+                  <SelectTrigger className="border-2 h-9">
+                    <SelectValue placeholder="All Users" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Users</SelectItem>
+                    {users.map(user => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.full_name || user.email || 'Unknown User'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* X-Axis Label */}
@@ -369,111 +655,260 @@ export function AnalyticsReports() {
 
             {/* Chart Type */}
             <div className="space-y-2">
-              <Label htmlFor="chart-type">Chart Type</Label>
-              <Select value={chartType} onValueChange={setChartType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bar">
-                    <div className="flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4" />
-                      <span>Bar Chart</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="line">
-                    <div className="flex items-center gap-2">
-                      <LineChart className="w-4 h-4" />
-                      <span>Line Chart</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="pie">
-                    <div className="flex items-center gap-2">
-                      <PieChart className="w-4 h-4" />
-                      <span>Pie Chart</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="table">
-                    <div className="flex items-center gap-2">
-                      <Table className="w-4 h-4" />
-                      <span>Table</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Metrics */}
-            <div className="space-y-2">
-              <Label>Metrics</Label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {metrics.map((field) => (
-                  <div key={field.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={field.id}
-                      checked={selectedFields.includes(field.id)}
-                      onCheckedChange={() => handleFieldToggle(field.id)}
-                    />
-                    <Label
-                      htmlFor={field.id}
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {field.name}
-                    </Label>
-                  </div>
-                ))}
+              <Label htmlFor="chart-type" className="text-sm font-semibold">Chart Type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setChartType('bar')}
+                  className={`p-3 rounded-lg border-2 transition-all ${
+                    chartType === 'bar'
+                      ? 'border-primary bg-primary/10 shadow-md'
+                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <BarChart3 className={`w-5 h-5 mx-auto mb-1 ${chartType === 'bar' ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className={`text-xs font-medium ${chartType === 'bar' ? 'text-primary' : 'text-muted-foreground'}`}>Bar</span>
+                </button>
+                <button
+                  onClick={() => setChartType('line')}
+                  className={`p-3 rounded-lg border-2 transition-all ${
+                    chartType === 'line'
+                      ? 'border-primary bg-primary/10 shadow-md'
+                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <LineChart className={`w-5 h-5 mx-auto mb-1 ${chartType === 'line' ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className={`text-xs font-medium ${chartType === 'line' ? 'text-primary' : 'text-muted-foreground'}`}>Line</span>
+                </button>
+                <button
+                  onClick={() => setChartType('pie')}
+                  className={`p-3 rounded-lg border-2 transition-all ${
+                    chartType === 'pie'
+                      ? 'border-primary bg-primary/10 shadow-md'
+                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <PieChart className={`w-5 h-5 mx-auto mb-1 ${chartType === 'pie' ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className={`text-xs font-medium ${chartType === 'pie' ? 'text-primary' : 'text-muted-foreground'}`}>Pie</span>
+                </button>
+                <button
+                  onClick={() => setChartType('table')}
+                  className={`p-3 rounded-lg border-2 transition-all ${
+                    chartType === 'table'
+                      ? 'border-primary bg-primary/10 shadow-md'
+                      : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <Table className={`w-5 h-5 mx-auto mb-1 ${chartType === 'table' ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className={`text-xs font-medium ${chartType === 'table' ? 'text-primary' : 'text-muted-foreground'}`}>Table</span>
+                </button>
               </div>
             </div>
 
-            {/* Dimensions */}
-            <div className="space-y-2">
-              <Label>Dimensions</Label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {dimensions.map((field) => (
-                  <div key={field.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={field.id}
-                      checked={selectedFields.includes(field.id)}
-                      onCheckedChange={() => handleFieldToggle(field.id)}
-                    />
-                    <Label
-                      htmlFor={field.id}
-                      className="text-sm font-normal cursor-pointer"
+            {/* Drag and Drop Section */}
+            <DragDropContext onDragEnd={handleDragEnd}>
+              {/* Selected Fields - Drag to reorder */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Selected Metrics</Label>
+                  <Badge variant="secondary" className="text-xs">
+                    {selectedFields.length}
+                  </Badge>
+                </div>
+                <Droppable droppableId="selected-fields">
+                  {(provided, snapshot) => (
+                    <div
+                      {...provided.droppableProps}
+                      ref={provided.innerRef}
+                      className={`min-h-[100px] max-h-64 overflow-y-auto rounded-lg border-2 border-dashed transition-colors ${
+                        snapshot.isDraggingOver
+                          ? 'border-primary bg-primary/5'
+                          : 'border-muted bg-muted/30'
+                      }`}
                     >
-                      {field.name}
-                    </Label>
-                  </div>
-                ))}
+                      {selectedFields.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-24 text-muted-foreground text-sm">
+                          <GripVertical className="w-5 h-5 mb-2 opacity-50" />
+                          <span>Drag metrics here</span>
+                        </div>
+                      ) : (
+                        <div className="p-2 space-y-2">
+                          {selectedFields.map((fieldId, index) => {
+                            const field = availableFields.find(f => f.id === fieldId)
+                            if (!field) return null
+                            const Icon = getFieldIcon(fieldId)
+                            return (
+                              <Draggable key={fieldId} draggableId={fieldId} index={index}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    className={`group flex items-center gap-2 p-2.5 rounded-lg border transition-all ${
+                                      snapshot.isDragging
+                                        ? 'shadow-lg scale-105 bg-background'
+                                        : 'bg-background hover:shadow-md'
+                                    } ${getFieldColor()}`}
+                                  >
+                                    <div
+                                      {...provided.dragHandleProps}
+                                      className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+                                    >
+                                      <GripVertical className="w-4 h-4" />
+                                    </div>
+                                    <Icon className="w-4 h-4 flex-shrink-0" />
+                                    <span className="text-sm font-medium flex-1">{field.name}</span>
+                                    <button
+                                      onClick={() => handleFieldToggle(fieldId)}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </Draggable>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
               </div>
-            </div>
 
-            {/* Filters */}
-            <div className="space-y-2">
-              <Label>Filters</Label>
-              <Button variant="outline" size="sm" className="w-full">
-                <Filter className="w-4 h-4 mr-2" />
-                Add Filter
-              </Button>
-            </div>
+              {/* Available Fields - Drag to add */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Available Metrics</Label>
+                  <Badge variant="outline" className="text-xs">
+                    {metrics.length + dimensions.length}
+                  </Badge>
+                </div>
+                <Droppable droppableId="available-fields">
+                  {(provided, snapshot) => (
+                    <div
+                      {...provided.droppableProps}
+                      ref={provided.innerRef}
+                      className={`min-h-[200px] max-h-96 overflow-y-auto rounded-lg border transition-colors ${
+                        snapshot.isDraggingOver
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border bg-muted/20'
+                      }`}
+                    >
+                      <div className="p-2 space-y-2">
+                        {/* Metrics Section */}
+                        {metrics.length > 0 && (
+                          <div className="mb-3">
+                            <div className="text-xs font-semibold text-muted-foreground mb-2 px-2 uppercase tracking-wide">
+                              Metrics
+                            </div>
+                            {metrics
+                              .filter(field => !selectedFields.includes(field.id))
+                              .map((field, index) => {
+                                const Icon = getFieldIcon(field.id)
+                                return (
+                                  <Draggable key={field.id} draggableId={field.id} index={index}>
+                                    {(provided, snapshot) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
+                                        className={`group flex items-center gap-2 p-2.5 rounded-lg border cursor-grab active:cursor-grabbing transition-all hover:shadow-md ${
+                                          snapshot.isDragging
+                                            ? 'shadow-lg scale-105 bg-background'
+                                            : 'bg-background'
+                                        } ${getFieldColor()}`}
+                                      >
+                                        <Icon className="w-4 h-4 flex-shrink-0" />
+                                        <span className="text-sm font-medium flex-1">{field.name}</span>
+                                        <Plus className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    )}
+                                  </Draggable>
+                                )
+                              })}
+                          </div>
+                        )}
+                        
+                        {/* Dimensions Section */}
+                        {dimensions.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-muted-foreground mb-2 px-2 uppercase tracking-wide">
+                              Dimensions
+                            </div>
+                            {dimensions
+                              .filter(field => !selectedFields.includes(field.id))
+                              .map((field, index) => {
+                                const Icon = getFieldIcon(field.id)
+                                return (
+                                  <Draggable key={field.id} draggableId={field.id} index={metrics.filter(f => !selectedFields.includes(f.id)).length + index}>
+                                    {(provided, snapshot) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
+                                        className={`group flex items-center gap-2 p-2.5 rounded-lg border cursor-grab active:cursor-grabbing transition-all hover:shadow-md ${
+                                          snapshot.isDragging
+                                            ? 'shadow-lg scale-105 bg-background'
+                                            : 'bg-background'
+                                        } ${getFieldColor()}`}
+                                      >
+                                        <Icon className="w-4 h-4 flex-shrink-0" />
+                                        <span className="text-sm font-medium flex-1">{field.name}</span>
+                                        <Plus className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    )}
+                                  </Draggable>
+                                )
+                              })}
+                          </div>
+                        )}
+                      </div>
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </div>
+            </DragDropContext>
+
           </CardContent>
         </Card>
 
-        {/* Report Preview */}
-        <Card className="lg:col-span-3 border-2">
-          <CardHeader className="pb-4">
+        {/* Modern Report Preview */}
+        <Card className="lg:col-span-3 border-2 shadow-xl">
+          <CardHeader className="pb-4 border-b bg-card">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-xl font-bold">{reportName || 'Report Preview'}</CardTitle>
-                <CardDescription className="mt-1.5">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5" />
+                <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                  {reportName || 'Report Preview'}
+                  {reportName && (
+                    <Badge variant="secondary" className="ml-2">
+                      {chartType}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="gap-1.5">
+                    <Calendar className="w-3 h-3" />
                     {dateRange.replace('_', ' ')}
-                  </span>
-                  <span className="mx-2">•</span>
-                  <span>{selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} selected</span>
+                  </Badge>
+                  <Badge variant="outline" className="gap-1.5">
+                    {selectedFields.length} metric{selectedFields.length !== 1 ? 's' : ''}
+                  </Badge>
+                  {selectedSpaceId && selectedSpaceId !== 'all' && (
+                    <Badge variant="outline" className="gap-1.5">
+                      <Filter className="w-3 h-3" />
+                      {spaces.find(s => s.id === selectedSpaceId)?.name || 'Space'}
+                    </Badge>
+                  )}
+                  {selectedUserId && selectedUserId !== 'all' && (
+                    <Badge variant="outline" className="gap-1.5">
+                      <Users className="w-3 h-3" />
+                      {users.find(u => u.id === selectedUserId)?.full_name || users.find(u => u.id === selectedUserId)?.email || 'User'}
+                    </Badge>
+                  )}
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" className="shadow-sm">
+              <Button variant="outline" size="sm" className="shadow-sm hover:shadow-md transition-shadow">
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
@@ -562,8 +997,8 @@ export function AnalyticsReports() {
                   {chartType === 'table' && <Table className="w-16 h-16 mx-auto text-muted-foreground mb-4" />}
                   <p className="text-sm text-muted-foreground mb-2">
                     {selectedFields.length > 0 
-                      ? `Click "Generate Report" to view data`
-                      : 'Select metrics and dimensions to generate report'}
+                      ? 'Report updates automatically as you make changes'
+                      : 'Drag metrics from the sidebar to start building your report'}
                   </p>
                   {selectedFields.length > 0 && (
                     <div className="flex flex-wrap gap-2 justify-center mt-4">
@@ -599,15 +1034,23 @@ export function AnalyticsReports() {
               setSelectedFields(config.selectedFields)
               setXAxisLabel(config.xAxisLabel || '')
               setYAxisLabel(config.yAxisLabel || '')
+              // Apply filters if provided
+              if (config.filters) {
+                setSelectedSpaceId(config.filters.spaceId || 'all')
+                setSelectedUserId(config.filters.userId || 'all')
+              }
               
-              // Generate the report automatically
-              setTimeout(() => {
-                handleGenerateReport()
-              }, 100)
+              // Skip auto-generation since we'll trigger it manually
+              skipAutoGenerate.current = true
               
               // Close the dialog after applying
               setShowAIAgent(false)
               toastSuccess('Report configuration applied!')
+              
+              // Generate the report automatically after state updates
+              setTimeout(() => {
+                handleGenerateReport()
+              }, 200)
             }}
             onClose={() => setShowAIAgent(false)}
           />

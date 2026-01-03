@@ -16,10 +16,10 @@ import {
   LogOut,
   User,
   ChevronDown,
-  HelpCircle,
   ChevronLeft,
   ChevronRight,
-  Search
+  Search,
+  Bot
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,11 +31,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { NotificationBell } from '@/components/notifications/notification-bell'
-import { fetchForms } from '@/lib/database-functions'
-import { Form } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
-import FillFormModal from '@/components/modals/fill-form-modal'
-import ConversationalFormModal from '@/components/modals/conversational-form-modal'
 import { InvoicingDashboard } from './tabs/invoicing-dashboard'
 import { InvoicingInvoices } from './tabs/invoicing-invoices'
 import { InvoicingClients } from './tabs/invoicing-clients'
@@ -44,6 +40,7 @@ import { InvoicingPayments } from './tabs/invoicing-payments'
 import { InvoicingExpenses } from './tabs/invoicing-expenses'
 import { InvoicingReports } from './tabs/invoicing-reports'
 import { InvoicingSettings } from './tabs/invoicing-settings'
+import { InvoicingAIAssistant } from './tabs/invoicing-ai-assistant'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 
@@ -59,6 +56,7 @@ const navigationItems = [
   { id: 'recurring', label: 'Recurring', icon: Repeat },
   { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'expenses', label: 'Expenses', icon: Receipt },
+  { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -69,8 +67,6 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [supportForm, setSupportForm] = useState<Form | null>(null)
-  const [showSupportModal, setShowSupportModal] = useState(false)
   const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
@@ -78,29 +74,6 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
     auth.signOut()
     router.push('/auth/signin')
   }
-
-  // Load support form
-  useEffect(() => {
-    const loadSupportForm = async () => {
-      try {
-        const forms = await fetchForms()
-        const supportTicketForm = forms.find(form => {
-          const title = form.title.toLowerCase().trim()
-          return title === 'support ticket' || 
-                 title === 'support' ||
-                 title.includes('support ticket') ||
-                 title.includes('support')
-        })
-        if (supportTicketForm) {
-          setSupportForm(supportTicketForm)
-        }
-      } catch (error) {
-        console.error('Error loading support form:', error)
-      }
-    }
-
-    loadSupportForm()
-  }, [])
 
   // Load user profile picture
   useEffect(() => {
@@ -163,6 +136,8 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
         return <InvoicingPayments />
       case 'expenses':
         return <InvoicingExpenses />
+      case 'ai-assistant':
+        return <InvoicingAIAssistant />
       case 'reports':
         return <InvoicingReports />
       case 'settings':
@@ -255,37 +230,6 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
           
           <div className="flex items-center gap-2">
             <NotificationBell />
-            <button
-              onClick={async () => {
-                if (!supportForm) {
-                  try {
-                    const forms = await fetchForms()
-                    const supportTicketForm = forms.find(form => {
-                      const title = form.title.toLowerCase().trim()
-                      return title === 'support ticket' || 
-                             title === 'support' ||
-                             title.includes('support ticket') ||
-                             title.includes('support')
-                    })
-                    if (supportTicketForm) {
-                      setSupportForm(supportTicketForm)
-                      setShowSupportModal(true)
-                    } else {
-                      setShowSupportModal(true)
-                    }
-                  } catch (error) {
-                    console.error('Error loading support form:', error)
-                    setShowSupportModal(true)
-                  }
-                } else {
-                  setShowSupportModal(true)
-                }
-              }}
-              className="p-2 hover:bg-muted rounded-md transition-colors"
-              title="Support"
-            >
-              <HelpCircle className="w-4 h-4 text-muted-foreground" />
-            </button>
             <div className="w-px h-5 bg-border mx-1" />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -334,16 +278,6 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
           {renderContent()}
         </div>
       </div>
-
-      {/* Support Modal */}
-      {showSupportModal && supportForm && (
-        <FillFormModal
-          form={supportForm}
-          isOpen={showSupportModal}
-          onClose={() => setShowSupportModal(false)}
-          onFormSubmitted={() => setShowSupportModal(false)}
-        />
-      )}
 
       {/* User Settings Modal */}
       <Dialog open={showUserSettingsModal} onOpenChange={setShowUserSettingsModal}>

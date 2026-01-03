@@ -1,6 +1,11 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { useSession } from '@/components/providers/session-provider'
+import { useRouter } from 'next/navigation'
+import { getInvoices } from '@/lib/invoicing-functions'
+import { getPayments, getPaymentStats } from '@/lib/payment-functions'
+import { getExpenses, getCashFlow } from '@/lib/expense-functions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { 
@@ -14,10 +19,14 @@ import {
   ArrowDownRight,
   Plus,
   AlertCircle,
-  Receipt
+  Receipt,
+  Loader2
 } from 'lucide-react'
 
 export function InvoicingDashboard() {
+  const { data: session } = useSession()
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalRevenue: 0,
     outstandingInvoices: 0,
@@ -27,21 +36,83 @@ export function InvoicingDashboard() {
     paidInvoices: 0,
     pendingInvoices: 0,
     overdueInvoices: 0,
+    totalExpenses: 0,
+    netCashFlow: 0,
   })
 
+  const spaceId = session?.user?.company_id || null
+
   useEffect(() => {
-    // TODO: Fetch real data from database
-    setStats({
-      totalRevenue: 245000,
-      outstandingInvoices: 125000,
-      overdueAmount: 35000,
-      paidThisMonth: 85000,
-      totalInvoices: 156,
-      paidInvoices: 98,
-      pendingInvoices: 45,
-      overdueInvoices: 13,
-    })
-  }, [])
+    loadDashboardData()
+  }, [spaceId])
+
+  const loadDashboardData = async () => {
+    setLoading(true)
+    try {
+      // Load invoices
+      const invoicesResult = await getInvoices(spaceId || undefined)
+      const invoices = invoicesResult.success ? invoicesResult.data || [] : []
+
+      // Load payments
+      const paymentsResult = await getPaymentStats(spaceId || undefined)
+      const paymentStats = paymentsResult.success ? paymentsResult.data : null
+
+      // Load expenses
+      const expensesResult = await getExpenses(spaceId || undefined)
+      const expenses = expensesResult.success ? expensesResult.data || [] : []
+
+      // Load cash flow
+      const cashFlowResult = await getCashFlow(spaceId || undefined)
+      const cashFlow = cashFlowResult.success ? cashFlowResult.data : null
+
+      // Calculate stats
+      const totalRevenue = invoices
+        .filter(inv => inv.status === 'paid')
+        .reduce((sum, inv) => sum + inv.total_amount, 0)
+
+      const outstandingInvoices = invoices
+        .filter(inv => inv.status === 'sent' || inv.status === 'viewed')
+        .reduce((sum, inv) => sum + (inv.total_amount - (inv.paid_amount || 0)), 0)
+
+      const now = new Date()
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      const paidThisMonth = invoices
+        .filter(inv => {
+          if (inv.status !== 'paid' || !inv.paid_at) return false
+          const paidDate = new Date(inv.paid_at)
+          return paidDate >= thisMonthStart
+        })
+        .reduce((sum, inv) => sum + inv.total_amount, 0)
+
+      const overdueInvoices = invoices.filter(inv => {
+        if (inv.status === 'paid' || inv.status === 'cancelled') return false
+        const dueDate = new Date(inv.due_date)
+        return dueDate < now
+      })
+
+      const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.total_amount - (inv.paid_amount || 0)), 0)
+
+      const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0)
+      const netCashFlow = cashFlow ? cashFlow.netCashFlow : totalRevenue - totalExpenses
+
+      setStats({
+        totalRevenue,
+        outstandingInvoices,
+        overdueAmount,
+        paidThisMonth,
+        totalInvoices: invoices.length,
+        paidInvoices: invoices.filter(inv => inv.status === 'paid').length,
+        pendingInvoices: invoices.filter(inv => inv.status === 'sent' || inv.status === 'viewed').length,
+        overdueInvoices: overdueInvoices.length,
+        totalExpenses,
+        netCashFlow,
+      })
+    } catch (error) {
+      console.error('Error loading dashboard data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const statCards = [
     {
@@ -89,14 +160,20 @@ export function InvoicingDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-end">
-        <Button>
+        <Button onClick={() => router.push('/apps/invoicing?tab=invoices')}>
           <Plus className="w-4 h-4 mr-2" />
           New Invoice
         </Button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat) => {
           const Icon = stat.icon
           return (
@@ -153,19 +230,35 @@ export function InvoicingDashboard() {
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button variant="outline" className="w-full justify-start">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => router.push('/apps/invoicing?tab=invoices')}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Create Invoice
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => router.push('/apps/invoicing?tab=invoices')}
+            >
               <FileText className="w-4 h-4 mr-2" />
               View All Invoices
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => router.push('/apps/invoicing?tab=payments')}
+            >
               <DollarSign className="w-4 h-4 mr-2" />
               Record Payment
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => router.push('/apps/invoicing?tab=expenses')}
+            >
               <Receipt className="w-4 h-4 mr-2" />
               Add Expense
             </Button>
@@ -214,20 +307,22 @@ export function InvoicingDashboard() {
         </Card>
       </div>
 
-      {/* Payment Timeline */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment Timeline</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64 flex items-center justify-center border-2 border-dashed rounded-lg">
-            <div className="text-center">
-              <TrendingUp className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">Payment timeline chart will be displayed here</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          {/* Payment Timeline */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64 flex items-center justify-center border-2 border-dashed rounded-lg">
+                <div className="text-center">
+                  <TrendingUp className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">Payment timeline chart will be displayed here</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   )
 }
