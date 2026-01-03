@@ -513,7 +513,7 @@ export function AnalyticsReports() {
           </Button>
           <Button 
             onClick={handleSaveReport}
-            disabled={saving || !reportName.trim() || selectedFields.length === 0}
+            disabled={saving}
             className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
           >
             {saving ? (
