@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { 
   Folder, 
   Upload, 
@@ -100,7 +101,7 @@ export default function DocumentsTab({ selectedCompany }: { selectedCompany?: st
   const [showPreview, setShowPreview] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const isAdmin = session?.user?.role === 'admin'
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
   const userCompanyId = session?.user?.company_id
 
   // Handle URL parameters for company selection

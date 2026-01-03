@@ -18,7 +18,8 @@ import {
   LogOut,
   Home,
   User,
-  Grid3x3
+  Grid3x3,
+  Shield
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -26,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { useSession, useAuth } from "@/components/providers/session-provider"
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { Company } from "@/lib/supabase"
+import { hasAdminPrivileges, hasSystemAdminPrivileges } from "@/lib/role-helpers"
 import {
   Tooltip,
   TooltipContent,
@@ -81,7 +83,7 @@ export function ModernSidebar({
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
   const [showCreateSpaceModal, setShowCreateSpaceModal] = useState(false)
 
-  const isAdmin = session?.user?.role === "admin"
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
 
   useEffect(() => {
     const loadSpaces = async () => {
@@ -460,6 +462,18 @@ export function ModernSidebar({
                         <User className="w-4 h-4" />
                         <span>User Settings</span>
                       </DropdownMenuItem>
+                      {session && session.user && session.user.role === 'system_admin' && (
+                        <>
+                          <div className="h-px bg-border my-1" />
+                          <DropdownMenuItem
+                            onClick={() => router.push('/apps/system-admin')}
+                            className="flex items-center gap-2 cursor-pointer"
+                          >
+                            <Shield className="w-4 h-4" />
+                            <span>System Admin</span>
+                          </DropdownMenuItem>
+                        </>
+                      )}
                       <div className="h-px bg-border my-1" />
                       <DropdownMenuItem
                         onClick={() => setShowLogoutDialog(true)}

@@ -29,11 +29,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { NotificationBell } from '@/components/notifications/notification-bell'
-import { fetchForms } from '@/lib/database-functions'
-import { Form } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
-import FillFormModal from '@/components/modals/fill-form-modal'
-import ConversationalFormModal from '@/components/modals/conversational-form-modal'
+import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
 import { UserManagementDashboard } from './tabs/user-management-dashboard'
 import { UserManagementUsers } from './tabs/user-management-users'
 import { UserManagementInvitations } from './tabs/user-management-invitations'
@@ -63,8 +60,7 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [supportForm, setSupportForm] = useState<Form | null>(null)
-  const [showSupportModal, setShowSupportModal] = useState(false)
+  const [showSupportTicketModal, setShowSupportTicketModal] = useState(false)
   const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
@@ -73,28 +69,6 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
     router.push('/auth/signin')
   }
 
-  // Load support form
-  useEffect(() => {
-    const loadSupportForm = async () => {
-      try {
-        const forms = await fetchForms()
-        const supportTicketForm = forms.find(form => {
-          const title = form.title.toLowerCase().trim()
-          return title === 'support ticket' || 
-                 title === 'support' ||
-                 title.includes('support ticket') ||
-                 title.includes('support')
-        })
-        if (supportTicketForm) {
-          setSupportForm(supportTicketForm)
-        }
-      } catch (error) {
-        console.error('Error loading support form:', error)
-      }
-    }
-
-    loadSupportForm()
-  }, [])
 
   // Load user profile picture
   useEffect(() => {
@@ -246,33 +220,9 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
           <div className="flex items-center gap-2">
             <NotificationBell />
             <button
-              onClick={async () => {
-                if (!supportForm) {
-                  try {
-                    const forms = await fetchForms()
-                    const supportTicketForm = forms.find(form => {
-                      const title = form.title.toLowerCase().trim()
-                      return title === 'support ticket' || 
-                             title === 'support' ||
-                             title.includes('support ticket') ||
-                             title.includes('support')
-                    })
-                    if (supportTicketForm) {
-                      setSupportForm(supportTicketForm)
-                      setShowSupportModal(true)
-                    } else {
-                      setShowSupportModal(true)
-                    }
-                  } catch (error) {
-                    console.error('Error loading support form:', error)
-                    setShowSupportModal(true)
-                  }
-                } else {
-                  setShowSupportModal(true)
-                }
-              }}
+              onClick={() => setShowSupportTicketModal(true)}
               className="p-2 hover:bg-muted rounded-md transition-colors"
-              title="Support"
+              title="Create Support Ticket"
             >
               <HelpCircle className="w-4 h-4 text-muted-foreground" />
             </button>
@@ -325,15 +275,12 @@ export function UserManagementLayout({ activeTab, onTabChange }: UserManagementL
         </div>
       </div>
 
-      {/* Support Modal */}
-      {showSupportModal && supportForm && (
-        <FillFormModal
-          form={supportForm}
-          isOpen={showSupportModal}
-          onClose={() => setShowSupportModal(false)}
-          onFormSubmitted={() => setShowSupportModal(false)}
-        />
-      )}
+      {/* Support Ticket Modal */}
+      <SupportTicketModal
+        isOpen={showSupportTicketModal}
+        onClose={() => setShowSupportTicketModal(false)}
+        spaceId={null}
+      />
 
       {/* User Settings Modal */}
       <Dialog open={showUserSettingsModal} onOpenChange={setShowUserSettingsModal}>

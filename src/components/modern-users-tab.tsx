@@ -81,7 +81,7 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
   const [editFormData, setEditFormData] = useState({
     name: "",
     email: "",
-    role: "user" as "admin" | "manager" | "user" | "internal",
+    role: "user" as "system_admin" | "admin" | "manager" | "user" | "internal",
     type: "client" as "internal" | "client",
     spaces: [] as string[],
   })
@@ -428,7 +428,7 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
           await updateUser(userId, {
             email: user.email,
             full_name: user.full_name || '',
-            role: user.role as 'admin' | 'manager' | 'user' | 'internal',
+            role: user.role as 'system_admin' | 'admin' | 'manager' | 'user' | 'internal',
             is_active: user.is_active !== false,
             company_id: activeSpace,
             assigned_manager_id: user.assigned_manager_id || undefined,

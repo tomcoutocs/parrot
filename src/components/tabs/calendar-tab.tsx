@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -345,7 +346,7 @@ export default function CalendarTab() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Schedule Meeting</h1>
             <p className="text-gray-600">Choose a date and time that works for you</p>
           </div>
-          {session?.user?.role === 'admin' && (
+          {hasAdminPrivileges(session?.user?.role) && (
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -818,7 +819,7 @@ export default function CalendarTab() {
                     {format(selectedDate, 'EEE d')}
                   </h3>
                   <div className="flex items-center gap-2">
-                    {session?.user?.role === 'admin' && (
+                    {hasAdminPrivileges(session?.user?.role) && (
                       <Button
                         variant="outline"
                         size="sm"

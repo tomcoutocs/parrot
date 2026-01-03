@@ -55,6 +55,16 @@ async function verifyPassword(password: string, hashedPassword: string): Promise
   return hashedInput === hashedPassword
 }
 
+// Helper function to check if user has admin privileges (admin or system_admin)
+export function hasAdminPrivileges(role: string): boolean {
+  return role === 'admin' || role === 'system_admin'
+}
+
+// Helper function to check if user has system admin privileges
+export function hasSystemAdminPrivileges(role: string): boolean {
+  return role === 'system_admin'
+}
+
 // Helper function to set application context for RLS
 async function setAppContext() {
   if (!supabase) return
@@ -797,7 +807,7 @@ export async function addProjectManager(projectId: string, userId: string, role:
         .eq('id', currentUserId)
         .single()
       
-      if (userError || !userData || userData.role !== 'admin') {
+      if (userError || !userData || !hasAdminPrivileges(userData.role)) {
         return { success: false, error: 'Access denied: Only admin users can manage project users' }
       }
     }
@@ -834,7 +844,7 @@ export async function removeProjectManager(projectId: string, userId: string, cu
         .eq('id', currentUserId)
         .single()
       
-      if (userError || !userData || userData.role !== 'admin') {
+      if (userError || !userData || !hasAdminPrivileges(userData.role)) {
         return { success: false, error: 'Access denied: Only admin users can manage project users' }
       }
     }
@@ -869,7 +879,7 @@ export async function addProjectMember(projectId: string, userId: string, role: 
         .eq('id', currentUserId)
         .single()
       
-      if (userError || !userData || userData.role !== 'admin') {
+      if (userError || !userData || !hasAdminPrivileges(userData.role)) {
         return { success: false, error: 'Access denied: Only admin users can manage project users' }
       }
     }
@@ -1349,7 +1359,7 @@ export async function testActualTaskAssignment(targetUserId: string, taskId: str
 export async function createUser(userData: {
   email: string
   full_name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   password: string
   assigned_manager_id?: string
   company_id?: string
@@ -1371,7 +1381,7 @@ export async function createUser(userData: {
     const insertData: {
       email: string
       full_name: string
-      role: 'admin' | 'manager' | 'user' | 'internal'
+      role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
       assigned_manager_id: string | null
       company_id: string | null
       is_active: boolean
@@ -1403,7 +1413,7 @@ export async function createUser(userData: {
     }
 
     // If this is an internal user, admin, or manager and company_ids are provided, create company assignments
-    if ((data.role === 'internal' || data.role === 'admin' || data.role === 'manager') && userData.company_ids && userData.company_ids.length > 0) {
+    if ((data.role === 'internal' || hasAdminPrivileges(data.role) || data.role === 'manager') && userData.company_ids && userData.company_ids.length > 0) {
       // Check if the table exists first
       const { error: tableCheckError } = await supabase
         .from('internal_user_companies')
@@ -1456,7 +1466,7 @@ export async function updateUser(
   userData: {
     email: string
     full_name: string
-    role: 'admin' | 'manager' | 'user' | 'internal'
+    role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
     is_active: boolean
     assigned_manager_id?: string
     company_id?: string
@@ -1474,12 +1484,30 @@ export async function updateUser(
   try {
     await setAppContext()
     
+    // Check if user is trying to manage an admin - only system_admin can do this
+    const currentUser = getCurrentUser()
+    if (currentUser) {
+      // Get the user being updated to check their current role
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single()
+      
+      // If updating an admin user or changing role to admin, only system_admin can do this
+      if (existingUser && (existingUser.role === 'admin' || userData.role === 'admin')) {
+        if (!hasSystemAdminPrivileges(currentUser.role)) {
+          return { success: false, error: 'Only system administrators can manage admin users' }
+        }
+      }
+    }
+    
     // Prepare update data, excluding tab_permissions if column doesn't exist
     // Try space_id first (after migration), fallback to company_id
     const updateData: {
       email: string
       full_name: string
-      role: 'admin' | 'manager' | 'user' | 'internal'
+      role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
       is_active: boolean
       assigned_manager_id: string | null
       space_id?: string | null
@@ -1549,7 +1577,7 @@ export async function updateUser(
     }
 
     // If this is an internal user, admin, or manager and company_ids are provided, update company assignments
-    if ((data.role === 'internal' || data.role === 'admin' || data.role === 'manager') && userData.company_ids) {
+    if ((data.role === 'internal' || hasAdminPrivileges(data.role) || data.role === 'manager') && userData.company_ids) {
       // Check if the table exists first
       const { error: tableCheckError } = await supabase
         .from('internal_user_companies')
@@ -1734,8 +1762,19 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
     
     // Verify current user has admin permissions
     const currentUser = getCurrentUser()
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser || !hasAdminPrivileges(currentUser.role)) {
       return { success: false, error: 'Only admins can delete users' }
+    }
+    
+    // Check if user being deleted is an admin - only system_admin can delete admins
+    let { data: userToCheck } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single()
+    
+    if (userToCheck && userToCheck.role === 'admin' && !hasSystemAdminPrivileges(currentUser.role)) {
+      return { success: false, error: 'Only system administrators can delete admin users' }
     }
     
     // Get user info before deleting for activity log
@@ -4340,7 +4379,7 @@ export async function updateSpaceServices(spaceId: string, serviceIds: string[])
     const currentUser = getCurrentUser()
     
     // Verify user has admin or manager role
-    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+    if (!currentUser || (!hasAdminPrivileges(currentUser.role) && currentUser.role !== 'manager')) {
       return { success: false, error: 'Only admins and managers can update space services' }
     }
     
@@ -5397,7 +5436,7 @@ export async function createFolder(
       console.log('User company access verified:', user)
       
       // Admins and managers can create folders in any company
-      if (user.role === 'admin' || user.role === 'manager') {
+      if (hasAdminPrivileges(user.role) || user.role === 'manager') {
         console.log('Admin/Manager creating folder in company:', companyId)
         // Allow access to any company
       } else {
@@ -6139,7 +6178,7 @@ export async function createSpaceBookmark(
     // Verify user has access to this company
     // Admins can create bookmarks in any company
     // Managers and other users can only create bookmarks in their own company
-    if (currentUser.role !== 'admin') {
+    if (!hasAdminPrivileges(currentUser.role)) {
       if (currentUser.companyId !== companyId) {
         return { success: false, error: 'You can only create bookmarks in your own company' }
       }
@@ -6280,7 +6319,7 @@ export async function updateSpaceBookmark(
     // Admins can update any bookmark
     // Managers and other users can only update bookmarks in their own company
     const bookmarkSpaceId = (existingBookmark as any).space_id || (existingBookmark as any).company_id
-    if (currentUser.role !== 'admin') {
+    if (!hasAdminPrivileges(currentUser.role)) {
       if (currentUser.companyId !== bookmarkSpaceId) {
         return { success: false, error: 'You can only update bookmarks in your own company' }
       }
@@ -6360,7 +6399,7 @@ export async function deleteSpaceBookmark(
     // Admins can delete any bookmark
     // Managers and other users can only delete bookmarks in their own company
     const bookmarkSpaceId = (existingBookmark as any).space_id || (existingBookmark as any).company_id
-    if (currentUser.role !== 'admin') {
+    if (!hasAdminPrivileges(currentUser.role)) {
       if (currentUser.companyId !== bookmarkSpaceId) {
         return { success: false, error: 'You can only delete bookmarks in your own company' }
       }
@@ -6956,7 +6995,7 @@ export async function saveRichDocument(
       // For new documents, verify user has access to this company
       // Admins can create documents in any company
       const hasAccess = 
-        currentUser.role === 'admin' ||
+        hasAdminPrivileges(currentUser.role) ||
         currentUser.companyId === companyId ||
         (currentUser.role === 'internal' && currentUser.companyIds?.includes(companyId)) ||
         (currentUser.role === 'manager' && currentUser.companyId === companyId)
@@ -7105,7 +7144,7 @@ export async function getCompanyRichDocuments(
     // Users can access their own company
     // Internal users can access companies they're assigned to
     const hasAccess = 
-      currentUser.role === 'admin' ||
+      hasAdminPrivileges(currentUser.role) ||
       currentUser.companyId === companyId ||
       (currentUser.role === 'internal' && currentUser.companyIds?.includes(companyId)) ||
       (currentUser.role === 'manager' && currentUser.companyId === companyId)
@@ -7181,7 +7220,7 @@ export async function getRichDocument(
     // Application-level security: Verify user has access to this company
     // Admins can view any document
     const hasAccess = 
-      currentUser.role === 'admin' ||
+      hasAdminPrivileges(currentUser.role) ||
       currentUser.companyId === data.company_id ||
       (currentUser.role === 'internal' && currentUser.companyIds?.includes(data.company_id)) ||
       (currentUser.role === 'manager' && currentUser.companyId === data.company_id)
@@ -7726,7 +7765,7 @@ export async function getUserManagementActivities(limit: number = 10): Promise<U
     const { data: invitations, error: invitationsError } = await supabase
       .from('user_invitations')
       .select('id, email, full_name, role, status, invited_by, created_at, accepted_at')
-      .in('role', ['admin', 'manager', 'internal'])
+      .in('role', ['system_admin', 'admin', 'manager', 'internal'])
       .order('created_at', { ascending: false })
       .limit(limit * 2) // Get more to filter
     
@@ -7784,7 +7823,7 @@ export async function getUserManagementActivities(limit: number = 10): Promise<U
     let { data: recentUsers, error: usersError } = await supabase
       .from('users')
       .select('id, email, full_name, role, updated_at, tab_permissions, space_id')
-      .in('role', ['admin', 'manager', 'internal'])
+      .in('role', ['system_admin', 'admin', 'manager', 'internal'])
       .order('updated_at', { ascending: false })
       .limit(limit)
     
@@ -7793,7 +7832,7 @@ export async function getUserManagementActivities(limit: number = 10): Promise<U
       const fallback = await supabase
         .from('users')
         .select('id, email, full_name, role, updated_at, tab_permissions, company_id')
-        .in('role', ['admin', 'manager', 'internal'])
+        .in('role', ['system_admin', 'admin', 'manager', 'internal'])
         .order('updated_at', { ascending: false })
         .limit(limit)
       

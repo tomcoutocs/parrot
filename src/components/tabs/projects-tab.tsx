@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { useSearchParams } from 'next/navigation'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import EmptyState from '@/components/ui/empty-state'
 import { LoadingTaskGrid, DataLoadingState, InlineLoading, LoadingSpinner } from '@/components/ui/loading-states'
@@ -969,7 +970,7 @@ export default function ProjectsTab({
       setLoading(true)
       try {
         // Get user's company ID for filtering (use currentSpaceId if available, otherwise user's company)
-        const companyId = currentSpaceId || (session?.user?.role === 'admin' ? undefined : session?.user?.company_id)
+        const companyId = currentSpaceId || (hasAdminPrivileges(session?.user?.role) ? undefined : session?.user?.company_id)
         
         const projectsData = await fetchProjectsOptimized(companyId)
         

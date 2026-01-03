@@ -20,6 +20,7 @@ import {
 } from '@/lib/database-functions'
 import { getPerformanceMetrics } from '@/lib/performance-optimizations'
 import type { User, Company } from '@/lib/supabase'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { 
   BarChart, 
   Bar, 
@@ -406,7 +407,7 @@ export default function DebugTab() {
   }, [isRealTimeEnabled])
 
   // Security check - only admin users can access debug tab
-  if (!session || session.user.role !== 'admin') {
+  if (!session || !hasAdminPrivileges(session.user.role)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">

@@ -43,6 +43,8 @@ import { InvoicingSettings } from './tabs/invoicing-settings'
 import { InvoicingAIAssistant } from './tabs/invoicing-ai-assistant'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
+import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
+import { HelpCircle } from 'lucide-react'
 
 interface InvoicingLayoutProps {
   activeTab: string
@@ -67,6 +69,7 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [showSupportTicketModal, setShowSupportTicketModal] = useState(false)
   const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
@@ -230,6 +233,13 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
           
           <div className="flex items-center gap-2">
             <NotificationBell />
+            <button
+              onClick={() => setShowSupportTicketModal(true)}
+              className="p-2 hover:bg-muted rounded-md transition-colors"
+              title="Create Support Ticket"
+            >
+              <HelpCircle className="w-4 h-4 text-muted-foreground" />
+            </button>
             <div className="w-px h-5 bg-border mx-1" />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -278,6 +288,13 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
           {renderContent()}
         </div>
       </div>
+
+      {/* Support Ticket Modal */}
+        <SupportTicketModal
+          isOpen={showSupportTicketModal}
+          onClose={() => setShowSupportTicketModal(false)}
+          spaceId={null}
+        />
 
       {/* User Settings Modal */}
       <Dialog open={showUserSettingsModal} onOpenChange={setShowUserSettingsModal}>

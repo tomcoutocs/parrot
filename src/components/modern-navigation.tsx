@@ -15,13 +15,13 @@ interface NavigationItem {
   id: string
   label: string
   icon: React.ReactNode
-  roles?: ('admin' | 'manager' | 'user' | 'internal')[]
+  roles?: ('system_admin' | 'admin' | 'manager' | 'user' | 'internal')[]
 }
 
 interface ModernNavigationProps {
   activeTab: string
   onTabChange: (tabId: string) => void
-  userRole?: 'admin' | 'manager' | 'user' | 'internal'
+  userRole?: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
 }
 
 const navigationItems: NavigationItem[] = [
@@ -31,8 +31,8 @@ const navigationItems: NavigationItem[] = [
   { id: "documents", label: "Documents", icon: <FileText className="w-4 h-4" /> },
   { id: "calendar", label: "Calendar", icon: <Calendar className="w-4 h-4" /> },
   { id: "reports", label: "Reports", icon: <BarChart3 className="w-4 h-4" /> },
-  { id: "users", label: "Users", icon: <Users className="w-4 h-4" />, roles: ['admin', 'manager'] },
-  { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" />, roles: ['admin', 'manager'] },
+  { id: "users", label: "Users", icon: <Users className="w-4 h-4" />, roles: ['system_admin', 'admin', 'manager'] },
+  { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" />, roles: ['system_admin', 'admin', 'manager'] },
 ]
 
 export function ModernNavigation({ activeTab, onTabChange, userRole }: ModernNavigationProps) {

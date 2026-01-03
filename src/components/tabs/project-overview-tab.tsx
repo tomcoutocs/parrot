@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSession } from '@/components/providers/session-provider'
 import { fetchTasks, fetchSpaces, fetchProjects } from '@/lib/database-functions'
 import type { TaskWithDetails, Company, ProjectWithDetails } from '@/lib/supabase'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -65,7 +66,7 @@ export default function ProjectOverviewTab() {
     try {
       // Fetch projects based on user role
       let allProjects: ProjectWithDetails[]
-      if (session?.user.role === 'admin') {
+      if (hasAdminPrivileges(session?.user.role)) {
         // Admin can see all projects
         allProjects = await fetchProjects()
       } else if (session?.user.role === 'manager') {
@@ -78,7 +79,7 @@ export default function ProjectOverviewTab() {
       
       // Fetch companies based on user role
       let allCompanies: Company[]
-      if (session?.user.role === 'admin') {
+      if (hasAdminPrivileges(session?.user.role)) {
         // Admin can see all companies
         allCompanies = await fetchSpaces()
       } else if (session?.user.role === 'manager') {
@@ -93,7 +94,7 @@ export default function ProjectOverviewTab() {
       
       // Fetch tasks based on user role
       let allTasks: TaskWithDetails[]
-      if (session?.user.role === 'admin') {
+      if (hasAdminPrivileges(session?.user.role)) {
         // Admin can see all tasks
         allTasks = await fetchTasks()
       } else if (session?.user.role === 'manager') {
@@ -263,7 +264,7 @@ export default function ProjectOverviewTab() {
     document.body.removeChild(link)
   }
 
-  if (session?.user.role !== 'admin' && session?.user.role !== 'manager') {
+  if (!hasAdminPrivileges(session?.user.role) && session?.user.role !== 'manager') {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -293,7 +294,7 @@ export default function ProjectOverviewTab() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Task Overview</h1>
           <p className="text-gray-600 mt-1">
-            {session?.user.role === 'admin' 
+            {hasAdminPrivileges(session?.user.role) 
               ? 'Track all tasks across all spaces' 
               : 'Track tasks for your assigned space'
             }
@@ -317,7 +318,7 @@ export default function ProjectOverviewTab() {
           <CardContent>
             <div className="text-2xl font-bold">{totalTasks}</div>
                          <p className="text-xs text-muted-foreground">
-               {session?.user.role === 'admin' ? 'Across all spaces' : 'For your space'}
+               {hasAdminPrivileges(session?.user.role) ? 'Across all spaces' : 'For your space'}
              </p>
           </CardContent>
         </Card>

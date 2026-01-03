@@ -32,11 +32,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { NotificationBell } from '@/components/notifications/notification-bell'
-import { fetchForms } from '@/lib/database-functions'
-import { Form } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
-import FillFormModal from '@/components/modals/fill-form-modal'
-import ConversationalFormModal from '@/components/modals/conversational-form-modal'
+import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
 import { LeadGenerationDashboard } from './tabs/lead-generation-dashboard'
 import { LeadPipeline } from './tabs/lead-pipeline'
 import { LeadCapture } from './tabs/lead-capture'
@@ -68,8 +65,7 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [supportForm, setSupportForm] = useState<Form | null>(null)
-  const [showSupportModal, setShowSupportModal] = useState(false)
+  const [showSupportTicketModal, setShowSupportTicketModal] = useState(false)
   const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
@@ -78,28 +74,6 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
     router.push('/auth/signin')
   }
 
-  // Load support form
-  useEffect(() => {
-    const loadSupportForm = async () => {
-      try {
-        const forms = await fetchForms()
-        const supportTicketForm = forms.find(form => {
-          const title = form.title.toLowerCase().trim()
-          return title === 'support ticket' || 
-                 title === 'support' ||
-                 title.includes('support ticket') ||
-                 title.includes('support')
-        })
-        if (supportTicketForm) {
-          setSupportForm(supportTicketForm)
-        }
-      } catch (error) {
-        console.error("Error loading support form:", error)
-      }
-    }
-
-    loadSupportForm()
-  }, [])
 
   // Load user profile picture
   useEffect(() => {
@@ -251,32 +225,9 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
           <div className="flex items-center gap-2">
             <NotificationBell />
             <button
-              onClick={async () => {
-                if (!supportForm) {
-                  try {
-                    const forms = await fetchForms()
-                    const supportTicketForm = forms.find(form => {
-                      const title = form.title.toLowerCase().trim()
-                      return title === 'support ticket' || 
-                             title === 'support' ||
-                             title.includes('support ticket') ||
-                             title.includes('support')
-                    })
-                    if (supportTicketForm) {
-                      setSupportForm(supportTicketForm)
-                      setShowSupportModal(true)
-                    } else {
-                      console.warn('Support form not found')
-                    }
-                  } catch (error) {
-                    console.error('Error loading support form:', error)
-                  }
-                } else {
-                  setShowSupportModal(true)
-                }
-              }}
+              onClick={() => setShowSupportTicketModal(true)}
               className="p-2 hover:bg-muted rounded-md transition-colors"
-              title="Support"
+              title="Create Support Ticket"
             >
               <HelpCircle className="w-4 h-4 text-muted-foreground" />
             </button>
@@ -331,52 +282,12 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
         </main>
       </div>
 
-      {/* Support Modal */}
-      {showSupportModal && supportForm && (() => {
-        // Parse theme from form description
-        let formTheme = {
-          primaryColor: '#f97316',
-          backgroundColor: '#ffffff',
-          textColor: '#000000',
-          fontFamily: 'inherit',
-          conversational: false
-        }
-        
-        if (supportForm.description) {
-          try {
-            const themeMatch = supportForm.description.match(/__THEME__({[\s\S]*?})__THEME__/)
-            if (themeMatch) {
-              formTheme = JSON.parse(themeMatch[1])
-            }
-          } catch (e) {
-            console.error('Error parsing theme:', e)
-          }
-        }
-
-        return formTheme.conversational ? (
-          <ConversationalFormModal
-            isOpen={showSupportModal}
-            onClose={() => setShowSupportModal(false)}
-            onFormSubmitted={() => {
-              setShowSupportModal(false)
-            }}
-            form={supportForm}
-            spaceId={null}
-            theme={formTheme}
-          />
-        ) : (
-          <FillFormModal
-            isOpen={showSupportModal}
-            onClose={() => setShowSupportModal(false)}
-            onFormSubmitted={() => {
-              setShowSupportModal(false)
-            }}
-            form={supportForm}
-            spaceId={null}
-            theme={formTheme}
-          />
-        )
-      })()}
+      {/* Support Ticket Modal */}
+      <SupportTicketModal
+        isOpen={showSupportTicketModal}
+        onClose={() => setShowSupportTicketModal(false)}
+        spaceId={null}
+      />
 
       {/* User Settings Modal */}
       <Dialog open={showUserSettingsModal} onOpenChange={setShowUserSettingsModal}>

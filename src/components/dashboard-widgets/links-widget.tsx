@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { 
   fetchDashboardLinks, 
   createDashboardLink, 
@@ -184,7 +185,7 @@ export default function LinksWidget({ companyId, config }: LinksWidgetProps) {
     }
   }
 
-  const canEdit = session?.user?.role === 'admin' || session?.user?.role === 'manager'
+  const canEdit = hasAdminPrivileges(session?.user?.role) || session?.user?.role === 'manager'
 
   return (
     <>

@@ -30,11 +30,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { NotificationBell } from '@/components/notifications/notification-bell'
-import { fetchForms } from '@/lib/database-functions'
-import { Form } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
-import FillFormModal from '@/components/modals/fill-form-modal'
-import ConversationalFormModal from '@/components/modals/conversational-form-modal'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
+import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
 import { CRMDashboard } from './tabs/crm-dashboard'
 import { CRMContacts } from './tabs/crm-contacts'
 import { CRMDeals } from './tabs/crm-deals'
@@ -66,8 +64,7 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [supportForm, setSupportForm] = useState<Form | null>(null)
-  const [showSupportModal, setShowSupportModal] = useState(false)
+  const [showSupportTicketModal, setShowSupportTicketModal] = useState(false)
   const [showUserSettingsModal, setShowUserSettingsModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
@@ -76,28 +73,6 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
     router.push('/auth/signin')
   }
 
-  // Load support form
-  useEffect(() => {
-    const loadSupportForm = async () => {
-      try {
-        const forms = await fetchForms()
-        const supportTicketForm = forms.find(form => {
-          const title = form.title.toLowerCase().trim()
-          return title === 'support ticket' || 
-                 title === 'support' ||
-                 title.includes('support ticket') ||
-                 title.includes('support')
-        })
-        if (supportTicketForm) {
-          setSupportForm(supportTicketForm)
-        }
-      } catch (error) {
-        console.error('Error loading support form:', error)
-      }
-    }
-
-    loadSupportForm()
-  }, [])
 
   // Load user profile picture
   useEffect(() => {
@@ -143,7 +118,8 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
   // Check if user has permission for a specific tab
   const hasTabPermission = (tabId: string): boolean => {
     if (!session?.user) return false
-    if (session.user.role === 'admin') return true // Admins have all permissions
+    const { hasAdminPrivileges } = require('@/lib/role-helpers')
+    if (hasAdminPrivileges(session.user.role)) return true // Admins have all permissions
     
     const tabPermissions = session.user.tab_permissions || []
     const permissionKey = `crm:${tabId}`
@@ -274,33 +250,9 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
           <div className="flex items-center gap-2">
             <NotificationBell />
             <button
-              onClick={async () => {
-                if (!supportForm) {
-                  try {
-                    const forms = await fetchForms()
-                    const supportTicketForm = forms.find(form => {
-                      const title = form.title.toLowerCase().trim()
-                      return title === 'support ticket' || 
-                             title === 'support' ||
-                             title.includes('support ticket') ||
-                             title.includes('support')
-                    })
-                    if (supportTicketForm) {
-                      setSupportForm(supportTicketForm)
-                      setShowSupportModal(true)
-                    } else {
-                      setShowSupportModal(true)
-                    }
-                  } catch (error) {
-                    console.error('Error loading support form:', error)
-                    setShowSupportModal(true)
-                  }
-                } else {
-                  setShowSupportModal(true)
-                }
-              }}
+              onClick={() => setShowSupportTicketModal(true)}
               className="p-2 hover:bg-muted rounded-md transition-colors"
-              title="Support"
+              title="Create Support Ticket"
             >
               <HelpCircle className="w-4 h-4 text-muted-foreground" />
             </button>
@@ -353,15 +305,12 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
         </div>
       </div>
 
-      {/* Support Modal */}
-      {showSupportModal && supportForm && (
-        <FillFormModal
-          form={supportForm}
-          isOpen={showSupportModal}
-          onClose={() => setShowSupportModal(false)}
-          onFormSubmitted={() => setShowSupportModal(false)}
-        />
-      )}
+      {/* Support Ticket Modal */}
+      <SupportTicketModal
+        isOpen={showSupportTicketModal}
+        onClose={() => setShowSupportTicketModal(false)}
+        spaceId={null}
+      />
 
       {/* User Settings Modal */}
       <Dialog open={showUserSettingsModal} onOpenChange={setShowUserSettingsModal}>

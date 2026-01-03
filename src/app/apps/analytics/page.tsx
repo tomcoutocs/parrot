@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
 import { AnalyticsLayout } from '@/components/analytics/analytics-layout'
 import { Loader2 } from 'lucide-react'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 function AnalyticsContent() {
   const { data: session, status } = useSession()
@@ -18,8 +19,8 @@ function AnalyticsContent() {
       return
     }
 
-    // Check if user is admin
-    if (session && session.user.role !== 'admin') {
+    // Check if user is admin or system admin
+    if (session && !hasAdminPrivileges(session.user.role)) {
       router.push('/apps')
       return
     }
@@ -45,7 +46,7 @@ function AnalyticsContent() {
   }
 
   // Double-check admin role before rendering
-  if (session.user.role !== 'admin') {
+  if (!hasAdminPrivileges(session.user.role)) {
     return null
   }
 

@@ -33,6 +33,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { fetchUsers, updateUser } from '@/lib/database-functions'
+import { hasAdminPrivileges, hasSystemAdminPrivileges } from '@/lib/role-helpers'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { useSession } from '@/components/providers/session-provider'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -155,9 +156,9 @@ export function UserManagementPermissions() {
       try {
         const dbUsers = await fetchUsers()
         
-        // Filter to only show internal users, managers, and admins (exclude client users)
+        // Filter to only show internal users, managers, and admins (exclude client users and system_admin)
         const teamUsers = dbUsers.filter((dbUser: DatabaseUser) => 
-          dbUser.role === 'admin' || 
+          (hasAdminPrivileges(dbUser.role) && !hasSystemAdminPrivileges(dbUser.role)) || 
           dbUser.role === 'manager' || 
           dbUser.role === 'internal'
         )
@@ -165,7 +166,7 @@ export function UserManagementPermissions() {
         // Map database users to component format
         const mappedUsers: UserPermissions[] = teamUsers.map((dbUser: DatabaseUser) => {
           const dbTabPermissions = dbUser.tab_permissions || []
-          const isAdmin = dbUser.role === 'admin'
+          const isAdmin = hasAdminPrivileges(dbUser.role)
           
           // Convert tab_permissions array to Set
           // Support both old format (app names) and new format (app:tab)

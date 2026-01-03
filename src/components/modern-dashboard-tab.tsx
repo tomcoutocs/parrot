@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useSession } from "@/components/providers/session-provider"
 import { useRouter } from "next/navigation"
+import { hasAdminPrivileges } from "@/lib/role-helpers"
 import { supabase } from "@/lib/supabase"
 import { fetchCompanyEvents } from "@/lib/simplified-database-functions"
 import { fetchTasksOptimized, fetchProjectsOptimized } from "@/lib/simplified-database-functions"
@@ -605,7 +606,7 @@ export function ModernDashboardTab({ activeSpace }: ModernDashboardTabProps) {
               <CardTitle>Upcoming Tasks</CardTitle>
             </div>
             <CardDescription>
-              {session?.user?.role === 'manager' || session?.user?.role === 'admin'
+              {session?.user?.role === 'manager' || hasAdminPrivileges(session?.user?.role)
                 ? 'All tasks from your spaces in the next 30 days'
                 : 'Tasks assigned to you in the next 30 days'}
             </CardDescription>

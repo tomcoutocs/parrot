@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
 import { CRMLayout } from '@/components/crm/crm-layout'
 import { Loader2 } from 'lucide-react'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 function CRMContent() {
   const { data: session, status } = useSession()
@@ -18,8 +19,8 @@ function CRMContent() {
       return
     }
 
-    // Check if user is admin
-    if (session && session.user.role !== 'admin') {
+    // Check if user is admin or system admin
+    if (session && !hasAdminPrivileges(session.user.role)) {
       router.push('/apps')
       return
     }
@@ -45,7 +46,7 @@ function CRMContent() {
   }
 
   // Double-check admin role before rendering
-  if (session.user.role !== 'admin') {
+  if (!hasAdminPrivileges(session.user.role)) {
     return null
   }
 

@@ -38,8 +38,12 @@ export default function SignInPage() {
         setError(result.error)
       } else if (result.user) {
         auth.signIn(result.user)
-        // Redirect to app selection page
-        router.push('/apps')
+        // Redirect system admins to choice page, others to apps
+        if (result.user.role === 'system_admin') {
+          router.push('/apps/system-admin-choice')
+        } else {
+          router.push('/apps')
+        }
       }
     } catch {
       setError('An error occurred. Please try again.')

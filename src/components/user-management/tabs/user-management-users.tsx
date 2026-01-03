@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { hasAdminPrivileges, hasSystemAdminPrivileges, canManageAdmins } from '@/lib/role-helpers'
 import { DeleteConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import { fetchUsers, updateUser, deleteUser } from '@/lib/database-functions'
 import { toastSuccess, toastError } from '@/lib/toast'
@@ -40,7 +41,7 @@ interface User {
   id: string
   name: string
   email: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   status: 'active' | 'inactive'
   lastLogin: string
   appPermissions: {
@@ -67,7 +68,7 @@ export function UserManagementUsers() {
   const [editFormData, setEditFormData] = useState({
     name: '',
     email: '',
-    role: 'internal' as 'admin' | 'manager' | 'user' | 'internal',
+    role: 'internal' as 'system_admin' | 'admin' | 'manager' | 'user' | 'internal',
     status: 'active' as 'active' | 'inactive'
   })
 
@@ -76,9 +77,9 @@ export function UserManagementUsers() {
     try {
       const dbUsers = await fetchUsers()
       
-      // Filter to only show internal users, managers, and admins (exclude client users)
+      // Filter to only show internal users, managers, and admins (exclude client users and system_admin)
       const teamUsers = dbUsers.filter((dbUser: DatabaseUser) => 
-        dbUser.role === 'admin' || 
+        (hasAdminPrivileges(dbUser.role) && !hasSystemAdminPrivileges(dbUser.role)) || 
         dbUser.role === 'manager' || 
         dbUser.role === 'internal'
       )
@@ -88,10 +89,10 @@ export function UserManagementUsers() {
         // Determine app permissions from tab_permissions
         const tabPermissions = dbUser.tab_permissions || []
         const appPermissions = {
-          crm: tabPermissions.includes('crm') || dbUser.role === 'admin',
-          invoicing: tabPermissions.includes('invoicing') || dbUser.role === 'admin',
-          leadGeneration: tabPermissions.includes('lead-generation') || dbUser.role === 'admin',
-          analytics: tabPermissions.includes('analytics') || dbUser.role === 'admin',
+          crm: tabPermissions.includes('crm') || hasAdminPrivileges(dbUser.role),
+          invoicing: tabPermissions.includes('invoicing') || hasAdminPrivileges(dbUser.role),
+          leadGeneration: tabPermissions.includes('lead-generation') || hasAdminPrivileges(dbUser.role),
+          analytics: tabPermissions.includes('analytics') || hasAdminPrivileges(dbUser.role),
         }
 
         return {
@@ -120,6 +121,12 @@ export function UserManagementUsers() {
   }, [])
 
   const handleEditUser = (user: User) => {
+    // Only system_admin can edit admin users
+    if (user.role === 'admin' && !hasSystemAdminPrivileges(session?.user?.role)) {
+      toastError('Only system administrators can manage admin users')
+      return
+    }
+    
     setSelectedUser(user)
     setEditFormData({
       name: user.name,
@@ -132,6 +139,13 @@ export function UserManagementUsers() {
 
   const handleSaveEdit = async () => {
     if (!selectedUser) return
+
+    // Only system_admin can edit admin users or change users to admin
+    if ((selectedUser.role === 'admin' || editFormData.role === 'admin') && !hasSystemAdminPrivileges(session?.user?.role)) {
+      toastError('Only system administrators can manage admin users')
+      setShowEditModal(false)
+      return
+    }
 
     setEditing(true)
     try {
@@ -160,6 +174,14 @@ export function UserManagementUsers() {
 
   const handleDeleteUser = async () => {
     if (!selectedUser) return
+
+    // Only system_admin can delete admin users
+    if (selectedUser.role === 'admin' && !hasSystemAdminPrivileges(session?.user?.role)) {
+      toastError('Only system administrators can delete admin users')
+      setShowDeleteDialog(false)
+      setSelectedUser(null)
+      return
+    }
 
     // Prevent users from deleting themselves
     if (selectedUser.id === session?.user?.id) {
@@ -378,12 +400,15 @@ export function UserManagementUsers() {
                 onValueChange={(value: 'admin' | 'manager' | 'user' | 'internal') =>
                   setEditFormData({ ...editFormData, role: value })
                 }
+                disabled={!hasSystemAdminPrivileges(session?.user?.role) && (selectedUser?.role === 'admin' || editFormData.role === 'admin')}
               >
                 <SelectTrigger className="col-span-3">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {hasSystemAdminPrivileges(session?.user?.role) && (
+                    <SelectItem value="admin">Admin</SelectItem>
+                  )}
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="internal">Internal</SelectItem>
                   <SelectItem value="user">User</SelectItem>
@@ -528,7 +553,10 @@ function UserList({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(user)}>
+              <DropdownMenuItem 
+                onClick={() => onEdit(user)}
+                disabled={user.role === 'admin' && !canManageAdmins}
+              >
                 <Edit className="w-4 h-4 mr-2" />
                 Edit User
               </DropdownMenuItem>
@@ -542,6 +570,7 @@ function UserList({
               <DropdownMenuItem 
                 className="text-destructive"
                 onClick={() => onDelete(user)}
+                disabled={user.role === 'admin' && !canManageAdmins}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete User

@@ -48,7 +48,7 @@ export function AdminTeam() {
   const [editFormData, setEditFormData] = useState({
     full_name: "",
     email: "",
-    role: "user" as "admin" | "manager" | "user" | "internal",
+    role: "user" as "system_admin" | "admin" | "manager" | "user" | "internal",
     company_ids: [] as string[],
     primary_company_id: "" as string | undefined,
   })

@@ -19,7 +19,7 @@ export interface AuthUser {
   id: string
   email: string
   name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   assignedManagerId?: string
   companyId?: string
   tab_permissions?: string[]

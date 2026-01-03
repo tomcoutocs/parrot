@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
 import { UserManagementLayout } from '@/components/user-management/user-management-layout'
 import { Loader2 } from 'lucide-react'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 function UserManagementContent() {
   const { data: session, status } = useSession()
@@ -19,7 +20,7 @@ function UserManagementContent() {
     }
 
     // Check if user is admin
-    if (session && session.user.role !== 'admin') {
+    if (session && !hasAdminPrivileges(session.user.role)) {
       router.push('/apps')
       return
     }
@@ -45,7 +46,7 @@ function UserManagementContent() {
   }
 
   // Double-check admin role before rendering
-  if (session.user.role !== 'admin') {
+  if (!hasAdminPrivileges(session.user.role)) {
     return null
   }
 

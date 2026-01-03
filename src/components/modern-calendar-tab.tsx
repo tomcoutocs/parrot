@@ -4,6 +4,7 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Edit, Trash2
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { useSession } from "@/components/providers/session-provider"
+import { hasAdminPrivileges } from "@/lib/role-helpers"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -76,7 +77,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
   const [deleting, setDeleting] = useState(false)
 
   const loadEvents = async () => {
-    const isAdmin = session?.user?.role === 'admin'
+    const isAdmin = hasAdminPrivileges(session?.user?.role)
     // Admins can load events without a company/space
     if (!isAdmin && !activeSpace && !session?.user?.company_id) {
       setLoading(false)
@@ -289,7 +290,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
     }
 
     // Admins can create events without a space/company
-    const isAdmin = session?.user?.role === 'admin'
+    const isAdmin = hasAdminPrivileges(session?.user?.role)
     const companyId = activeSpace || session?.user?.company_id
     
     if (!isAdmin && !companyId) {
@@ -495,7 +496,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
     }
 
     // Admins can create events without a space/company
-    const isAdmin = session?.user?.role === 'admin'
+    const isAdmin = hasAdminPrivileges(session?.user?.role)
     const companyId = activeSpace || session?.user?.company_id
     
     if (!isAdmin && !companyId) {
@@ -1273,7 +1274,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                             }
                             
                             // For admin view, show company name if available
-                            const isAdmin = session?.user?.role === 'admin'
+                            const isAdmin = hasAdminPrivileges(session?.user?.role)
                             const showCompanyName = isAdmin && event.companyName && !activeSpace
                             
                             return (
@@ -1394,7 +1395,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                             return `rgba(${r}, ${g}, ${b}, ${alpha})`
                           }
                           
-                          const isAdmin = session?.user?.role === 'admin'
+                          const isAdmin = hasAdminPrivileges(session?.user?.role)
                           const showCompanyName = isAdmin && event.companyName && !activeSpace
                           
                           return (
@@ -1514,7 +1515,7 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
                                 return `rgba(${r}, ${g}, ${b}, ${alpha})`
                               }
                               
-                              const isAdmin = session?.user?.role === 'admin'
+                              const isAdmin = hasAdminPrivileges(session?.user?.role)
                               const showCompanyName = isAdmin && event.companyName && !activeSpace
                               
                               return (

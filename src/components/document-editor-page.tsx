@@ -17,6 +17,7 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -152,7 +153,7 @@ export default function DocumentEditorPage({ documentId, inline = false, spaceId
   // For non-admin users, always use their company_id as the space
   // For admin users, ONLY use the space param from URL (don't fall back to company_id)
   const spaceParam = propSpaceId || searchParams?.get('space')
-  const isAdmin = session?.user?.role === 'admin'
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
   const currentSpaceId = spaceParam || (!isAdmin && session?.user?.company_id ? session.user.company_id : null)
   
   

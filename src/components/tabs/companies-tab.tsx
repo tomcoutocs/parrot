@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { toastSuccess, toastError } from '@/lib/toast'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { createSpace, updateSpace, deleteSpace, fetchServices, updateSpaceServices, getSpaceServices, fetchSpacesWithServices } from '@/lib/database-functions'
 import { fetchCompaniesOptimized } from '@/lib/simplified-database-functions' // Still needed for optimized fetching
 import { fetchCompanyDetails, testCompanyAccess, simpleCompanyTest, fetchCompaniesDirect } from '@/lib/company-detail-functions'
@@ -97,7 +98,7 @@ export default function CompaniesTab({ selectedCompanyId }: { selectedCompanyId?
   const [companyDetailError, setCompanyDetailError] = useState<string | null>(null)
 
   // Check if current user is admin
-  const isAdmin = session?.user?.role === 'admin'
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
 
   const loadCompanies = async () => {
     setIsLoading(true)

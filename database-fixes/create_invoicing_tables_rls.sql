@@ -107,10 +107,46 @@ CREATE POLICY "Users can create AI queries" ON ai_bookkeeping_queries
   );
 
 -- RLS Policies for support_tickets
-CREATE POLICY "Users can manage their support tickets" ON support_tickets
-  FOR ALL USING (
+-- All authenticated users can create support tickets
+CREATE POLICY "All users can create support tickets" ON support_tickets
+  FOR INSERT 
+  WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Users can view their own tickets or tickets in their accessible spaces
+-- System admins can view all tickets
+CREATE POLICY "Users can view their support tickets" ON support_tickets
+  FOR SELECT 
+  USING (
     user_id = auth.uid()
     OR space_id IN (SELECT space_id FROM get_user_accessible_spaces(auth.uid()))
+    OR EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = auth.uid() 
+      AND role = 'system_admin'
+    )
+  );
+
+-- Users can update their own tickets or tickets in their accessible spaces
+-- System admins can update all tickets
+CREATE POLICY "Users can update their support tickets" ON support_tickets
+  FOR UPDATE 
+  USING (
+    user_id = auth.uid()
+    OR space_id IN (SELECT space_id FROM get_user_accessible_spaces(auth.uid()))
+    OR EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = auth.uid() 
+      AND role = 'system_admin'
+    )
+  )
+  WITH CHECK (
+    user_id = auth.uid()
+    OR space_id IN (SELECT space_id FROM get_user_accessible_spaces(auth.uid()))
+    OR EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = auth.uid() 
+      AND role = 'system_admin'
+    )
   );
 
 -- RLS Policies for support_messages
@@ -120,6 +156,11 @@ CREATE POLICY "Users can view messages for their tickets" ON support_messages
       SELECT id FROM support_tickets 
       WHERE user_id = auth.uid()
       OR space_id IN (SELECT space_id FROM get_user_accessible_spaces(auth.uid()))
+      OR EXISTS (
+        SELECT 1 FROM users 
+        WHERE id = auth.uid() 
+        AND role = 'system_admin'
+      )
     )
   );
 
@@ -129,6 +170,11 @@ CREATE POLICY "Users can create messages for their tickets" ON support_messages
       SELECT id FROM support_tickets 
       WHERE user_id = auth.uid()
       OR space_id IN (SELECT space_id FROM get_user_accessible_spaces(auth.uid()))
+      OR EXISTS (
+        SELECT 1 FROM users 
+        WHERE id = auth.uid() 
+        AND role = 'system_admin'
+      )
     )
   );
 

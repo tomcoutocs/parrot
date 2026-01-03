@@ -36,14 +36,14 @@ import type { UserInvitation } from '@/lib/supabase'
 interface InvitationUser {
   email: string
   full_name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
 }
 
 interface PendingInvitation {
   id: string
   email: string
   full_name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   status: 'pending' | 'accepted' | 'expired'
   invited_by: string
   created_at: string

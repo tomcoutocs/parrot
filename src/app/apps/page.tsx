@@ -19,7 +19,8 @@ import {
   User,
   ChevronDown,
   UserCog,
-  BarChart3
+  BarChart3,
+  Shield
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -29,19 +30,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { fetchForms } from '@/lib/database-functions'
-import { Form, supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { NotificationBell } from '@/components/notifications/notification-bell'
+import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
+import { hasSystemAdminPrivileges, hasAdminPrivileges } from '@/lib/role-helpers'
+import { toastError } from '@/lib/toast'
 
 export default function AppsPage() {
   const { data: session, status } = useSession()
   const auth = useAuth()
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
-  const [showSupportModal, setShowSupportModal] = useState(false)
-  const [supportForm, setSupportForm] = useState<Form | null>(null)
-  const [loadingSupportForm, setLoadingSupportForm] = useState(false)
+  const [showSupportTicketModal, setShowSupportTicketModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
   const handleSignOut = () => {
@@ -52,7 +53,10 @@ export default function AppsPage() {
   useEffect(() => {
     if (status !== 'loading' && !session) {
       router.push('/auth/signin')
+      return
     }
+    // Don't redirect system admins - they can access platform apps if they navigate here directly
+    // The choice page is only shown after login
   }, [session, status, router])
 
   // Load user profile picture
@@ -98,31 +102,6 @@ export default function AppsPage() {
     }
   }, [session?.user?.id])
 
-  const handleOpenSupport = async () => {
-    setLoadingSupportForm(true)
-    try {
-      const forms = await fetchForms()
-      const supportTicketForm = forms.find(form => {
-        const title = form.title.toLowerCase().trim()
-        return title === 'support ticket' || 
-               title === 'support' ||
-               title.includes('support ticket') ||
-               title.includes('support')
-      })
-      if (supportTicketForm) {
-        setSupportForm(supportTicketForm)
-        setShowSupportModal(true)
-      } else {
-        // If no support form found, show a simple contact form
-        setShowSupportModal(true)
-      }
-    } catch (error) {
-      console.error('Error loading support form:', error)
-      setShowSupportModal(true)
-    } finally {
-      setLoadingSupportForm(false)
-    }
-  }
 
   const allApps = [
     {
@@ -195,7 +174,15 @@ export default function AppsPage() {
   // Check if user has permission for an app (has at least one tab permission)
   const hasAppPermission = (appId: string): boolean => {
     if (!session?.user) return false
-    if (session.user.role === 'admin') return true // Admins have all permissions
+    
+    // Check for system admin only apps
+    const app = allApps.find(a => a.id === appId)
+    if (app && (app as any).systemAdminOnly) {
+      return hasSystemAdminPrivileges(session.user.role)
+    }
+    
+    if (hasSystemAdminPrivileges(session.user.role)) return true // System admins have all permissions
+    if (hasAdminPrivileges(session.user.role)) return true // Admins have all permissions
     
     const tabPermissions = session.user.tab_permissions || []
     
@@ -210,10 +197,14 @@ export default function AppsPage() {
 
   // Set availability based on user role and permissions
   const apps = allApps.map(app => {
-    // Admin-only apps require admin role AND app permission
+    // Admin-only apps require admin or system_admin role AND app permission
     if (app.adminOnly) {
-      if (session?.user?.role !== 'admin') {
+      if (!hasAdminPrivileges(session?.user?.role)) {
         return { ...app, available: false }
+      }
+      // System admins and admins have all permissions, so they can access
+      if (hasSystemAdminPrivileges(session?.user?.role) || hasAdminPrivileges(session?.user?.role)) {
+        return app
       }
       // Even admins need explicit permission (unless they have all permissions)
       if (!hasAppPermission(app.id)) {
@@ -230,15 +221,15 @@ export default function AppsPage() {
   const handleAppClick = (appId: string) => {
     if (appId === 'client-portal') {
       // Redirect to the current dashboard
-      if (session?.user?.role === 'admin') {
+      if (hasAdminPrivileges(session?.user?.role)) {
         router.push('/dashboard')
       } else {
         router.push('/dashboard?tab=user-dashboard')
       }
     } else if (appId === 'crm' || appId === 'lead-generation' || appId === 'invoicing' || appId === 'user-management' || appId === 'analytics') {
       // Admin-only apps - check role before allowing access
-      if (session?.user?.role !== 'admin') {
-        return // Don't navigate if not admin
+      if (!hasAdminPrivileges(session?.user?.role)) {
+        return // Don't navigate if not admin or system admin
       }
       router.push(`/apps/${appId}`)
     } else {
@@ -278,16 +269,11 @@ export default function AppsPage() {
             <div className="flex items-center gap-2">
               <NotificationBell />
               <button
-                onClick={handleOpenSupport}
-                disabled={loadingSupportForm}
+                onClick={() => setShowSupportTicketModal(true)}
                 className="p-2 hover:bg-muted rounded-md transition-colors"
-                title="Support"
+                title="Create Support Ticket"
               >
-                {loadingSupportForm ? (
-                  <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-                ) : (
-                  <HelpCircle className="w-4 h-4 text-muted-foreground" />
-                )}
+                <HelpCircle className="w-4 h-4 text-muted-foreground" />
               </button>
               <div className="w-px h-5 bg-border mx-1" />
               <DropdownMenu>
@@ -311,6 +297,18 @@ export default function AppsPage() {
                     <User className="w-4 h-4" />
                     <span>User Settings</span>
                   </DropdownMenuItem>
+                  {session?.user?.role === 'system_admin' && (
+                    <>
+                      <div className="w-px h-px bg-border mx-2 my-1" />
+                      <DropdownMenuItem
+                        onClick={() => router.push('/apps/system-admin')}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
+                        <Shield className="w-4 h-4" />
+                        <span>System Admin</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <div className="w-px h-px bg-border mx-2 my-1" />
                   <DropdownMenuItem
                     onClick={handleSignOut}
@@ -411,46 +409,12 @@ export default function AppsPage() {
       </Dialog>
 
       {/* Support Modal */}
-      <Dialog open={showSupportModal} onOpenChange={setShowSupportModal}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Support Ticket</DialogTitle>
-            <DialogDescription>
-              {supportForm
-                ? supportForm.description || 'Submit a support ticket and we\'ll get back to you soon.'
-                : 'Submit a support ticket and we\'ll get back to you soon.'}
-            </DialogDescription>
-          </DialogHeader>
-          {supportForm ? (
-            <div className="mt-4">
-              <p className="text-sm text-muted-foreground mb-4">
-                Support form functionality will be integrated here. For now, please contact support directly.
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Your Email</label>
-                  <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Form: {supportForm.title}</label>
-                  <p className="text-sm text-muted-foreground">
-                    This form will be rendered here in a future update.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4">
-              <p className="text-sm text-muted-foreground">
-                Please contact support at{' '}
-                <a href="mailto:support@parrot.com" className="text-primary hover:underline">
-                  support@parrot.com
-                </a>
-              </p>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Support Ticket Modal */}
+      <SupportTicketModal
+        isOpen={showSupportTicketModal}
+        onClose={() => setShowSupportTicketModal(false)}
+        spaceId={null}
+      />
     </div>
   )
 }

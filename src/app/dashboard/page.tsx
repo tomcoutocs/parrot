@@ -7,6 +7,7 @@ import DashboardLayout, { TabType } from '@/components/dashboard-layout'
 import { ModernDashboardLayout } from '@/components/modern-dashboard-layout'
 import LazyTabComponent, { preloadCriticalTabs, prefetchTab } from '@/components/lazy-tab-loader'
 import { loadDashboardData, cleanupSubscriptions } from '@/lib/simplified-database-functions'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 function DashboardContent() {
   const { data: session, status } = useSession()
@@ -50,7 +51,7 @@ function DashboardContent() {
     const spaceParam = searchParams.get('space')
     
     // For non-admin users, ensure they can't access admin tabs via URL
-    if (session && session.user.role !== 'admin') {
+    if (session && !hasAdminPrivileges(session.user.role)) {
       const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
       if (tabParam && adminOnlyTabs.includes(tabParam)) {
         // Redirect non-admin users to user-dashboard (personal dashboard, no space)
@@ -75,7 +76,7 @@ function DashboardContent() {
     // This MUST run BEFORE any space syncing logic
     // BUT: Don't redirect if user is already in a space and clicking overview - allow them to stay in the space
     // Managers and admins can access spaces, so they should be allowed to stay in spaces when clicking overview
-    const canAccessSpaces = session && (session.user.role === 'admin' || session.user.role === 'manager')
+    const canAccessSpaces = session && (hasAdminPrivileges(session.user.role) || session.user.role === 'manager')
     if (session && !canAccessSpaces && !isChangingTabRef.current && !isChangingSpaceRef.current) {
       // Only redirect regular users if:
       // 1. No tab specified AND no space (initial load)
@@ -141,7 +142,7 @@ function DashboardContent() {
     if (spaceParam) {
       console.log('Setting current space to:', spaceParam)
       // For non-admin users on user-dashboard or user-settings, never sync space - remove it from URL
-      if (session && session.user.role !== 'admin' && (tabParam === 'user-dashboard' || tabParam === 'user-settings')) {
+      if (session && !hasAdminPrivileges(session.user.role) && (tabParam === 'user-dashboard' || tabParam === 'user-settings')) {
         if (spaceParam) {
           // Remove space from URL for user-dashboard/user-settings
           router.replace(`/dashboard?tab=${tabParam}`)
@@ -204,7 +205,7 @@ function DashboardContent() {
   // Initialize dashboard for non-admin users - redirect to user-dashboard on login
   // This runs once when session loads for non-admin users
   useEffect(() => {
-    const canAccessSpaces = session && (session.user.role === 'admin' || session.user.role === 'manager')
+    const canAccessSpaces = session && (hasAdminPrivileges(session.user.role) || session.user.role === 'manager')
     if (!session || canAccessSpaces || isChangingTabRef.current || isChangingSpaceRef.current) {
       return
     }
@@ -250,7 +251,7 @@ function DashboardContent() {
           
           // Load initial dashboard data in the background (non-blocking)
           const userRole = session.user.role
-          const companyId = session.user.role === 'admin' ? undefined : session.user.company_id
+          const companyId = hasAdminPrivileges(session.user.role) ? undefined : session.user.company_id
           
           // Use setTimeout to defer this to next tick, allowing UI to render first
           setTimeout(async () => {
@@ -279,7 +280,7 @@ function DashboardContent() {
 
   // Ensure active tab is valid for user role - redirect non-admin users away from admin tabs
   useEffect(() => {
-    if (session && session.user.role !== 'admin') {
+    if (session && !hasAdminPrivileges(session.user.role)) {
       const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
       if (adminOnlyTabs.includes(activeTab)) {
         // Redirect non-admin users to dashboard in their space
@@ -330,7 +331,7 @@ function DashboardContent() {
     
     // Security check - prevent non-admin users from accessing admin-only tabs
     const adminOnlyTabs: TabType[] = ['spaces', 'admin', 'companies', 'project-overview', 'debug']
-    if (adminOnlyTabs.includes(tab) && session?.user?.role !== 'admin') {
+    if (adminOnlyTabs.includes(tab) && !hasAdminPrivileges(session?.user?.role)) {
       console.warn(`Non-admin user attempted to access ${tab} tab`)
       // Redirect non-admin users back to dashboard in their space
       if (session?.user?.company_id) {
@@ -383,7 +384,7 @@ function DashboardContent() {
     // Forms tab - special handling: admin users can access without space, non-admin users need space
     if (tab === 'forms' && !currentSpaceId) {
       // For non-admin users, automatically use their company_id as space
-      if (session?.user?.role !== 'admin' && session?.user?.company_id) {
+      if (!hasAdminPrivileges(session?.user?.role) && session?.user?.company_id) {
         setCurrentSpaceId(session.user.company_id)
         setSelectedCompany(session.user.company_id)
         setActiveTab(tab)
@@ -403,7 +404,7 @@ function DashboardContent() {
     const spaceRequiredTabs: TabType[] = ['dashboard', 'projects', 'services', 'company-calendars', 'documents']
     if (spaceRequiredTabs.includes(tab) && !currentSpaceId) {
       // For non-admin users, automatically use their company_id as space
-      if (session?.user?.role !== 'admin' && session?.user?.company_id) {
+      if (!hasAdminPrivileges(session?.user?.role) && session?.user?.company_id) {
         setCurrentSpaceId(session.user.company_id)
         setSelectedCompany(session.user.company_id)
         setActiveTab(tab)
@@ -431,7 +432,7 @@ function DashboardContent() {
       }
       
       // For non-admin users, automatically use their company_id as space
-      if (session?.user?.role !== 'admin' && session?.user?.company_id) {
+      if (!hasAdminPrivileges(session?.user?.role) && session?.user?.company_id) {
         setCurrentSpaceId(session.user.company_id)
         setSelectedCompany(session.user.company_id)
         setActiveTab('settings')
@@ -475,7 +476,7 @@ function DashboardContent() {
   const handleSelectSpace = (spaceId: string) => {
     console.log('Dashboard: handleSelectSpace called with spaceId:', spaceId)
     console.log('Dashboard: Current currentSpaceId:', currentSpaceId)
-    console.log('Dashboard: Is admin?', session?.user?.role === 'admin')
+    console.log('Dashboard: Is admin?', hasAdminPrivileges(session?.user?.role))
     
     if (!spaceId) {
       console.error('Dashboard: No spaceId provided to handleSelectSpace')
@@ -511,7 +512,7 @@ function DashboardContent() {
     console.log('Dashboard: Current activeTab:', activeTab)
     
     // Prevent non-admin users from exiting their space
-    if (spaceId === null && session?.user?.role !== 'admin') {
+    if (spaceId === null && !hasAdminPrivileges(session?.user?.role)) {
       console.warn('Non-admin user attempted to exit their space')
       // Keep them in their space
       if (session?.user?.company_id) {
@@ -621,7 +622,7 @@ function DashboardContent() {
     const internalTab = tabMap[tabId] || 'dashboard'
     
     // Security check: prevent non-manager/admin users from accessing users tab
-    if (internalTab === 'admin' && session?.user?.role !== 'admin' && session?.user?.role !== 'manager') {
+    if (internalTab === 'admin' && !hasAdminPrivileges(session?.user?.role) && session?.user?.role !== 'manager') {
       console.warn('Non-manager user attempted to access users tab')
       // Redirect to dashboard
       handleTabChange('dashboard')
@@ -629,7 +630,7 @@ function DashboardContent() {
     }
     
     // Security check: prevent non-manager/admin users from accessing settings tab
-    if (internalTab === 'settings' && session?.user?.role !== 'admin' && session?.user?.role !== 'manager') {
+    if (internalTab === 'settings' && !hasAdminPrivileges(session?.user?.role) && session?.user?.role !== 'manager') {
       console.warn('Non-manager user attempted to access settings tab')
       // Redirect to dashboard
       handleTabChange('dashboard')

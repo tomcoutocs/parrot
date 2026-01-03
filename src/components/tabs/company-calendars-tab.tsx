@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, getDay, getDate, addMonths, subMonths, isSameDay, isWithinInterval, parseISO, addDays } from 'date-fns'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { supabase } from '@/lib/supabase'
 
 interface CompanyEvent {
@@ -81,7 +82,7 @@ export default function CompanyCalendarsTab({ selectedCompany }: { selectedCompa
   const [includeTime, setIncludeTime] = useState(false)
   const [creating, setCreating] = useState(false)
 
-  const isAdmin = session?.user?.role === 'admin'
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
 
   // Debug logging
   console.log('CompanyCalendarsTab - Status:', status, 'Session:', session?.user?.id, 'IsAdmin:', isAdmin)

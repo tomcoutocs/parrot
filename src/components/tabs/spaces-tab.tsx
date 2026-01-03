@@ -11,6 +11,7 @@ import { Loader2 } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { fetchCompaniesOptimized } from '@/lib/simplified-database-functions'
 import type { Company } from '@/lib/supabase'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 interface SpacesTabProps {
   onSelectSpace: (companyId: string) => void
@@ -25,7 +26,7 @@ export default function SpacesTab({ onSelectSpace, currentSpaceId }: SpacesTabPr
   const [searchTerm, setSearchTerm] = useState('')
   const [error, setError] = useState('')
 
-  const isAdmin = session?.user?.role === 'admin'
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
 
   const loadSpaces = async () => {
     setIsLoading(true)

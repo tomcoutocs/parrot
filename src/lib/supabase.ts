@@ -90,7 +90,7 @@ export interface User {
   id: string
   email: string
   full_name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   created_at: string
   updated_at: string
   is_active: boolean
@@ -337,7 +337,7 @@ export interface UserInvitation {
   full_name: string
   space_id: string | null
   company_id?: string | null // Deprecated: kept for backward compatibility, use space_id
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   invited_by: string
   invitation_token: string
   status: 'pending' | 'accepted' | 'expired'

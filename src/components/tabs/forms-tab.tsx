@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { 
   Plus, 
   Edit, 
@@ -90,7 +91,7 @@ export default function FormsTab({ currentSpaceId }: FormsTabProps) {
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [selectedForm, setSelectedForm] = useState<Form | null>(null)
 
-  const isAdmin = session?.user?.role === 'admin'
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
   const isManager = session?.user?.role === 'manager'
   const canManageForms = isAdmin || isManager
 

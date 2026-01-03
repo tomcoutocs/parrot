@@ -16,6 +16,7 @@ import { Loader2 } from 'lucide-react'
 import { useSession } from '@/components/providers/session-provider'
 import { createUser, updateUser, deleteUser, fetchSpaces, fetchUsersWithCompanies } from '@/lib/database-functions'
 import type { Company, UserWithCompanies } from '@/lib/supabase'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { Checkbox } from '@/components/ui/checkbox'
 import UserInvitationModal from '@/components/modals/user-invitation-modal'
 import { toastSuccess, toastError } from '@/lib/toast'
@@ -33,7 +34,7 @@ const availableTabs = [
 interface CreateUserData {
   email: string
   full_name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   password: string
   assigned_manager_id?: string
   company_id?: string
@@ -45,7 +46,7 @@ interface CreateUserData {
 interface EditUserData {
   email: string
   full_name: string
-  role: 'admin' | 'manager' | 'user' | 'internal'
+  role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
   is_active: boolean
   assigned_manager_id?: string
   company_id?: string
@@ -85,7 +86,7 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
   const [showInviteUsersModal, setShowInviteUsersModal] = useState(false)
 
   // Check if current user is admin
-  const isAdmin = session?.user?.role === 'admin'
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
 
   // Handle URL parameters for company filtering
   useEffect(() => {

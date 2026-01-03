@@ -37,6 +37,7 @@ import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { QuickThemeToggle } from '@/components/ui/settings-modal'
 import { Breadcrumb, useBreadcrumbs } from '@/components/ui/breadcrumb'
 import { NotificationBell } from '@/components/notifications/notification-bell'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 
 interface DashboardLayoutProps {
@@ -115,7 +116,7 @@ export default function DashboardLayout({
   // Filter navigation items based on role and tab permissions
   const filteredNavItems = baseNavItems.filter(item => {
     // Admin users can see all tabs
-    if (userRole === 'admin') return true
+    if (hasAdminPrivileges(userRole)) return true
     
     // For non-admin users, check both role and tab permissions
     const hasRoleAccess = item.roles.includes(userRole)

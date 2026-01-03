@@ -17,6 +17,7 @@ import {
 import { Project, ProjectWithDetails, User, Company } from '@/lib/supabase'
 import { useSession } from '@/components/providers/session-provider'
 import { fetchUsers, fetchSpaces, updateProject } from '@/lib/database-functions'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 interface EditProjectModalProps {
   isOpen: boolean
@@ -217,7 +218,7 @@ export default function EditProjectModal({
                 <SelectValue placeholder="Select a company" />
               </SelectTrigger>
               <SelectContent>
-                {session?.user?.role === 'admin' ? (
+                {hasAdminPrivileges(session?.user?.role) ? (
                   // Admins can select any company
                   companies.map(company => (
                     <SelectItem key={company.id} value={company.id}>

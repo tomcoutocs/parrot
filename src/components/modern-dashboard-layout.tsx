@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useSession } from "@/components/providers/session-provider"
 import { useRouter } from "next/navigation"
-import { Bell, Settings, ChevronDown, LayoutDashboard, LogOut, User, Check, HelpCircle, Grid3x3 } from "lucide-react"
+import { Bell, Settings, ChevronDown, LayoutDashboard, LogOut, User, Check, HelpCircle, Grid3x3, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -37,11 +37,13 @@ import { fetchCompaniesOptimized, fetchProjectsOptimized } from "@/lib/simplifie
 import { Company, Service, Form } from "@/lib/supabase"
 import { getSpaceServices, fetchForms } from "@/lib/database-functions"
 import { supabase } from "@/lib/supabase"
+import { hasAdminPrivileges, hasSystemAdminPrivileges } from "@/lib/role-helpers"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { useAuth } from "@/components/providers/session-provider"
 import { LogoutConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import FillFormModal from "@/components/modals/fill-form-modal"
 import ConversationalFormModal from "@/components/modals/conversational-form-modal"
+import { SupportTicketModal } from "@/components/modals/support-ticket-modal"
 
 interface ModernDashboardLayoutProps {
   children: React.ReactNode
@@ -69,11 +71,10 @@ export function ModernDashboardLayout({
   const [spaceManager, setSpaceManager] = useState<{ id?: string; name: string; avatar?: string } | null>(null)
   const [spaceServices, setSpaceServices] = useState<string[]>([])
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0)
-  const [supportForm, setSupportForm] = useState<Form | null>(null)
-  const [showSupportModal, setShowSupportModal] = useState(false)
+  const [showSupportTicketModal, setShowSupportTicketModal] = useState(false)
   const [userProfilePicture, setUserProfilePicture] = useState<string | null>(null)
 
-  const isAdmin = session?.user?.role === "admin"
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
   
   // Initialize viewMode based on URL parameters and space selection
   // Use stable dependencies to avoid array size changes
@@ -122,10 +123,10 @@ export function ModernDashboardLayout({
     if (activeTab === "reports" && !currentSpaceId) {
       // Reports can be accessed without a space - use client mode
       setViewMode("client")
-    } else if (!currentSpaceId && userRole === "admin") {
+    } else if (!currentSpaceId && hasAdminPrivileges(userRole)) {
       // Only admins can use admin mode when no space is selected
       setViewMode("admin")
-    } else if (!currentSpaceId && userRole !== "admin") {
+    } else if (!currentSpaceId && !hasAdminPrivileges(userRole)) {
       // Non-admin users without a space should be in client mode
       setViewMode("client")
     }
@@ -284,32 +285,6 @@ export function ModernDashboardLayout({
     loadSpaces()
   }, [currentSpaceId])
 
-  // Load support form
-  useEffect(() => {
-    const loadSupportForm = async () => {
-      try {
-        const forms = await fetchForms()
-        // Try multiple variations to find support form
-        const supportTicketForm = forms.find(form => {
-          const title = form.title.toLowerCase().trim()
-          return title === 'support ticket' || 
-                 title === 'support' ||
-                 title.includes('support ticket') ||
-                 title.includes('support')
-        })
-        if (supportTicketForm) {
-          console.log('Support form found:', supportTicketForm.title)
-          setSupportForm(supportTicketForm)
-        } else {
-          console.log('Support form not found. Available forms:', forms.map(f => f.title))
-        }
-      } catch (error) {
-        console.error("Error loading support form:", error)
-      }
-    }
-
-    loadSupportForm()
-  }, [])
 
   // Load user profile picture
   useEffect(() => {
@@ -577,33 +552,9 @@ export function ModernDashboardLayout({
           <div className="flex items-center gap-2">
             <NotificationBell />
             <button
-              onClick={async () => {
-                // If support form not loaded yet, try to load it
-                if (!supportForm) {
-                  try {
-                    const forms = await fetchForms()
-                    const supportTicketForm = forms.find(form => {
-                      const title = form.title.toLowerCase().trim()
-                      return title === 'support ticket' || 
-                             title === 'support' ||
-                             title.includes('support ticket') ||
-                             title.includes('support')
-                    })
-                    if (supportTicketForm) {
-                      setSupportForm(supportTicketForm)
-                      setShowSupportModal(true)
-                    } else {
-                      console.warn('Support form not found')
-                    }
-                  } catch (error) {
-                    console.error('Error loading support form:', error)
-                  }
-                } else {
-                  setShowSupportModal(true)
-                }
-              }}
+              onClick={() => setShowSupportTicketModal(true)}
               className="p-2 hover:bg-muted rounded-md transition-colors"
-              title="Support"
+              title="Create Support Ticket"
             >
               <HelpCircle className="w-4 h-4 text-muted-foreground" />
             </button>
@@ -629,6 +580,24 @@ export function ModernDashboardLayout({
                   <Grid3x3 className="w-4 h-4" />
                   <span>Back to Apps</span>
                 </DropdownMenuItem>
+                {(() => {
+                  // Debug: Log role to console
+                  if (session?.user?.role) {
+                    console.log('Current user role:', session.user.role, 'Is system_admin?', session.user.role === 'system_admin')
+                  }
+                  return session?.user?.role === 'system_admin' ? (
+                    <>
+                      <div className="w-px h-px bg-border mx-2 my-1" />
+                      <DropdownMenuItem
+                        onClick={() => router.push('/apps/system-admin')}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
+                        <Shield className="w-4 h-4" />
+                        <span>System Admin</span>
+                      </DropdownMenuItem>
+                    </>
+                  ) : null
+                })()}
                 <div className="w-px h-px bg-border mx-2 my-1" />
                 <DropdownMenuItem
                   onClick={() => onTabChange('user-settings')}
@@ -807,10 +776,10 @@ export function ModernDashboardLayout({
                 {activeTab === "documents" && <ModernDocumentsTab activeSpace={currentSpaceId ?? null} />}
                 {activeTab === "company-calendars" && <ModernCalendarTab activeSpace={currentSpaceId ?? null} />}
                 {activeTab === "reports" && <ModernReportsTab activeSpace={currentSpaceId ?? null} />}
-                {activeTab === "admin" && (session?.user?.role === "admin" || session?.user?.role === "manager") && (
+                {activeTab === "admin" && (hasAdminPrivileges(session?.user?.role) || session?.user?.role === "manager") && (
                   <ModernUsersTab activeSpace={currentSpaceId ?? null} />
                 )}
-                {activeTab === "settings" && (session?.user?.role === "admin" || session?.user?.role === "manager") && (
+                {activeTab === "settings" && (hasAdminPrivileges(session?.user?.role) || session?.user?.role === "manager") && (
                   <ModernSettingsTab 
                     activeSpace={currentSpaceId ?? null}
                     onServicesUpdated={() => {
@@ -851,55 +820,12 @@ export function ModernDashboardLayout({
         }}
       />
 
-      {/* Support Form Modal */}
-      {showSupportModal && supportForm && (() => {
-        // Parse theme from form description
-        let formTheme = {
-          primaryColor: '#f97316',
-          backgroundColor: '#ffffff',
-          textColor: '#000000',
-          fontFamily: 'inherit',
-          conversational: false
-        }
-        
-        if (supportForm.description) {
-          try {
-            // Use a more robust regex that handles multiline JSON
-            const themeMatch = supportForm.description.match(/__THEME__({[\s\S]*?})__THEME__/)
-            if (themeMatch) {
-              formTheme = JSON.parse(themeMatch[1])
-              console.log('Parsed theme in dashboard layout:', formTheme)
-            }
-          } catch (e) {
-            console.error('Error parsing theme in dashboard layout:', e)
-            // Ignore parse errors, use defaults
-          }
-        }
-
-        return formTheme.conversational ? (
-          <ConversationalFormModal
-            isOpen={showSupportModal}
-            onClose={() => setShowSupportModal(false)}
-            onFormSubmitted={() => {
-              setShowSupportModal(false)
-            }}
-            form={supportForm}
-            spaceId={currentSpaceId}
-            theme={formTheme}
-          />
-        ) : (
-          <FillFormModal
-            isOpen={showSupportModal}
-            onClose={() => setShowSupportModal(false)}
-            onFormSubmitted={() => {
-              setShowSupportModal(false)
-            }}
-            form={supportForm}
-            spaceId={currentSpaceId}
-            theme={formTheme}
-          />
-        )
-      })()}
+      {/* Support Ticket Modal */}
+      <SupportTicketModal
+        isOpen={showSupportTicketModal}
+        onClose={() => setShowSupportTicketModal(false)}
+        spaceId={currentSpaceId}
+      />
     </div>
   )
 }

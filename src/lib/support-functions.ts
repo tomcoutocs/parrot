@@ -52,6 +52,17 @@ export async function createSupportTicket(
       return { success: false, error: 'User not authenticated' }
     }
 
+    // Set user context for RLS policies
+    try {
+      await supabase.rpc('set_user_context', {
+        user_id: currentUser.id,
+        user_role: currentUser.role,
+        company_id: currentUser.companyId || null
+      })
+    } catch (error) {
+      console.warn('set_user_context RPC function not available, continuing anyway')
+    }
+
     const finalSpaceId = spaceId || currentUser.companyId || null
     const priority = data.priority || 'normal'
     const slaHours = priority === 'urgent' ? 2 : priority === 'high' ? 4 : priority === 'normal' ? 24 : 48
@@ -90,12 +101,16 @@ export async function getSupportTickets(spaceId?: string): Promise<{ success: bo
   }
 
   try {
+    const currentUser = getCurrentUser()
+    const isSystemAdmin = currentUser?.role === 'system_admin'
+    
     let query = supabase
       .from('support_tickets')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (spaceId) {
+    // System admins can see all tickets, others are filtered by space
+    if (!isSystemAdmin && spaceId) {
       query = query.eq('space_id', spaceId)
     }
 
@@ -161,7 +176,7 @@ export async function addTicketMessage(
       .single()
 
     const isFirstResponse = !ticket?.first_response_at
-    const isStaff = currentUser.role === 'admin' || currentUser.role === 'internal'
+    const isStaff = currentUser.role === 'system_admin' || currentUser.role === 'admin' || currentUser.role === 'internal'
 
     const { data: msg, error } = await supabase
       .from('support_messages')

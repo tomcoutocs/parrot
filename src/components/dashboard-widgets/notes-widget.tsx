@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { 
   fetchDashboardNotes, 
   createDashboardNote, 
@@ -104,7 +105,7 @@ export default function NotesWidget({ companyId, config }: NotesWidgetProps) {
     }
   }
 
-  const canEdit = session?.user?.role === 'admin' || session?.user?.role === 'manager'
+  const canEdit = hasAdminPrivileges(session?.user?.role) || session?.user?.role === 'manager'
 
   return (
     <Card className="parrot-card-enhanced h-full flex flex-col">

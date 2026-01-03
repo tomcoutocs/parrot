@@ -14,6 +14,7 @@ import {
   ArrowUpRight
 } from 'lucide-react'
 import { fetchUsers, getPendingInvitations, getUserManagementActivities } from '@/lib/database-functions'
+import { hasAdminPrivileges, hasSystemAdminPrivileges } from '@/lib/role-helpers'
 import type { User } from '@/lib/supabase'
 import type { UserManagementActivity } from '@/lib/database-functions'
 
@@ -43,16 +44,16 @@ export function UserManagementDashboard() {
         const users = usersData || []
         const invitations = invitationsResult.success ? (invitationsResult.data || []) : []
 
-        // Filter to only show internal users, managers, and admins (exclude client users)
+        // Filter to only show internal users, managers, and admins (exclude client users and system_admin)
         const teamUsers = users.filter(u => 
-          u.role === 'admin' || 
+          (hasAdminPrivileges(u.role) && !hasSystemAdminPrivileges(u.role)) || 
           u.role === 'manager' || 
           u.role === 'internal'
         )
 
-        // Filter invitations to only internal/admin/manager roles
+        // Filter invitations to only internal/admin/manager roles (exclude system_admin)
         const teamInvitations = invitations.filter(inv => 
-          inv.role === 'admin' || 
+          (hasAdminPrivileges(inv.role) && !hasSystemAdminPrivileges(inv.role)) || 
           inv.role === 'manager' || 
           inv.role === 'internal'
         )

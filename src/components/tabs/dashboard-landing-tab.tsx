@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import { useSession } from '@/components/providers/session-provider'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 import { RefreshCw, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -43,7 +44,7 @@ export default function DashboardLandingTab({ onNavigateToTab, currentSpaceId }:
   // Determine the company ID to use
   const companyId = currentSpaceId || session?.user?.company_id
 
-  const canConfigure = session?.user?.role === 'admin' || session?.user?.role === 'manager'
+  const canConfigure = hasAdminPrivileges(session?.user?.role) || session?.user?.role === 'manager'
 
   useEffect(() => {
     if (companyId) {

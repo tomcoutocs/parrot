@@ -32,6 +32,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { supabase } from "@/lib/supabase"
+import { hasSystemAdminPrivileges } from "@/lib/role-helpers"
 
 export function AdminAllUsers() {
   const { data: session } = useSession()
@@ -54,7 +55,7 @@ export function AdminAllUsers() {
   const [editFormData, setEditFormData] = useState({
     full_name: "",
     email: "",
-    role: "user" as "admin" | "manager" | "user" | "internal",
+    role: "user" as "system_admin" | "admin" | "manager" | "user" | "internal",
     company_ids: [] as string[],
     primary_company_id: "" as string | undefined,
   })
@@ -63,9 +64,11 @@ export function AdminAllUsers() {
     try {
       const users = await fetchUsersOptimized()
       const companiesData = await fetchCompaniesOptimized()
+      // Filter out system_admin users
+      const filteredUsersList = users.filter(user => !hasSystemAdminPrivileges(user.role))
       setCompanies(companiesData)
-      setAllUsers(users)
-      setFilteredUsers(users)
+      setAllUsers(filteredUsersList)
+      setFilteredUsers(filteredUsersList)
     } catch (error) {
       console.error("Error loading users:", error)
     }
