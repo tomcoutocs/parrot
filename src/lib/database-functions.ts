@@ -1378,12 +1378,14 @@ export async function createUser(userData: {
     const hashedPassword = await hashPassword(userData.password)
     
     // Prepare insert data, excluding tab_permissions if column doesn't exist
+    // Try space_id first (after migration), fallback to company_id
     const insertData: {
       email: string
       full_name: string
       role: 'system_admin' | 'admin' | 'manager' | 'user' | 'internal'
       assigned_manager_id: string | null
-      company_id: string | null
+      space_id?: string | null
+      company_id?: string | null
       is_active: boolean
       password: string
       tab_permissions?: string[]
@@ -1392,9 +1394,20 @@ export async function createUser(userData: {
       full_name: userData.full_name,
       role: userData.role,
       assigned_manager_id: userData.assigned_manager_id || null,
-      company_id: userData.company_id || null,
       is_active: true,
       password: hashedPassword
+    }
+
+    // Add space_id or company_id based on what column exists
+    // Admin, manager, and internal users can be created without a space assignment
+    // Always set the field (to null if not provided) to ensure proper database insertion
+    if (userData.company_id !== undefined) {
+      // Try space_id first (after migration)
+      insertData.space_id = userData.company_id || null
+    } else {
+      // For admin, manager, and internal users without a space, explicitly set to null
+      // Regular users should always have a company_id, but we handle null for safety
+      insertData.space_id = null
     }
 
     // Include tab_permissions if provided
@@ -1402,11 +1415,34 @@ export async function createUser(userData: {
       insertData.tab_permissions = userData.tab_permissions
     }
     
-    const { data, error } = await supabase
+    // Try inserting with space_id first (after migration)
+    let { data, error } = await supabase
       .from('users')
       .insert(insertData)
       .select()
       .single()
+
+    // If space_id column doesn't exist (migration not run), try company_id
+    if (error && (error.message?.includes('does not exist') || error.message?.includes('column') || error.message?.includes('company_id') || (error as any).code === '42703')) {
+      // Remove space_id and use company_id instead
+      const fallbackData = { ...insertData }
+      delete fallbackData.space_id
+      // Always set company_id (to null if not provided) for admin/manager/internal users without a space
+      fallbackData.company_id = userData.company_id !== undefined ? (userData.company_id || null) : null
+      
+      const fallbackResult = await supabase
+        .from('users')
+        .insert(fallbackData)
+        .select()
+        .single()
+      
+      if (fallbackResult.error) {
+        return { success: false, error: fallbackResult.error.message || 'Failed to create user' }
+      }
+      
+      data = fallbackResult.data
+      error = null
+    }
 
     if (error) {
       return { success: false, error: error.message || 'Failed to create user' }
@@ -1452,7 +1488,8 @@ export async function createUser(userData: {
         role: data.role,
         full_name: data.full_name 
       },
-      company_id: data.company_id || undefined,
+      space_id: (data as any).space_id || (data as any).company_id || undefined,
+      company_id: (data as any).company_id || (data as any).space_id || undefined,
     })
 
     return { success: true, data }
