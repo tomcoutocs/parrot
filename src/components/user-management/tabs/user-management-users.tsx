@@ -8,9 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { 
-  Plus, 
   Search, 
-  Users,
   Mail,
   Shield,
   UserCheck,
@@ -258,14 +256,6 @@ export function UserManagementUsers() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-end">
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Invite User
-        </Button>
-      </div>
-
       {/* Users List */}
       <Card>
         <CardHeader>

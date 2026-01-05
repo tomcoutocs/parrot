@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Plus, Edit, Trash2, User as UserIcon, Mail, Shield, Users, Search, Grid3X3, List, Settings } from 'lucide-react'
+import { Plus, Edit, Trash2, User as UserIcon, Mail, Shield, Users, Search, Grid3X3, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -368,14 +368,6 @@ export default function UsersTab({ selectedCompany }: { selectedCompany?: string
           <Button variant="orange" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create User
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowInviteUsersModal(true)}
-            disabled={companies.length === 0}
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Invite Users
           </Button>
         </div>
       </div>
