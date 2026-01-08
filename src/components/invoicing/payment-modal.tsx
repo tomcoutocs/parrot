@@ -33,10 +33,14 @@ export function PaymentModal({ isOpen, onClose, invoice, onPaymentSuccess }: Pay
     // Load Stripe.js
     if (isOpen && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
       const loadStripe = async () => {
-        const stripeModule = await import('@stripe/stripe-js')
-        const stripeInstance = await stripeModule.loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
-        if (stripeInstance) {
-          setStripe(stripeInstance)
+        try {
+          const stripeModule = await import('@stripe/stripe-js')
+          const stripeInstance = await stripeModule.loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+          if (stripeInstance) {
+            setStripe(stripeInstance)
+          }
+        } catch (error) {
+          console.warn('Stripe.js not available:', error)
         }
       }
       loadStripe()

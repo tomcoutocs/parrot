@@ -48,6 +48,7 @@ interface PendingInvitation {
   invited_by: string
   created_at: string
   expires_at: string
+  space_id?: string | null
 }
 
 export function UserManagementInvitations() {
@@ -97,6 +98,7 @@ export function UserManagementInvitations() {
             invited_by: inv.invited_by,
             created_at: new Date(inv.created_at).toLocaleDateString(),
             expires_at: new Date(inv.expires_at).toLocaleDateString(),
+            space_id: inv.space_id || null,
           }))
           
           setPendingInvitations(mappedInvitations)
@@ -368,9 +370,65 @@ export function UserManagementInvitations() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => {
-                        // TODO: Implement resend invitation
-                        toastError('Resend invitation functionality coming soon')
+                      <DropdownMenuItem onClick={async () => {
+                        try {
+                          setSending(true)
+                          const response = await fetch('/api/invitations/resend', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              invitation_id: invitation.id,
+                              company_name: companies.find(c => c.id === invitation.space_id)?.name,
+                              inviter_name: session?.user?.name
+                            })
+                          })
+
+                          const data = await response.json()
+
+                          if (!response.ok) {
+                            toastError(data.error || 'Failed to resend invitation')
+                            return
+                          }
+
+                          toastSuccess('Invitation resent successfully!')
+                          
+                          // Refresh invitations
+                          const refreshResult = await getPendingInvitations()
+                          if (refreshResult.success && refreshResult.data) {
+                            const teamInvitations = refreshResult.data.filter((inv: UserInvitation) => 
+                              inv.role === 'admin' || 
+                              inv.role === 'manager' || 
+                              inv.role === 'internal'
+                            )
+                            const processedInvitations = teamInvitations.map((inv: UserInvitation) => {
+                              const expiresAt = new Date(inv.expires_at)
+                              const isExpired = expiresAt < new Date() && inv.status === 'pending'
+                              return {
+                                ...inv,
+                                status: isExpired ? 'expired' : inv.status
+                              }
+                            })
+                            const mappedInvitations: PendingInvitation[] = processedInvitations.map((inv: UserInvitation) => ({
+                              id: inv.id,
+                              email: inv.email,
+                              full_name: inv.full_name,
+                              role: inv.role,
+                              status: inv.status,
+                              invited_by: inv.invited_by,
+                              created_at: new Date(inv.created_at).toLocaleDateString(),
+                              expires_at: new Date(inv.expires_at).toLocaleDateString(),
+                            }))
+                            setPendingInvitations(mappedInvitations)
+                          }
+                        } catch (error) {
+                          toastError('Failed to resend invitation', {
+                            description: error instanceof Error ? error.message : 'Please try again'
+                          })
+                        } finally {
+                          setSending(false)
+                        }
                       }}>
                         Resend Invitation
                       </DropdownMenuItem>

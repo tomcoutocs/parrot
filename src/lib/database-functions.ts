@@ -6720,6 +6720,59 @@ export async function getPendingInvitations(companyId?: string): Promise<{ succe
   }
 }
 
+export async function resendInvitation(invitationId: string): Promise<{ success: boolean; data?: UserInvitation; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    await setAppContext()
+    
+    // Get the invitation
+    const { data: invitation, error: fetchError } = await supabase
+      .from('user_invitations')
+      .select('*')
+      .eq('id', invitationId)
+      .single()
+
+    if (fetchError || !invitation) {
+      return { success: false, error: 'Invitation not found' }
+    }
+
+    // Get invitation expiry days from settings
+    const settingsResult = await getUserManagementSettings()
+    const expiryDays = settingsResult.data?.invitation_expiry_days || 7
+
+    // Generate a new invitation token
+    const newInvitationToken = crypto.randomUUID()
+    
+    // Set new expiration date
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + expiryDays)
+
+    // Update invitation with new token and expiry
+    const { data: updatedInvitation, error: updateError } = await supabase
+      .from('user_invitations')
+      .update({
+        invitation_token: newInvitationToken,
+        expires_at: expiresAt.toISOString(),
+        status: 'pending', // Reset to pending if it was expired
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', invitationId)
+      .select()
+      .single()
+
+    if (updateError) {
+      return { success: false, error: updateError.message || 'Failed to update invitation' }
+    }
+
+    return { success: true, data: mapInvitationData(updatedInvitation) }
+  } catch (error) {
+    return { success: false, error: 'Failed to resend invitation' }
+  }
+}
+
 export async function cancelInvitation(invitationId: string): Promise<{ success: boolean; error?: string }> {
   if (!supabase) {
     return { success: false, error: 'Supabase not configured' }

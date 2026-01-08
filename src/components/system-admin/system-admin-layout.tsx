@@ -12,7 +12,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Settings
+  Settings,
+  Flag
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,6 +27,7 @@ import { NotificationBell } from '@/components/notifications/notification-bell'
 import { SystemAdminAnalytics } from './tabs/system-admin-analytics'
 import { SystemAdminMonitoring } from './tabs/system-admin-monitoring'
 import { SystemAdminTickets } from './tabs/system-admin-tickets'
+import { SystemAdminReportedAutomations } from './tabs/system-admin-reported-automations'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { supabase } from '@/lib/supabase'
@@ -41,6 +43,7 @@ const navigationItems = [
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'monitoring', label: 'System Monitoring', icon: Server },
   { id: 'tickets', label: 'Support Tickets', icon: MessageSquare },
+  { id: 'reported-automations', label: 'Reported Automations', icon: Flag },
 ]
 
 export function SystemAdminLayout({ activeTab, onTabChange }: SystemAdminLayoutProps) {
@@ -111,6 +114,8 @@ export function SystemAdminLayout({ activeTab, onTabChange }: SystemAdminLayoutP
         return <SystemAdminMonitoring />
       case 'tickets':
         return <SystemAdminTickets />
+      case 'reported-automations':
+        return <SystemAdminReportedAutomations />
       default:
         return <SystemAdminAnalytics />
     }

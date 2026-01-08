@@ -64,6 +64,17 @@ export interface InvoiceEmailData {
   hostedLink: string
 }
 
+export interface SupportTicketEmailData {
+  recipientName: string
+  recipientEmail: string
+  ticketId: string
+  ticketSubject: string
+  ticketDescription: string
+  ticketStatus: 'resolved' | 'closed'
+  ticketPriority: 'low' | 'normal' | 'high' | 'urgent'
+  resolvedAt: string
+}
+
 // Email sending function for single invitation using Resend
 export async function sendInvitationEmail(data: InvitationEmailData): Promise<EmailResult> {
   try {
@@ -666,6 +677,181 @@ Parrot Portal`
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to send invoice email'
+    }
+  }
+}
+
+// Email sending function for support ticket closure/resolution
+export async function sendSupportTicketEmail(data: SupportTicketEmailData): Promise<EmailResult> {
+  try {
+    if (!process.env.RESEND_API_KEY || !resend) {
+      console.warn('⚠️ RESEND_API_KEY not configured or Resend client not initialized, falling back to mock email')
+      console.log('📧 Mock support ticket email sent:', {
+        to: data.recipientEmail,
+        subject: `Support Ticket ${data.ticketStatus === 'resolved' ? 'Resolved' : 'Closed'}: ${data.ticketSubject}`,
+        ticketId: data.ticketId,
+        ticketSubject: data.ticketSubject,
+        ticketStatus: data.ticketStatus,
+      })
+      return { success: true }
+    }
+
+    const statusText = data.ticketStatus === 'resolved' ? 'Resolved' : 'Closed'
+    const statusColor = data.ticketStatus === 'resolved' ? '#10b981' : '#6b7280'
+    
+    const priorityColors: Record<string, string> = {
+      urgent: '#ef4444',
+      high: '#f59e0b',
+      normal: '#3b82f6',
+      low: '#6b7280'
+    }
+    
+    const priorityText: Record<string, string> = {
+      urgent: 'Urgent',
+      high: 'High',
+      normal: 'Normal',
+      low: 'Low'
+    }
+
+    const resolvedDate = new Date(data.resolvedAt).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Support Ticket ${statusText}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">Support Ticket ${statusText}</h1>
+          </div>
+          
+          <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+            <p style="font-size: 16px; margin-bottom: 20px;">Hello ${data.recipientName},</p>
+            
+            <p style="font-size: 16px; margin-bottom: 20px;">
+              Your support ticket has been <strong style="color: ${statusColor};">${statusText.toLowerCase()}</strong>.
+            </p>
+            
+            <div style="background: #f9fafb; border-left: 4px solid ${statusColor}; padding: 20px; margin: 20px 0; border-radius: 4px;">
+              <div style="margin-bottom: 15px;">
+                <strong style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Ticket ID</strong>
+                <p style="margin: 5px 0 0 0; font-size: 14px; font-family: monospace;">${data.ticketId}</p>
+              </div>
+              
+              <div style="margin-bottom: 15px;">
+                <strong style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Subject</strong>
+                <p style="margin: 5px 0 0 0; font-size: 16px; font-weight: 600;">${data.ticketSubject}</p>
+              </div>
+              
+              <div style="margin-bottom: 15px;">
+                <strong style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Priority</strong>
+                <p style="margin: 5px 0 0 0; font-size: 14px;">
+                  <span style="display: inline-block; padding: 4px 12px; background: ${priorityColors[data.ticketPriority] || '#6b7280'}20; color: ${priorityColors[data.ticketPriority] || '#6b7280'}; border-radius: 4px; font-weight: 500;">
+                    ${priorityText[data.ticketPriority] || data.ticketPriority}
+                  </span>
+                </p>
+              </div>
+              
+              <div style="margin-bottom: 15px;">
+                <strong style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">${statusText} At</strong>
+                <p style="margin: 5px 0 0 0; font-size: 14px;">${resolvedDate}</p>
+              </div>
+            </div>
+            
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 20px; margin: 20px 0;">
+              <strong style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 10px;">Your Original Request</strong>
+              <p style="margin: 0; font-size: 14px; color: #374151; white-space: pre-wrap;">${data.ticketDescription}</p>
+            </div>
+            
+            <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
+              If you have any further questions or concerns, please don't hesitate to reach out to our support team.
+            </p>
+            
+            <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
+              Best regards,<br>
+              <strong>The Parrot Portal Support Team</strong>
+            </p>
+          </div>
+        </body>
+      </html>
+    `
+
+    const emailText = `Support Ticket ${statusText}
+
+Hello ${data.recipientName},
+
+Your support ticket has been ${data.ticketStatus === 'resolved' ? 'resolved' : 'closed'}.
+
+Ticket Details:
+- Ticket ID: ${data.ticketId}
+- Subject: ${data.ticketSubject}
+- Priority: ${priorityText[data.ticketPriority] || data.ticketPriority}
+- ${statusText} At: ${resolvedDate}
+
+Your Original Request:
+${data.ticketDescription}
+
+If you have any further questions or concerns, please don't hesitate to reach out to our support team.
+
+Best regards,
+The Parrot Portal Support Team`
+
+    const fromEmail = process.env.FROM_EMAIL
+    
+    if (!fromEmail) {
+      console.error('❌ FROM_EMAIL not configured. Please set a verified domain email.')
+      return {
+        success: false,
+        error: 'Email configuration error: FROM_EMAIL not set'
+      }
+    }
+
+    const result = await resend.emails.send({
+      from: fromEmail,
+      to: [data.recipientEmail],
+      subject: `Support Ticket ${statusText}: ${data.ticketSubject}`,
+      html: emailHtml,
+      text: emailText,
+    })
+
+    if (result.error) {
+      console.error('Resend API error:', result.error)
+      
+      if (result.error.message?.includes('domain is not verified')) {
+        return {
+          success: false,
+          error: 'Domain verification error: Please verify your domain in Resend dashboard'
+        }
+      }
+      
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email'
+      }
+    }
+
+    console.log('📧 Support ticket email sent successfully:', {
+      id: result.data?.id,
+      to: data.recipientEmail,
+      ticketId: data.ticketId,
+      status: data.ticketStatus,
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error sending support ticket email:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send support ticket email'
     }
   }
 }

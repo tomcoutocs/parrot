@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
+import { format, isSameMonth, isSameDay } from "date-fns"
 import { formatDateForDatabase, formatDateForInput } from "@/lib/date-utils"
 import { toastError, toastSuccess } from "@/lib/toast"
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
@@ -1175,169 +1177,171 @@ export function ModernCalendarTab({ activeSpace }: ModernCalendarTabProps) {
         {/* Calendar View */}
         <div>
           {view === 'month' && (
-            <div className="border border-border/80 rounded-lg overflow-hidden">
-              {/* Days of week header */}
-              <div className="grid grid-cols-7 bg-muted/20 border-b border-border/60">
-                {daysOfWeek.map(day => (
-                  <div key={day} className="px-2 py-3 text-center text-xs text-muted-foreground">
-                    {day}
-                  </div>
-                ))}
-              </div>
+            <Card>
+              <CardContent className="p-6">
+                {/* Days of week header */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {daysOfWeek.map(day => (
+                    <div key={day} className="p-2 text-center text-xs font-medium text-muted-foreground">
+                      {day}
+                    </div>
+                  ))}
+                </div>
 
-              {/* Calendar days */}
-              <div className="grid grid-cols-7">
-              
-              {/* Render day cells */}
-              {days.map((day, index) => {
-                const dayEvents = day ? getEventsForDay(day) : []
-                const eventLayouts = calculateEventLayout()
-                
-                // Render all events for this day (both single-day and multi-day)
-                // Multi-day events will appear on each day they span
-                const allDayEvents = dayEvents
-                  .map(event => {
-                    const layout = eventLayouts.find(l => l.event.id === event.id)
-                    const eventStart = new Date(event.startDate)
-                    const eventEnd = new Date(event.endDate)
-                    eventStart.setHours(0, 0, 0, 0)
-                    eventEnd.setHours(0, 0, 0, 0)
+                {/* Calendar grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Render day cells */}
+                  {days.map((dayNum, index) => {
+                    if (dayNum === null) return <div key={index} className="min-h-[100px]" />
                     
-                    // Check if it's a multi-day event
-                    const isMultiDay = eventStart.getTime() !== eventEnd.getTime()
+                    // Convert day number to Date object for date comparisons
+                    const day = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNum)
+                    const dayEvents = getEventsForDay(dayNum) // getEventsForDay expects a number
+                    const eventLayouts = calculateEventLayout()
+                    const isCurrentMonth = isSameMonth(day, currentDate)
+                    const isTodayDate = isSameDay(day, new Date())
                     
-                    return { 
-                      event, 
-                      lane: layout?.lane ?? 0,
-                      isMultiDay 
-                    }
-                  })
-                  .sort((a, b) => {
-                    // Multi-day events first, then single-day events
-                    if (a.isMultiDay && !b.isMultiDay) return -1
-                    if (!a.isMultiDay && b.isMultiDay) return 1
-                    // Within same type, sort by lane
-                    return a.lane - b.lane
-                  })
-                
-                return (
-                  <div
-                    key={index}
-                    onClick={(e) => {
-                      // Only open create dialog if clicking on empty space (not on an event)
-                      if (day !== null) {
-                        const target = e.target as HTMLElement
-                        // Check if click is on an event element or within an event
-                        const isEventClick = target.closest('.event-item') !== null
-                        // Check if click is on the day number
-                        const isDayNumberClick = target.closest('.day-number') !== null
-                        // Check if click is from a dropdown menu
-                        const isDropdownClick = target.closest('[role="menu"]') !== null || 
-                                                target.closest('[role="menuitem"]') !== null ||
-                                                target.closest('[data-radix-popper-content-wrapper]') !== null
+                    // Render all events for this day (both single-day and multi-day)
+                    // Multi-day events will appear on each day they span
+                    const allDayEvents = dayEvents
+                      .map(event => {
+                        const layout = eventLayouts.find(l => l.event.id === event.id)
+                        const eventStart = new Date(event.startDate)
+                        const eventEnd = new Date(event.endDate)
+                        eventStart.setHours(0, 0, 0, 0)
+                        eventEnd.setHours(0, 0, 0, 0)
                         
-                        // Only open create dialog if clicking on empty space and not from dropdown
-                        if (!isEventClick && !isDayNumberClick && !isDropdownClick) {
-                          handleDayClick(day)
+                        // Check if it's a multi-day event
+                        const isMultiDay = eventStart.getTime() !== eventEnd.getTime()
+                        
+                        return { 
+                          event, 
+                          lane: layout?.lane ?? 0,
+                          isMultiDay 
                         }
-                      }
-                    }}
-                    className={`min-h-28 p-2 border-r border-b border-border/60 last:border-r-0 ${
-                      index >= days.length - 7 ? "border-b-0" : ""
-                    } ${day === null ? "bg-muted/10" : "bg-background hover:bg-muted/20 cursor-pointer"} transition-colors relative`}
-                  >
-                    {day !== null && (
-                      <div className="h-full flex flex-col">
-                        <div 
-                          className={`text-sm mb-1 day-number ${
-                            isToday(day) 
-                              ? "w-6 h-6 rounded-full bg-foreground text-background flex items-center justify-center" 
-                              : "text-foreground"
-                          }`}
-                        >
-                          {day}
-                        </div>
-                        <div className="space-y-1 flex-1 overflow-y-auto">
-                          {/* All events for this day */}
-                          {allDayEvents.slice(0, 5).map(({ event }) => {
-                            // Truncate long event names for display (like "Holiday Po...")
-                            const displayTitle = event.title.length > 20 
-                              ? event.title.substring(0, 17) + '...' 
-                              : event.title
-                            
-                            // Convert hex color to rgba with transparency
-                            const hexToRgba = (hex: string, alpha: number) => {
-                              const r = parseInt(hex.slice(1, 3), 16)
-                              const g = parseInt(hex.slice(3, 5), 16)
-                              const b = parseInt(hex.slice(5, 7), 16)
-                              return `rgba(${r}, ${g}, ${b}, ${alpha})`
-                            }
-                            
-                            // For admin view, show company name if available
-                            const isAdmin = hasAdminPrivileges(session?.user?.role)
-                            const showCompanyName = isAdmin && event.companyName && !activeSpace
-                            
-                            return (
-                              <DropdownMenu key={event.id}>
-                                <DropdownMenuTrigger asChild>
-                                  <div
+                      })
+                      .sort((a, b) => {
+                        // Multi-day events first, then single-day events
+                        if (a.isMultiDay && !b.isMultiDay) return -1
+                        if (!a.isMultiDay && b.isMultiDay) return 1
+                        // Within same type, sort by lane
+                        return a.lane - b.lane
+                      })
+                    
+                    return (
+                      <div
+                        key={index}
+                        onClick={(e) => {
+                          // Only open create dialog if clicking on empty space (not on an event)
+                          const target = e.target as HTMLElement
+                          // Check if click is on an event element or within an event
+                          const isEventClick = target.closest('.event-item') !== null
+                          // Check if click is on the day number
+                          const isDayNumberClick = target.closest('.day-number') !== null
+                          // Check if click is from a dropdown menu
+                          const isDropdownClick = target.closest('[role="menu"]') !== null || 
+                                                  target.closest('[role="menuitem"]') !== null ||
+                                                  target.closest('[data-radix-popper-content-wrapper]') !== null
+                          
+                          // Only open create dialog if clicking on empty space and not from dropdown
+                          if (!isEventClick && !isDayNumberClick && !isDropdownClick) {
+                            handleDayClick(dayNum)
+                          }
+                        }}
+                        className={`
+                          min-h-[100px] border rounded-lg p-2 transition-colors
+                          ${isCurrentMonth ? 'bg-background' : 'bg-muted/30 opacity-50'}
+                          ${isTodayDate ? 'ring-2 ring-primary ring-offset-2' : ''}
+                          ${dayEvents.length > 0 ? 'cursor-pointer hover:bg-muted/50' : 'hover:bg-muted/20 cursor-pointer'}
+                        `}
+                      >
+                        <div className="h-full flex flex-col">
+                          <div 
+                            className={`
+                              text-sm font-medium mb-1 day-number
+                              ${isCurrentMonth ? 'text-foreground' : 'text-muted-foreground'}
+                              ${isTodayDate ? 'text-primary' : ''}
+                            `}
+                          >
+                            {format(day, 'd')}
+                          </div>
+                          <div className="space-y-1 flex-1 overflow-y-auto">
+                            {/* All events for this day */}
+                            {allDayEvents.slice(0, 3).map(({ event }) => {
+                              // Truncate long event names for display
+                              const displayTitle = event.title.length > 20 
+                                ? event.title.substring(0, 17) + '...' 
+                                : event.title
+                              
+                              // Convert hex color to rgba with transparency
+                              const hexToRgba = (hex: string, alpha: number) => {
+                                const r = parseInt(hex.slice(1, 3), 16)
+                                const g = parseInt(hex.slice(3, 5), 16)
+                                const b = parseInt(hex.slice(5, 7), 16)
+                                return `rgba(${r}, ${g}, ${b}, ${alpha})`
+                              }
+                              
+                              // For admin view, show company name if available
+                              const isAdmin = hasAdminPrivileges(session?.user?.role)
+                              const showCompanyName = isAdmin && event.companyName && !activeSpace
+                              
+                              return (
+                                <DropdownMenu key={event.id}>
+                                  <DropdownMenuTrigger asChild>
+                                    <div
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="w-full text-xs px-1.5 py-0.5 rounded border truncate font-medium cursor-pointer hover:opacity-90 transition-opacity event-item text-foreground"
+                                      style={{
+                                        backgroundColor: hexToRgba(event.color, 0.2),
+                                        borderColor: event.color + '40',
+                                        color: 'inherit'
+                                      }}
+                                      title={showCompanyName ? `${event.title} (${event.companyName})` : event.title}
+                                    >
+                                      {displayTitle}
+                                    </div>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent 
+                                    align="start" 
+                                    className="w-48"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="w-full text-xs px-2 py-1 rounded-md font-medium cursor-pointer hover:opacity-90 transition-opacity overflow-hidden text-ellipsis whitespace-nowrap relative group event-item text-foreground"
-                                    style={{
-                                      backgroundColor: hexToRgba(event.color, 0.2),
-                                      borderLeft: `3px solid ${event.color}`,
-                                    }}
-                                    title={showCompanyName ? `${event.title} (${event.companyName})` : event.title}
                                   >
-                                    {showCompanyName && event.companyName && (
-                                      <span className="font-semibold text-[10px] opacity-70 mr-1 text-foreground">
-                                        {event.companyName.substring(0, 8)}:
-                                      </span>
-                                    )}
-                                    {displayTitle}
-                                  </div>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent 
-                                  align="start" 
-                                  className="w-48"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <DropdownMenuItem 
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleEditEvent(event)
-                                    }}
-                                  >
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit Event
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      deleteEvent(event.id)
-                                    }}
-                                    className="text-red-500"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete Event
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )
-                          })}
-                          {dayEvents.length > 5 && (
-                            <div className="text-xs text-muted-foreground px-1 font-medium" onClick={(e) => e.stopPropagation()}>
-                              +{dayEvents.length - 5} more
-                            </div>
-                          )}
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleEditEvent(event)
+                                      }}
+                                    >
+                                      <Edit className="mr-2 h-4 w-4" />
+                                      Edit Event
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        deleteEvent(event.id)
+                                      }}
+                                      className="text-red-500"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete Event
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )
+                            })}
+                            {dayEvents.length > 3 && (
+                              <div className="text-xs text-muted-foreground px-1.5" onClick={(e) => e.stopPropagation()}>
+                                +{dayEvents.length - 3} more
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {view === 'week' && (

@@ -222,9 +222,21 @@ export async function updateTicketStatus(
   }
 
   try {
+    // Fetch ticket details before updating (to get user info for email)
+    const { data: ticket, error: fetchError } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('id', ticketId)
+      .single()
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message }
+    }
+
     const updateData: any = { status }
+    const resolvedAt = new Date().toISOString()
     if (status === 'resolved' || status === 'closed') {
-      updateData.resolved_at = new Date().toISOString()
+      updateData.resolved_at = resolvedAt
     }
 
     const { error } = await supabase
@@ -234,6 +246,46 @@ export async function updateTicketStatus(
 
     if (error) {
       return { success: false, error: error.message }
+    }
+
+    // Send email notification if ticket is resolved or closed
+    if ((status === 'resolved' || status === 'closed') && ticket.user_id) {
+      try {
+        // Fetch user email
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('email, name')
+          .eq('id', ticket.user_id)
+          .single()
+
+        if (!userError && user?.email) {
+          // Send email via API route
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
+          const response = await fetch(`${baseUrl}/api/support/send-ticket-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipientName: user.name || 'User',
+              recipientEmail: user.email,
+              ticketId: ticket.id,
+              ticketSubject: ticket.subject,
+              ticketDescription: ticket.description,
+              ticketStatus: status,
+              ticketPriority: ticket.priority,
+              resolvedAt: resolvedAt,
+            }),
+          })
+
+          const result = await response.json()
+          if (!result.success) {
+            console.error('Failed to send ticket email:', result.error)
+            // Don't fail the whole operation if email fails
+          }
+        }
+      } catch (emailError) {
+        console.error('Error sending ticket email:', emailError)
+        // Don't fail the whole operation if email fails
+      }
     }
 
     return { success: true }

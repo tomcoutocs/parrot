@@ -116,11 +116,44 @@ export default function TaskDetailSidebar({
       // Create notification for task assignee and other commenters (if different from commenter)
       if (data) {
         const { createTaskCommentNotification } = await import('@/lib/notification-functions')
+        const { fetchUsers } = await import('@/lib/database-functions')
         
         // Extract mentions from comment (@username format)
         const mentionMatches = newComment.match(/@(\w+)/g) || []
-        // For now, we'll just notify the task assignee
-        // TODO: Parse actual user IDs from mentions
+        const mentionedUserIds: string[] = []
+        
+        if (mentionMatches.length > 0 && supabase) {
+          try {
+            // Fetch all users to match mentions
+            const allUsers = await fetchUsers()
+            
+            // Match mentions to users by username (email prefix) or full name
+            mentionMatches.forEach(mention => {
+              const username = mention.replace('@', '').toLowerCase()
+              
+              // Try to match by email prefix (before @)
+              const userByEmail = allUsers.find(u => 
+                u.email?.toLowerCase().split('@')[0] === username
+              )
+              
+              // Try to match by full name (first name or last name)
+              const userByName = allUsers.find(u => {
+                const fullName = u.full_name?.toLowerCase() || ''
+                const nameParts = fullName.split(' ')
+                return nameParts.some(part => part === username) || 
+                       nameParts.some(part => part.startsWith(username))
+              })
+              
+              // Prefer email match, fallback to name match
+              const matchedUser = userByEmail || userByName
+              if (matchedUser && !mentionedUserIds.includes(matchedUser.id)) {
+                mentionedUserIds.push(matchedUser.id)
+              }
+            })
+          } catch (error) {
+            console.error('Error parsing user mentions:', error)
+          }
+        }
         
         await createTaskCommentNotification(
           task.id,
@@ -128,7 +161,7 @@ export default function TaskDetailSidebar({
           data.id,
           session.user.id,
           session.user.name || 'Unknown',
-          [] // Mentioned user IDs - to be implemented
+          mentionedUserIds
         ).catch(err => console.error('Failed to create comment notification:', err))
       }
     } catch (error) {

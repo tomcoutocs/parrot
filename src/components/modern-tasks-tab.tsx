@@ -19,6 +19,7 @@ import CreateProjectModal from "@/components/modals/create-project-modal"
 import CreateTaskModal from "@/components/modals/create-task-modal"
 import TaskDetailSidebar from "@/components/task-detail-sidebar"
 import EditProjectModal from "@/components/modals/edit-project-modal"
+import { EditTaskModal } from "@/components/modals/edit-task-modal"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -208,7 +209,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   const [deletingTasks, setDeletingTasks] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
-  const [users, setUsers] = useState<Array<{ id: string; full_name: string; email: string; profile_picture?: string | null }>>([])
+  const [users, setUsers] = useState<User[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedTaskForSidebar, setSelectedTaskForSidebar] = useState<TaskWithDetails | null>(null)
   const [isTaskSidebarOpen, setIsTaskSidebarOpen] = useState(false)
@@ -219,6 +220,8 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   const [projectsData, setProjectsData] = useState<ProjectWithDetails[]>([])
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null)
+  const [showEditTaskModal, setShowEditTaskModal] = useState(false)
+  const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<TaskWithDetails | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -286,13 +289,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           new Map(allSpaceUsers.map(user => [user.id, user])).values()
         )
         
-        const spaceUsers = uniqueUsers.map(user => ({
-          id: user.id,
-          full_name: user.full_name || "",
-          email: user.email || "",
-          profile_picture: user.profile_picture || null
-        }))
-        setUsers(spaceUsers)
+        setUsers(uniqueUsers)
         
         // Store projects data for edit modal
         setProjectsData(projectsData)
@@ -508,13 +505,7 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
           new Map(allSpaceUsers.map(user => [user.id, user])).values()
         )
         
-        const updatedSpaceUsers = uniqueUsers.map(user => ({
-          id: user.id,
-          full_name: user.full_name || "",
-          email: user.email || "",
-          profile_picture: user.profile_picture || null
-        }))
-        setUsers(updatedSpaceUsers)
+        setUsers(uniqueUsers)
       } catch (error) {
         console.error('Error refreshing users after profile picture update:', error)
       }
@@ -1053,13 +1044,69 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
   }
 
   const handleEditTask = (task: TaskWithDetails) => {
-    // TODO: Open edit task modal
+    setSelectedTaskForEdit(task)
+    setShowEditTaskModal(true)
   }
 
-  const handleBulkUpdate = (updates: Partial<Task>) => {
-    setSelectedTasks([])
-    setIsSelectionMode(false)
-    // TODO: Bulk update tasks in database
+  const handleBulkUpdate = async (updates: Partial<Task>) => {
+    if (selectedTasks.length === 0 || !session?.user?.id) return
+
+    try {
+      // Update all selected tasks
+      const updatePromises = selectedTasks.map(taskId => {
+        const task = tasksMap.get(taskId)
+        if (!task) return Promise.resolve()
+
+        const updateData: Partial<Task> = { ...updates }
+        // Ensure we preserve existing fields that aren't being updated
+        if (!updateData.status && task.status) updateData.status = task.status
+        if (!updateData.priority && task.priority) updateData.priority = task.priority
+        if (!updateData.assigned_to && task.assigned_to) updateData.assigned_to = task.assigned_to
+
+        return updateTask(taskId, updateData, session.user.id)
+      })
+
+      await Promise.all(updatePromises)
+      toastSuccess(`Updated ${selectedTasks.length} task${selectedTasks.length !== 1 ? 's' : ''}`)
+      
+      // Reload data
+      const loadData = async () => {
+        if (!activeSpace) return
+        const projectsData = await fetchProjectsOptimized(activeSpace || undefined)
+        const projectIds = projectsData.map(p => p.id)
+        const allTasksData = projectIds.length > 0 
+          ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+          : []
+        const transformedProjects: Project[] = projectsData.map((project) => {
+          const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+          const designTasks = projectTasks.map(transformTaskToDesignTask)
+          const statusGroups = groupTasksByStatus(designTasks)
+          return {
+            id: project.id,
+            name: project.name || "Unnamed Project",
+            dueDate: "-",
+            launchDate: undefined,
+            statusGroups,
+            taskCount: projectTasks.length
+          }
+        })
+        setProjects(transformedProjects)
+        
+        // Update tasks map
+        const newTasksMap = new Map<string, TaskWithDetails>()
+        allTasksData.forEach(task => {
+          newTasksMap.set(task.id, task)
+        })
+        setTasksMap(newTasksMap)
+      }
+      await loadData()
+
+      setSelectedTasks([])
+      setIsSelectionMode(false)
+    } catch (error) {
+      console.error('Error bulk updating tasks:', error)
+      toastError('Failed to update tasks')
+    }
   }
 
   const handleBulkDelete = async () => {
@@ -2232,6 +2279,51 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
         project={selectedProjectForEdit}
         users={editModalUsers}
       />
+
+      {/* Edit Task Modal */}
+      {showEditTaskModal && selectedTaskForEdit && (
+        <EditTaskModal
+          task={selectedTaskForEdit}
+          isOpen={showEditTaskModal}
+          onClose={() => {
+            setShowEditTaskModal(false)
+            setSelectedTaskForEdit(null)
+          }}
+          onTaskUpdated={async () => {
+            setShowEditTaskModal(false)
+            setSelectedTaskForEdit(null)
+            // Reload data
+            if (!activeSpace) return
+            const projectsData = await fetchProjectsOptimized(activeSpace || undefined)
+            const projectIds = projectsData.map(p => p.id)
+            const allTasksData = projectIds.length > 0 
+              ? await Promise.all(projectIds.map(id => fetchTasksOptimized(id))).then(results => results.flat())
+              : []
+            const transformedProjects: Project[] = projectsData.map((project) => {
+              const projectTasks = allTasksData.filter(t => t.project_id === project.id)
+              const designTasks = projectTasks.map(transformTaskToDesignTask)
+              const statusGroups = groupTasksByStatus(designTasks)
+              return {
+                id: project.id,
+                name: project.name || "Unnamed Project",
+                dueDate: "-",
+                launchDate: undefined,
+                statusGroups,
+                taskCount: projectTasks.length
+              }
+            })
+            setProjects(transformedProjects)
+            
+            // Update tasks map
+            const newTasksMap = new Map<string, TaskWithDetails>()
+            allTasksData.forEach(task => {
+              newTasksMap.set(task.id, task)
+            })
+            setTasksMap(newTasksMap)
+          }}
+          users={users}
+        />
+      )}
 
       {/* Task Detail Sidebar */}
       <TaskDetailSidebar

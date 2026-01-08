@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { useSession } from '@/components/providers/session-provider'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { 
@@ -16,10 +17,14 @@ import {
   Plus,
   Mail,
   Phone,
-  Building2
+  Building2,
+  Loader2
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export function CRMDashboard() {
+  const { data: session } = useSession()
+  const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalContacts: 0,
     totalDeals: 0,
@@ -32,19 +37,86 @@ export function CRMDashboard() {
   })
 
   useEffect(() => {
-    // TODO: Fetch real data from database
-    // For now, using mock data
-    setStats({
-      totalContacts: 1247,
-      totalDeals: 89,
-      totalRevenue: 2450000,
-      activeAccounts: 342,
-      dealsWon: 23,
-      dealsLost: 12,
-      conversionRate: 65.7,
-      avgDealSize: 106521,
-    })
-  }, [])
+    loadCRMData()
+  }, [session?.user?.company_id])
+
+  const loadCRMData = async () => {
+    if (!session?.user?.company_id || !supabase) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      setLoading(true)
+      const spaceId = session.user.company_id
+
+      // Fetch leads (contacts)
+      const { data: leads, error: leadsError } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('space_id', spaceId)
+
+      if (leadsError) {
+        console.error('Error fetching leads:', leadsError)
+      }
+
+      // Fetch companies (accounts)
+      const { data: companies, error: companiesError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('space_id', spaceId)
+        .eq('is_active', true)
+
+      if (companiesError) {
+        console.error('Error fetching companies:', companiesError)
+      }
+
+      // Calculate stats from leads
+      const totalContacts = leads?.length || 0
+      const totalDeals = leads?.filter(l => l.status && l.status !== 'new').length || 0
+      const dealsWon = leads?.filter(l => l.status === 'closed_won').length || 0
+      const dealsLost = leads?.filter(l => l.status === 'closed_lost').length || 0
+      const totalDealsCount = dealsWon + dealsLost + (leads?.filter(l => 
+        ['qualified', 'proposal', 'negotiation'].includes(l.status)
+      ).length || 0)
+      
+      // Calculate revenue from leads with budget
+      const totalRevenue = leads?.reduce((sum, lead) => {
+        if (lead.status === 'closed_won' && lead.budget) {
+          return sum + parseFloat(lead.budget.toString())
+        }
+        return sum
+      }, 0) || 0
+
+      // Calculate average deal size
+      const wonDealsWithBudget = leads?.filter(l => l.status === 'closed_won' && l.budget) || []
+      const avgDealSize = wonDealsWithBudget.length > 0
+        ? wonDealsWithBudget.reduce((sum, l) => sum + parseFloat(l.budget.toString()), 0) / wonDealsWithBudget.length
+        : 0
+
+      // Calculate conversion rate
+      const conversionRate = totalDealsCount > 0 
+        ? (dealsWon / totalDealsCount) * 100 
+        : 0
+
+      const activeAccounts = companies?.length || 0
+
+      setStats({
+        totalContacts,
+        totalDeals: totalDealsCount,
+        totalRevenue,
+        activeAccounts,
+        dealsWon,
+        dealsLost,
+        conversionRate,
+        avgDealSize,
+      })
+    } catch (error) {
+      console.error('Error loading CRM data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const statCards: Array<{
     title: string
@@ -119,27 +191,33 @@ export function CRMDashboard() {
         </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {statCards.map((stat) => {
-          const Icon = stat.icon
-          return (
-            <Card key={stat.title}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-                <Icon className={`h-4 w-4 ${stat.color}`} />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <div className="flex items-center text-xs text-muted-foreground mt-1">
-                  {stat.trend === 'up' && <ArrowUpRight className="w-3 h-3 text-green-600 mr-1" />}
-                  {stat.trend === 'down' && <ArrowDownRight className="w-3 h-3 text-red-600 mr-1" />}
-                  {stat.description}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {statCards.map((stat) => {
+            const Icon = stat.icon
+            return (
+              <Card key={stat.title}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                  <Icon className={`h-4 w-4 ${stat.color}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stat.value}</div>
+                  <div className="flex items-center text-xs text-muted-foreground mt-1">
+                    {stat.trend === 'up' && <ArrowUpRight className="w-3 h-3 text-green-600 mr-1" />}
+                    {stat.trend === 'down' && <ArrowDownRight className="w-3 h-3 text-red-600 mr-1" />}
+                    {stat.description}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       {/* Quick Actions & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

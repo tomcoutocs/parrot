@@ -28,7 +28,9 @@ import {
   Bookmark,
   Mail,
   Activity,
-  Settings
+  Settings,
+  Store,
+  Heart
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -128,6 +130,19 @@ const apps: App[] = [
       { id: 'settings', label: 'Settings', icon: Settings },
     ]
   },
+  {
+    id: 'automations',
+    name: 'Automations',
+    icon: Zap,
+    description: 'Workflow Automation',
+    tabs: [
+      { id: 'builder', label: 'Builder', icon: Zap },
+      { id: 'saved', label: 'My Automations', icon: Save },
+      { id: 'marketplace', label: 'Marketplace', icon: Store },
+      { id: 'liked', label: 'Liked', icon: Heart },
+      { id: 'settings', label: 'Settings', icon: Settings },
+    ]
+  },
 ]
 
 interface UserPermissions {
@@ -174,7 +189,7 @@ export function UserManagementPermissions() {
           
           dbTabPermissions.forEach(perm => {
             // If it's in old format (just app name), grant all tabs for that app
-            if (['crm', 'invoicing', 'lead-generation', 'analytics', 'user-management'].includes(perm)) {
+            if (['crm', 'invoicing', 'lead-generation', 'analytics', 'user-management', 'automations'].includes(perm)) {
               const app = apps.find(a => a.id === perm)
               if (app) {
                 // Grant all tabs for this app

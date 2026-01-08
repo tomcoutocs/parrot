@@ -19,7 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  Bot
+  Bot,
+  Calendar
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +42,7 @@ import { InvoicingExpenses } from './tabs/invoicing-expenses'
 import { InvoicingReports } from './tabs/invoicing-reports'
 import { InvoicingSettings } from './tabs/invoicing-settings'
 import { InvoicingAIAssistant } from './tabs/invoicing-ai-assistant'
+import { InvoicingCalendar } from './tabs/invoicing-calendar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
@@ -54,6 +56,7 @@ interface InvoicingLayoutProps {
 const navigationItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'invoices', label: 'Invoices', icon: FileText },
+  { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'clients', label: 'Clients', icon: Users },
   { id: 'recurring', label: 'Recurring', icon: Repeat },
   { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -131,6 +134,8 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
         return <InvoicingDashboard />
       case 'invoices':
         return <InvoicingInvoices />
+      case 'calendar':
+        return <InvoicingCalendar />
       case 'clients':
         return <InvoicingClients />
       case 'recurring':

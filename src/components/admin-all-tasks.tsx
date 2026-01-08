@@ -8,11 +8,13 @@ import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { fetchTasksOptimized, fetchProjectsOptimized, fetchCompaniesOptimized, fetchUsersOptimized } from "@/lib/simplified-database-functions"
 import { TaskWithDetails, ProjectWithDetails, Company, User } from "@/lib/supabase"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
 import { LoadingSpinner } from "@/components/ui/loading-states"
+import CreateTaskModal from "@/components/modals/create-task-modal"
 
 interface TaskWithProject extends TaskWithDetails {
   project?: ProjectWithDetails & { company?: Company }
@@ -31,6 +33,9 @@ export function AdminAllTasks() {
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [filterPriority, setFilterPriority] = useState<string>("all")
   const [filterAssignee, setFilterAssignee] = useState<string>("all")
+  const [showProjectSelectModal, setShowProjectSelectModal] = useState(false)
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
+  const [selectedProjectForTask, setSelectedProjectForTask] = useState<string>("")
 
   const handleTaskClick = (task: TaskWithProject) => {
     // Navigate to projects tab with the selected task, project, and space
@@ -265,9 +270,11 @@ export function AdminAllTasks() {
         </div>
         <Button 
           onClick={() => {
-            // TODO: Implement task creation with project selection
-            // For now, this could navigate to a project or show a project selection modal
-            console.log("Create new task - needs project selection")
+            if (projects.length === 0) {
+              alert("No projects available. Please create a project first.")
+              return
+            }
+            setShowProjectSelectModal(true)
           }}
           className="flex items-center gap-2"
         >
@@ -606,8 +613,79 @@ export function AdminAllTasks() {
         </div>
       </Card>
 
-      {/* Create Task Modal - Note: CreateTaskModal requires a projectId, so we'll need to handle this differently */}
-      {/* For now, the create button is disabled until we implement project selection */}
+      {/* Project Selection Modal */}
+      <Dialog open={showProjectSelectModal} onOpenChange={setShowProjectSelectModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Project</DialogTitle>
+            <DialogDescription>
+              Choose a project to create a task in
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select value={selectedProjectForTask} onValueChange={setSelectedProjectForTask}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => {
+                  const projectWithCompany = project as ProjectWithDetails & { company?: Company }
+                  return (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name} {projectWithCompany.company ? `(${projectWithCompany.company.name})` : ''}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                setShowProjectSelectModal(false)
+                setSelectedProjectForTask("")
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={() => {
+                if (selectedProjectForTask) {
+                  setShowProjectSelectModal(false)
+                  setShowCreateTaskModal(true)
+                }
+              }} disabled={!selectedProjectForTask}>
+                Continue
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Task Modal */}
+      {showCreateTaskModal && selectedProjectForTask && (
+        <CreateTaskModal
+          isOpen={showCreateTaskModal}
+          onClose={() => {
+            setShowCreateTaskModal(false)
+            setSelectedProjectForTask("")
+          }}
+          onTaskCreated={async () => {
+            setShowCreateTaskModal(false)
+            setSelectedProjectForTask("")
+            // Reload tasks
+            const tasksData = await fetchTasksOptimized()
+            const enrichedTasks = tasksData
+              .map(task => {
+                const project = projects.find(p => p.id === task.project_id)
+                return { ...task, project }
+              })
+              .filter(task => {
+                const activeProjectIds = new Set(projects.map(p => p.id))
+                return activeProjectIds.has(task.project_id) && task.project !== undefined
+              })
+            setTasks(enrichedTasks)
+          }}
+          projectId={selectedProjectForTask}
+          users={users}
+        />
+      )}
     </div>
   )
 }

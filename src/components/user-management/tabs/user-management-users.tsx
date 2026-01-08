@@ -47,6 +47,7 @@ interface User {
     invoicing: boolean
     leadGeneration: boolean
     analytics: boolean
+    automations: boolean
   }
   avatar?: string
 }
@@ -91,6 +92,7 @@ export function UserManagementUsers() {
           invoicing: tabPermissions.includes('invoicing') || hasAdminPrivileges(dbUser.role),
           leadGeneration: tabPermissions.includes('lead-generation') || hasAdminPrivileges(dbUser.role),
           analytics: tabPermissions.includes('analytics') || hasAdminPrivileges(dbUser.role),
+          automations: tabPermissions.includes('automations') || tabPermissions.some(p => p.startsWith('automations:')) || hasAdminPrivileges(dbUser.role),
         }
 
         return {
@@ -532,6 +534,7 @@ function UserList({
                   {user.appPermissions.invoicing && <Badge variant="outline" className="text-xs">Invoicing</Badge>}
                   {user.appPermissions.leadGeneration && <Badge variant="outline" className="text-xs">Lead Gen</Badge>}
                   {user.appPermissions.analytics && <Badge variant="outline" className="text-xs">Analytics</Badge>}
+                  {user.appPermissions.automations && <Badge variant="outline" className="text-xs">Automations</Badge>}
                 </div>
               </div>
             </div>

@@ -136,9 +136,28 @@ export function InvoicingReports() {
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8']
 
-  const handleExport = () => {
-    // TODO: Implement PDF/CSV export
-    alert('Export functionality coming soon!')
+  const handleExport = async (format: 'pdf' | 'csv' = 'pdf') => {
+    try {
+      const url = `/api/invoicing/export-report?format=${format}`
+      const response = await fetch(url)
+      
+      if (!response.ok) {
+        throw new Error('Failed to export report')
+      }
+
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `invoicing-report-${new Date().toISOString().split('T')[0]}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(downloadUrl)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Error exporting report:', error)
+      alert('Failed to export report. Please try again.')
+    }
   }
   return (
     <div className="space-y-6">
@@ -148,9 +167,13 @@ export function InvoicingReports() {
             <Filter className="w-4 h-4 mr-2" />
             Customize Report
           </Button>
-          <Button onClick={handleExport}>
+          <Button variant="outline" onClick={() => handleExport('csv')}>
             <Download className="w-4 h-4 mr-2" />
-            Export Report
+            Export CSV
+          </Button>
+          <Button onClick={() => handleExport('pdf')}>
+            <Download className="w-4 h-4 mr-2" />
+            Export PDF
           </Button>
         </div>
 

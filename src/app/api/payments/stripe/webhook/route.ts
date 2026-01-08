@@ -28,7 +28,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Dynamic import of Stripe
-    const stripe = (await import('stripe')).default
+    let stripe: any
+    try {
+      stripe = (await import('stripe')).default
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Stripe package not installed. Please run: npm install stripe' },
+        { status: 500 }
+      )
+    }
+    
     const stripeClient = new stripe(process.env.STRIPE_SECRET_KEY || '', {
       apiVersion: '2025-12-15.clover',
     })

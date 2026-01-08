@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox as UICheckbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,7 @@ interface LineItem {
   quantity: number
   unit_price: number
   tax_rate: number
+  is_service?: boolean // Service items don't need quantity
 }
 
 interface CreateInvoiceModalProps {
@@ -64,19 +66,25 @@ export function CreateInvoiceModal({
   })
   const [taxRate, setTaxRate] = useState(0) // Smart default: 0%
   const [discount, setDiscount] = useState(0)
+  const [showTax, setShowTax] = useState(false)
+  const [showDiscount, setShowDiscount] = useState(false)
   const [currency, setCurrency] = useState('USD') // Smart default
   const [notes, setNotes] = useState('')
   const [terms, setTerms] = useState('')
   
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: '1', description: '', quantity: 1, unit_price: 0, tax_rate: 0 }
+    { id: '1', description: '', quantity: 1, unit_price: 0, tax_rate: 0, is_service: false }
   ])
 
   // Calculate totals
   const calculateTotals = useCallback(() => {
     let subtotal = 0
     lineItems.forEach(item => {
-      const lineTotal = (item.quantity || 0) * (item.unit_price || 0)
+      // For service items, use unit_price directly (quantity is ignored)
+      // For regular items, multiply quantity * unit_price
+      const lineTotal = item.is_service 
+        ? (item.unit_price || 0)
+        : (item.quantity || 0) * (item.unit_price || 0)
       subtotal += lineTotal
     })
     const subtotalAfterDiscount = subtotal - (discount || 0)
@@ -110,7 +118,7 @@ export function CreateInvoiceModal({
         terms: terms || undefined,
         line_items: lineItems.map(item => ({
           description: item.description,
-          quantity: item.quantity,
+          quantity: item.is_service ? 1 : item.quantity, // Service items always use quantity 1
           unit_price: item.unit_price,
           tax_rate: item.tax_rate
         }))
@@ -175,7 +183,8 @@ export function CreateInvoiceModal({
       description: '',
       quantity: 1,
       unit_price: 0,
-      tax_rate: 0
+      tax_rate: 0,
+      is_service: false
     }])
   }
 
@@ -185,7 +194,7 @@ export function CreateInvoiceModal({
     }
   }
 
-  const handleLineItemChange = (id: string, field: keyof LineItem, value: string | number) => {
+  const handleLineItemChange = (id: string, field: keyof LineItem, value: string | number | boolean) => {
     setLineItems(lineItems.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ))
@@ -220,11 +229,11 @@ export function CreateInvoiceModal({
           client_email: clientEmail || undefined,
           client_address: clientAddress || undefined,
           due_date: dueDate,
-          line_items: lineItems
+            line_items: lineItems
             .filter(item => item.description.trim())
             .map(item => ({
               description: item.description,
-              quantity: item.quantity || 1,
+              quantity: item.is_service ? 1 : (item.quantity || 1), // Service items always use quantity 1
               unit_price: item.unit_price || 0,
               tax_rate: item.tax_rate || 0
             })),
@@ -263,10 +272,12 @@ export function CreateInvoiceModal({
     })
     setTaxRate(0)
     setDiscount(0)
+    setShowTax(false)
+    setShowDiscount(false)
     setCurrency('USD')
     setNotes('')
     setTerms('')
-    setLineItems([{ id: '1', description: '', quantity: 1, unit_price: 0, tax_rate: 0 }])
+    setLineItems([{ id: '1', description: '', quantity: 1, unit_price: 0, tax_rate: 0, is_service: false }])
     setInvoiceId(null)
     setLastSaved(null)
     onClose()
@@ -338,7 +349,7 @@ export function CreateInvoiceModal({
           {/* Invoice Details */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold">Invoice Details</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="dueDate">Due Date *</Label>
                 <Input
@@ -363,7 +374,24 @@ export function CreateInvoiceModal({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+            </div>
+            
+            {/* Tax Toggle */}
+            <div className="flex items-center space-x-2">
+              <UICheckbox
+                id="showTax"
+                checked={showTax}
+                onCheckedChange={(checked) => {
+                  setShowTax(checked === true)
+                  if (!checked) setTaxRate(0)
+                }}
+              />
+              <Label htmlFor="showTax" className="text-sm font-medium cursor-pointer">
+                Apply Tax
+              </Label>
+            </div>
+            {showTax && (
+              <div className="space-y-2 pl-6">
                 <Label htmlFor="taxRate">Tax Rate (%)</Label>
                 <Input
                   id="taxRate"
@@ -375,18 +403,35 @@ export function CreateInvoiceModal({
                   onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="discount">Discount ({currency})</Label>
-              <Input
-                id="discount"
-                type="number"
-                min="0"
-                step="0.01"
-                value={discount}
-                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+            )}
+
+            {/* Discount Toggle */}
+            <div className="flex items-center space-x-2">
+              <UICheckbox
+                id="showDiscount"
+                checked={showDiscount}
+                onCheckedChange={(checked) => {
+                  setShowDiscount(checked === true)
+                  if (!checked) setDiscount(0)
+                }}
               />
+              <Label htmlFor="showDiscount" className="text-sm font-medium cursor-pointer">
+                Apply Discount
+              </Label>
             </div>
+            {showDiscount && (
+              <div className="space-y-2 pl-6">
+                <Label htmlFor="discount">Discount ({currency})</Label>
+                <Input
+                  id="discount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={discount}
+                  onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+            )}
           </div>
 
           {/* Line Items */}
@@ -404,6 +449,25 @@ export function CreateInvoiceModal({
               </Button>
             </div>
             <div className="space-y-3">
+              {/* Column Headers */}
+              <div className="grid grid-cols-12 gap-2 pb-2 border-b">
+                <div className="col-span-5">
+                  <Label className="text-xs font-medium text-muted-foreground">Description</Label>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Quantity</Label>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Price</Label>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Tax %</Label>
+                </div>
+                <div className="col-span-1 flex justify-center">
+                  <Label className="text-xs font-medium text-muted-foreground">Service</Label>
+                </div>
+              </div>
+              {/* Line Items */}
               {lineItems.map((item, index) => (
                 <div key={item.id} className="grid grid-cols-12 gap-2 items-start">
                   <div className="col-span-5">
@@ -422,6 +486,8 @@ export function CreateInvoiceModal({
                       placeholder="Qty"
                       value={item.quantity}
                       onChange={(e) => handleLineItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                      disabled={item.is_service}
+                      className={item.is_service ? "opacity-50 cursor-not-allowed" : ""}
                     />
                   </div>
                   <div className="col-span-2">
@@ -445,13 +511,28 @@ export function CreateInvoiceModal({
                       onChange={(e) => handleLineItemChange(item.id, 'tax_rate', parseFloat(e.target.value) || 0)}
                     />
                   </div>
-                  <div className="col-span-1">
+                  <div className="col-span-1 flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-center">
+                      <UICheckbox
+                        id={`service-${item.id}`}
+                        checked={item.is_service || false}
+                        onCheckedChange={(checked) => handleLineItemChange(item.id, 'is_service', checked === true)}
+                      />
+                      <Label 
+                        htmlFor={`service-${item.id}`} 
+                        className="sr-only"
+                        title="Service (no quantity)"
+                      >
+                        Service
+                      </Label>
+                    </div>
                     {lineItems.length > 1 && (
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveLineItem(item.id)}
+                        aria-label="Remove item"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -463,20 +544,21 @@ export function CreateInvoiceModal({
           </div>
 
           {/* Totals */}
-          <div className="border-t pt-4 space-y-2">
+          <div className="space-y-4 border-t pt-4">
+            <h3 className="text-sm font-semibold">Invoice Totals</h3>
             <div className="flex justify-end">
               <div className="w-64 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Subtotal:</span>
                   <span>{currency} {totals.subtotal.toFixed(2)}</span>
                 </div>
-                {discount > 0 && (
+                {showDiscount && discount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span>Discount:</span>
                     <span>-{currency} {discount.toFixed(2)}</span>
                   </div>
                 )}
-                {taxRate > 0 && (
+                {showTax && taxRate > 0 && (
                   <div className="flex justify-between text-sm">
                     <span>Tax ({taxRate}%):</span>
                     <span>{currency} {totals.taxAmount.toFixed(2)}</span>
@@ -491,26 +573,29 @@ export function CreateInvoiceModal({
           </div>
 
           {/* Notes & Terms */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                placeholder="Additional notes for the client..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="terms">Terms & Conditions</Label>
-              <Textarea
-                id="terms"
-                placeholder="Payment terms..."
-                value={terms}
-                onChange={(e) => setTerms(e.target.value)}
-                rows={3}
-              />
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold">Additional Information</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Additional notes for the client..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="terms">Terms & Conditions</Label>
+                <Textarea
+                  id="terms"
+                  placeholder="Payment terms..."
+                  value={terms}
+                  onChange={(e) => setTerms(e.target.value)}
+                  rows={3}
+                />
+              </div>
             </div>
           </div>
 

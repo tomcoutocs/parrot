@@ -20,7 +20,8 @@ import {
   ChevronDown,
   UserCog,
   BarChart3,
-  Shield
+  Shield,
+  Zap
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -169,6 +170,17 @@ export default function AppsPage() {
       available: true,
       adminOnly: true, // Only admins can access this app
     },
+    {
+      id: 'automations',
+      name: 'Automations',
+      description: 'Build custom automation workflows and pipelines',
+      icon: Zap,
+      color: 'text-purple-400 dark:text-purple-500',
+      bgColor: 'bg-purple-50/50 dark:bg-purple-950/30',
+      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(168,85,247,0.12)] dark:hover:shadow-[0_4px_12px_rgba(168,85,247,0.18)]',
+      available: true,
+      adminOnly: false, // Available to all users
+    },
   ]
 
   // Check if user has permission for an app (has at least one tab permission)
@@ -231,6 +243,9 @@ export default function AppsPage() {
       if (!hasAdminPrivileges(session?.user?.role)) {
         return // Don't navigate if not admin or system admin
       }
+      router.push(`/apps/${appId}`)
+    } else if (appId === 'automations') {
+      // Automations app - available to all users
       router.push(`/apps/${appId}`)
     } else {
       // For placeholder apps, show coming soon message
@@ -297,7 +312,7 @@ export default function AppsPage() {
                     <User className="w-4 h-4" />
                     <span>User Settings</span>
                   </DropdownMenuItem>
-                  {session?.user?.role === 'system_admin' && (
+                  {session?.user && hasSystemAdminPrivileges(session.user.role) && (
                     <>
                       <div className="w-px h-px bg-border mx-2 my-1" />
                       <DropdownMenuItem
