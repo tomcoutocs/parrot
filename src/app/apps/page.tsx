@@ -21,7 +21,8 @@ import {
   UserCog,
   BarChart3,
   Shield,
-  Zap
+  Zap,
+  Palette
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -179,7 +180,18 @@ export default function AppsPage() {
       bgColor: 'bg-purple-50/50 dark:bg-purple-950/30',
       hoverShadow: 'hover:shadow-[0_4px_12px_rgba(168,85,247,0.12)] dark:hover:shadow-[0_4px_12px_rgba(168,85,247,0.18)]',
       available: true,
-      adminOnly: false, // Available to all users
+      adminOnly: true, // Only admins can access this app
+    },
+    {
+      id: 'platform-customization',
+      name: 'Platform Customization',
+      description: 'Customize branding, themes, and white-label settings for your space',
+      icon: Palette,
+      color: 'text-fuchsia-400 dark:text-fuchsia-500',
+      bgColor: 'bg-fuchsia-50/50 dark:bg-fuchsia-950/30',
+      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(240,171,252,0.12)] dark:hover:shadow-[0_4px_12px_rgba(240,171,252,0.18)]',
+      available: true,
+      adminOnly: true, // Only admins can access this app
     },
   ]
 
@@ -238,14 +250,11 @@ export default function AppsPage() {
       } else {
         router.push('/dashboard?tab=user-dashboard')
       }
-    } else if (appId === 'crm' || appId === 'lead-generation' || appId === 'invoicing' || appId === 'user-management' || appId === 'analytics') {
+    } else if (appId === 'crm' || appId === 'lead-generation' || appId === 'invoicing' || appId === 'user-management' || appId === 'analytics' || appId === 'platform-customization' || appId === 'automations') {
       // Admin-only apps - check role before allowing access
       if (!hasAdminPrivileges(session?.user?.role)) {
         return // Don't navigate if not admin or system admin
       }
-      router.push(`/apps/${appId}`)
-    } else if (appId === 'automations') {
-      // Automations app - available to all users
       router.push(`/apps/${appId}`)
     } else {
       // For placeholder apps, show coming soon message
@@ -346,13 +355,10 @@ export default function AppsPage() {
             <h2 className="text-2xl font-bold tracking-tight mb-2">
               Welcome back, {session?.user?.name || 'User'}!
             </h2>
-            <p className="text-sm text-muted-foreground">
-              Choose an app to get started
-            </p>
           </div>
 
           {/* App Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {apps.map((app) => {
               const Icon = app.icon
               return (

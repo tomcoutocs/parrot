@@ -30,7 +30,12 @@ import {
   Activity,
   Settings,
   Store,
-  Heart
+  Heart,
+  Palette,
+  Paintbrush,
+  Layout,
+  Globe,
+  Eye
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -143,6 +148,22 @@ const apps: App[] = [
       { id: 'settings', label: 'Settings', icon: Settings },
     ]
   },
+  {
+    id: 'platform-customization',
+    name: 'Platform Customization',
+    icon: Palette,
+    description: 'Branding & White-Label',
+    tabs: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'branding', label: 'Branding', icon: Palette },
+      { id: 'themes', label: 'Themes', icon: Paintbrush },
+      { id: 'layout', label: 'Layout', icon: Layout },
+      { id: 'white-label', label: 'White-Label', icon: Globe },
+      { id: 'email', label: 'Email', icon: Mail },
+      { id: 'preview', label: 'Preview', icon: Eye },
+      { id: 'settings', label: 'Settings', icon: Settings },
+    ]
+  },
 ]
 
 interface UserPermissions {
@@ -189,7 +210,7 @@ export function UserManagementPermissions() {
           
           dbTabPermissions.forEach(perm => {
             // If it's in old format (just app name), grant all tabs for that app
-            if (['crm', 'invoicing', 'lead-generation', 'analytics', 'user-management', 'automations'].includes(perm)) {
+            if (['crm', 'invoicing', 'lead-generation', 'analytics', 'user-management', 'automations', 'platform-customization'].includes(perm)) {
               const app = apps.find(a => a.id === perm)
               if (app) {
                 // Grant all tabs for this app
