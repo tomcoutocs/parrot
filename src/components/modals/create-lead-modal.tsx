@@ -24,6 +24,30 @@ interface CreateLeadModalProps {
   onLeadCreated: () => void
 }
 
+// Default stage options
+const defaultStages = [
+  { id: 'new', name: 'New' },
+  { id: 'qualified', name: 'Qualified' },
+  { id: 'contacted', name: 'Contacted' },
+  { id: 'proposal', name: 'Proposal' },
+  { id: 'negotiation', name: 'Negotiation' },
+  { id: 'closed-won', name: 'Closed Won' },
+  { id: 'closed-lost', name: 'Closed Lost' },
+]
+
+// Default source options
+const defaultSources = [
+  { id: 'website', name: 'Website' },
+  { id: 'referral', name: 'Referral' },
+  { id: 'cold-call', name: 'Cold Call' },
+  { id: 'social-media', name: 'Social Media' },
+  { id: 'advertisement', name: 'Advertisement' },
+  { id: 'webinar', name: 'Webinar' },
+  { id: 'event', name: 'Event' },
+  { id: 'partner', name: 'Partner' },
+  { id: 'email-campaign', name: 'Email Campaign' },
+]
+
 export default function CreateLeadModal({ 
   isOpen, 
   onClose, 
@@ -50,17 +74,26 @@ export default function CreateLeadModal({
       const stagesResult = await fetchLeadStages(session.user.company_id)
       const sourcesResult = await fetchLeadSources(session.user.company_id)
 
-      if (stagesResult.success && stagesResult.stages) {
+      // Use database stages if available, otherwise use defaults
+      if (stagesResult.success && stagesResult.stages && stagesResult.stages.length > 0) {
         setStages(stagesResult.stages)
         // Set default stage (first one or "New")
         const defaultStage = stagesResult.stages.find(s => s.name.toLowerCase() === 'new') || stagesResult.stages[0]
         if (defaultStage) {
           setStageId(defaultStage.id)
         }
+      } else {
+        // Use default stages
+        setStages(defaultStages as LeadStage[])
+        setStageId('new')
       }
 
-      if (sourcesResult.success && sourcesResult.sources) {
+      // Use database sources if available, otherwise use defaults
+      if (sourcesResult.success && sourcesResult.sources && sourcesResult.sources.length > 0) {
         setSources(sourcesResult.sources)
+      } else {
+        // Use default sources
+        setSources(defaultSources as LeadSource[])
       }
     }
 
@@ -72,12 +105,6 @@ export default function CreateLeadModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
-    if (!email.trim() && !phone.trim()) {
-      toastError('Please provide either an email or phone number')
-      setIsLoading(false)
-      return
-    }
 
     if (!session?.user?.id) {
       toastError('User session not found')
@@ -154,7 +181,7 @@ export default function CreateLeadModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
