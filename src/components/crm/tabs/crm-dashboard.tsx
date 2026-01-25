@@ -21,6 +21,10 @@ import {
   Loader2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { formatDistanceToNow } from 'date-fns'
+import CreateLeadModal from '@/components/modals/create-lead-modal'
+import { CreateSpaceModal } from '@/components/modals/create-space-modal'
+import CreateActivityModal from '@/components/modals/create-activity-modal'
 
 export function CRMDashboard() {
   const { data: session } = useSession()
@@ -35,6 +39,22 @@ export function CRMDashboard() {
     conversionRate: 0,
     avgDealSize: 0,
   })
+  const [recentActivities, setRecentActivities] = useState<Array<{
+    id: string
+    type: string
+    title: string
+    description: string
+    time: string
+  }>>([])
+  const [pipelineStages, setPipelineStages] = useState<Array<{
+    name: string
+    count: number
+    percentage: number
+  }>>([])
+  const [isCreateContactModalOpen, setIsCreateContactModalOpen] = useState(false)
+  const [isCreateDealModalOpen, setIsCreateDealModalOpen] = useState(false)
+  const [isCreateAccountModalOpen, setIsCreateAccountModalOpen] = useState(false)
+  const [isCreateActivityModalOpen, setIsCreateActivityModalOpen] = useState(false)
 
   useEffect(() => {
     loadCRMData()
@@ -71,6 +91,13 @@ export function CRMDashboard() {
         console.error('Error fetching companies:', companiesError)
       }
 
+      // Fetch lead stages for pipeline
+      const { data: leadStages } = await supabase
+        .from('lead_stages')
+        .select('*')
+        .eq('space_id', spaceId)
+        .order('stage_order', { ascending: true })
+
       // Calculate stats from leads
       const totalContacts = leads?.length || 0
       const totalDeals = leads?.filter(l => l.status && l.status !== 'new').length || 0
@@ -101,6 +128,12 @@ export function CRMDashboard() {
 
       const activeAccounts = companies?.length || 0
 
+      // Store pipeline data for later use
+      const pipelineData = {
+        stages: leadStages || [],
+        leads: leads || [],
+      }
+
       setStats({
         totalContacts,
         totalDeals: totalDealsCount,
@@ -111,6 +144,47 @@ export function CRMDashboard() {
         conversionRate,
         avgDealSize,
       })
+
+      // Fetch recent activities
+      const recentLeads = leads?.slice(0, 5) || []
+      const activities = recentLeads.map(lead => {
+        const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown'
+        const timeAgo = lead.created_at 
+          ? formatDistanceToNow(new Date(lead.created_at), { addSuffix: true })
+          : 'Recently'
+        
+        return {
+          id: lead.id,
+          type: lead.status === 'closed_won' ? 'deal_won' : lead.status === 'closed_lost' ? 'deal_lost' : 'contact_added',
+          title: lead.status === 'closed_won' 
+            ? 'Deal won' 
+            : lead.status === 'closed_lost'
+            ? 'Deal lost'
+            : 'New contact added',
+          description: lead.status === 'closed_won'
+            ? `${fullName} deal closed${lead.budget ? ` for $${lead.budget.toLocaleString()}` : ''}`
+            : lead.status === 'closed_lost'
+            ? `${fullName} deal was lost`
+            : `${fullName} was added to the system`,
+          time: timeAgo,
+        }
+      })
+      setRecentActivities(activities)
+
+      // Calculate pipeline stages
+      const stageCounts: Record<string, number> = {}
+      leads?.forEach(lead => {
+        const stageName = leadStages?.find(s => s.id === lead.stage_id)?.name || lead.status || 'New'
+        stageCounts[stageName] = (stageCounts[stageName] || 0) + 1
+      })
+      
+      const totalPipelineLeads = Object.values(stageCounts).reduce((sum, count) => sum + count, 0)
+      const pipeline = Object.entries(stageCounts).map(([name, count]) => ({
+        name,
+        count,
+        percentage: totalPipelineLeads > 0 ? (count / totalPipelineLeads) * 100 : 0,
+      }))
+      setPipelineStages(pipeline)
     } catch (error) {
       console.error('Error loading CRM data:', error)
     } finally {
@@ -180,15 +254,49 @@ export function CRMDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-end gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setIsCreateContactModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             New Contact
           </Button>
-          <Button>
+          <Button onClick={() => setIsCreateDealModalOpen(true)}>
             <Briefcase className="w-4 h-4 mr-2" />
             New Deal
           </Button>
         </div>
+
+      {/* Create Modals */}
+      <CreateLeadModal
+        isOpen={isCreateContactModalOpen}
+        onClose={() => setIsCreateContactModalOpen(false)}
+        onLeadCreated={() => {
+          setIsCreateContactModalOpen(false)
+          loadCRMData()
+        }}
+      />
+      <CreateLeadModal
+        isOpen={isCreateDealModalOpen}
+        onClose={() => setIsCreateDealModalOpen(false)}
+        onLeadCreated={() => {
+          setIsCreateDealModalOpen(false)
+          loadCRMData()
+        }}
+      />
+      <CreateSpaceModal
+        isOpen={isCreateAccountModalOpen}
+        onClose={() => setIsCreateAccountModalOpen(false)}
+        onSuccess={() => {
+          setIsCreateAccountModalOpen(false)
+          loadCRMData()
+        }}
+      />
+      <CreateActivityModal
+        isOpen={isCreateActivityModalOpen}
+        onClose={() => setIsCreateActivityModalOpen(false)}
+        onActivityCreated={() => {
+          setIsCreateActivityModalOpen(false)
+          loadCRMData()
+        }}
+      />
 
       {/* Stats Grid */}
       {loading ? (
@@ -227,19 +335,19 @@ export function CRMDashboard() {
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => setIsCreateContactModalOpen(true)}>
               <Users className="w-4 h-4 mr-2" />
               Add New Contact
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => setIsCreateDealModalOpen(true)}>
               <Briefcase className="w-4 h-4 mr-2" />
               Create New Deal
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => setIsCreateAccountModalOpen(true)}>
               <Building2 className="w-4 h-4 mr-2" />
               Add New Account
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => setIsCreateActivityModalOpen(true)}>
               <Calendar className="w-4 h-4 mr-2" />
               Schedule Activity
             </Button>
@@ -260,38 +368,48 @@ export function CRMDashboard() {
             <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                  <Users className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">New contact added</p>
-                  <p className="text-xs text-muted-foreground">John Smith was added to the system</p>
-                  <p className="text-xs text-muted-foreground mt-1">2 hours ago</p>
-                </div>
+            {recentActivities.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No recent activity
               </div>
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-                  <Briefcase className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Deal updated</p>
-                  <p className="text-xs text-muted-foreground">Acme Corp deal moved to "Negotiation"</p>
-                  <p className="text-xs text-muted-foreground mt-1">5 hours ago</p>
-                </div>
+            ) : (
+              <div className="space-y-4">
+                {recentActivities.map((activity) => {
+                  const getIcon = () => {
+                    switch (activity.type) {
+                      case 'deal_won':
+                        return <DollarSign className="w-4 h-4 text-amber-600" />
+                      case 'deal_lost':
+                        return <Briefcase className="w-4 h-4 text-red-600" />
+                      default:
+                        return <Users className="w-4 h-4 text-blue-600" />
+                    }
+                  }
+                  const getBgColor = () => {
+                    switch (activity.type) {
+                      case 'deal_won':
+                        return 'bg-amber-100 dark:bg-amber-900/30'
+                      case 'deal_lost':
+                        return 'bg-red-100 dark:bg-red-900/30'
+                      default:
+                        return 'bg-blue-100 dark:bg-blue-900/30'
+                    }
+                  }
+                  return (
+                    <div key={activity.id} className="flex items-start gap-3">
+                      <div className={`p-2 rounded-full ${getBgColor()}`}>
+                        {getIcon()}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{activity.title}</p>
+                        <p className="text-xs text-muted-foreground">{activity.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/30">
-                  <DollarSign className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Deal won</p>
-                  <p className="text-xs text-muted-foreground">TechStart Inc deal closed for $125,000</p>
-                  <p className="text-xs text-muted-foreground mt-1">1 day ago</p>
-                </div>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -302,20 +420,26 @@ export function CRMDashboard() {
           <CardTitle>Sales Pipeline Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed'].map((stage, index) => (
-              <div key={stage} className="text-center">
-                <div className="text-2xl font-bold">{Math.floor(Math.random() * 20) + 5}</div>
-                <div className="text-sm text-muted-foreground mt-1">{stage}</div>
-                <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-emerald-600 rounded-full"
-                    style={{ width: `${Math.random() * 100}%` }}
-                  />
+          {pipelineStages.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              No pipeline data available
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {pipelineStages.slice(0, 5).map((stage) => (
+                <div key={stage.name} className="text-center">
+                  <div className="text-2xl font-bold">{stage.count}</div>
+                  <div className="text-sm text-muted-foreground mt-1">{stage.name}</div>
+                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-emerald-600 rounded-full"
+                      style={{ width: `${stage.percentage}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

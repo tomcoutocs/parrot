@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession } from '@/components/providers/session-provider'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,10 +14,15 @@ import {
   Mail,
   MessageSquare,
   CheckSquare,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { fetchLeads, fetchLeadActivities, type Lead, type LeadActivity } from '@/lib/database-functions'
+import { formatDistanceToNow } from 'date-fns'
+import { supabase } from '@/lib/supabase'
+import CreateActivityModal from '@/components/modals/create-activity-modal'
 
 interface Activity {
   id: string
@@ -30,49 +36,82 @@ interface Activity {
 }
 
 export function CRMActivities() {
+  const { data: session } = useSession()
   const [searchTerm, setSearchTerm] = useState('')
-  const [activities] = useState<Activity[]>([
-    {
-      id: '1',
-      type: 'call',
-      title: 'Follow-up call with John Smith',
-      relatedTo: 'Acme Corp - Enterprise License',
-      assignedTo: 'John Doe',
-      dueDate: '2024-02-10',
-      status: 'completed',
-      description: 'Discuss pricing and implementation timeline',
-    },
-    {
-      id: '2',
-      type: 'meeting',
-      title: 'Product demo for TechStart',
-      relatedTo: 'TechStart - Annual Subscription',
-      assignedTo: 'Jane Smith',
-      dueDate: '2024-02-12',
-      status: 'pending',
-      description: 'Showcase new features and answer questions',
-    },
-    {
-      id: '3',
-      type: 'email',
-      title: 'Send proposal to GlobalTech',
-      relatedTo: 'GlobalTech - Implementation',
-      assignedTo: 'John Doe',
-      dueDate: '2024-02-08',
-      status: 'overdue',
-      description: 'Include pricing and contract terms',
-    },
-    {
-      id: '4',
-      type: 'task',
-      title: 'Update CRM records',
-      relatedTo: 'Acme Corp',
-      assignedTo: 'John Doe',
-      dueDate: '2024-02-11',
-      status: 'pending',
-      description: 'Sync latest contact information',
-    },
-  ])
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+
+  useEffect(() => {
+    loadActivities()
+  }, [session?.user?.company_id])
+
+  const loadActivities = async () => {
+    if (!session?.user?.company_id || !supabase) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      setLoading(true)
+      const spaceId = session.user.company_id
+
+      // Fetch all leads first
+      const leadsResult = await fetchLeads({ spaceId })
+      const leads = leadsResult.success ? leadsResult.leads || [] : []
+
+      // Fetch all lead activities
+      const allActivities: Activity[] = []
+      
+      // Fetch activities for each lead
+      for (const lead of leads.slice(0, 50)) { // Limit to avoid too many requests
+        const activitiesResult = await fetchLeadActivities(lead.id)
+        if (activitiesResult.success && activitiesResult.activities) {
+          const leadName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown'
+          
+          activitiesResult.activities.forEach((activity: LeadActivity) => {
+            // Map activity_type to our type
+            const typeMap: Record<string, 'call' | 'email' | 'meeting' | 'task' | 'note'> = {
+              'call': 'call',
+              'email': 'email',
+              'meeting': 'meeting',
+              'task': 'task',
+              'note': 'note',
+              'form_submitted': 'note',
+              'stage_changed': 'note',
+            }
+            const type = typeMap[activity.activity_type] || 'note'
+
+            // Determine status based on created date
+            const createdDate = new Date(activity.created_at)
+            const now = new Date()
+            const daysDiff = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
+            const status: 'completed' | 'pending' | 'overdue' = daysDiff > 0 ? 'completed' : 'pending'
+
+            allActivities.push({
+              id: activity.id,
+              type,
+              title: activity.description || `${type} with ${leadName}`,
+              relatedTo: leadName,
+              assignedTo: session.user?.name || 'Unknown',
+              dueDate: activity.created_at.split('T')[0],
+              status,
+              description: activity.description || '',
+            })
+          })
+        }
+      }
+
+      // Sort by date (newest first)
+      allActivities.sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
+      
+      setActivities(allActivities)
+    } catch (error) {
+      console.error('Error loading activities:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredActivities = activities.filter(activity =>
     activity.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -117,11 +156,21 @@ export function CRMActivities() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-end">
-        <Button>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           New Activity
         </Button>
       </div>
+
+      {/* Create Activity Modal */}
+      <CreateActivityModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onActivityCreated={() => {
+          setIsCreateModalOpen(false)
+          loadActivities()
+        }}
+      />
 
       {/* Activity Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -192,26 +241,32 @@ export function CRMActivities() {
           <CardTitle>All Activities</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList>
-              <TabsTrigger value="all">All ({filteredActivities.length})</TabsTrigger>
-              <TabsTrigger value="pending">Pending ({pendingActivities.length})</TabsTrigger>
-              <TabsTrigger value="completed">Completed ({completedActivities.length})</TabsTrigger>
-              <TabsTrigger value="overdue">Overdue ({overdueActivities.length})</TabsTrigger>
-            </TabsList>
-            <TabsContent value="all" className="mt-4">
-              <ActivityList activities={filteredActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
-            </TabsContent>
-            <TabsContent value="pending" className="mt-4">
-              <ActivityList activities={pendingActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
-            </TabsContent>
-            <TabsContent value="completed" className="mt-4">
-              <ActivityList activities={completedActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
-            </TabsContent>
-            <TabsContent value="overdue" className="mt-4">
-              <ActivityList activities={overdueActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
-            </TabsContent>
-          </Tabs>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : (
+            <Tabs defaultValue="all" className="w-full">
+              <TabsList>
+                <TabsTrigger value="all">All ({filteredActivities.length})</TabsTrigger>
+                <TabsTrigger value="pending">Pending ({pendingActivities.length})</TabsTrigger>
+                <TabsTrigger value="completed">Completed ({completedActivities.length})</TabsTrigger>
+                <TabsTrigger value="overdue">Overdue ({overdueActivities.length})</TabsTrigger>
+              </TabsList>
+              <TabsContent value="all" className="mt-4">
+                <ActivityList activities={filteredActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
+              </TabsContent>
+              <TabsContent value="pending" className="mt-4">
+                <ActivityList activities={pendingActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
+              </TabsContent>
+              <TabsContent value="completed" className="mt-4">
+                <ActivityList activities={completedActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
+              </TabsContent>
+              <TabsContent value="overdue" className="mt-4">
+                <ActivityList activities={overdueActivities} getActivityIcon={getActivityIcon} getStatusColor={getStatusColor} />
+              </TabsContent>
+            </Tabs>
+          )}
         </CardContent>
       </Card>
     </div>

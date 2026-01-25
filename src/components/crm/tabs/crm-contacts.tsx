@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession } from '@/components/providers/session-provider'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +13,8 @@ import {
   Mail,
   Phone,
   Building2,
-  User
+  User,
+  Loader2
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -22,58 +24,85 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { fetchLeads, type Lead } from '@/lib/database-functions'
+import { formatDistanceToNow } from 'date-fns'
+import CreateLeadModal from '@/components/modals/create-lead-modal'
+import ImportLeadModal from '@/components/modals/import-lead-modal'
 
 interface Contact {
   id: string
   name: string
-  email: string
-  phone: string
-  company: string
-  title: string
+  email?: string
+  phone?: string
+  company?: string
+  title?: string
   status: 'active' | 'inactive' | 'lead'
   lastContact: string
   avatar?: string
 }
 
 export function CRMContacts() {
+  const { data: session } = useSession()
   const [searchTerm, setSearchTerm] = useState('')
-  const [contacts] = useState<Contact[]>([
-    {
-      id: '1',
-      name: 'John Smith',
-      email: 'john.smith@acmecorp.com',
-      phone: '+1 (555) 123-4567',
-      company: 'Acme Corp',
-      title: 'VP of Sales',
-      status: 'active',
-      lastContact: '2 days ago',
-    },
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      email: 'sarah.j@techstart.io',
-      phone: '+1 (555) 234-5678',
-      company: 'TechStart Inc',
-      title: 'CEO',
-      status: 'active',
-      lastContact: '1 week ago',
-    },
-    {
-      id: '3',
-      name: 'Michael Chen',
-      email: 'mchen@globaltech.com',
-      phone: '+1 (555) 345-6789',
-      company: 'GlobalTech',
-      title: 'CTO',
-      status: 'lead',
-      lastContact: '3 days ago',
-    },
-  ])
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+
+  useEffect(() => {
+    loadContacts()
+  }, [session?.user?.company_id])
+
+  const loadContacts = async () => {
+    if (!session?.user?.company_id) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      setLoading(true)
+      // Fetch only closed_won leads for contacts
+      const result = await fetchLeads({ 
+        spaceId: session.user.company_id,
+        status: 'closed_won'
+      })
+
+      if (result.success && result.leads) {
+        const mappedContacts: Contact[] = result.leads.map((lead: Lead) => {
+          const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown'
+          // All contacts are closed_won, so they're active contacts
+          const status = 'active'
+          
+          const lastContact = lead.last_contacted_at 
+            ? formatDistanceToNow(new Date(lead.last_contacted_at), { addSuffix: true })
+            : lead.created_at 
+            ? formatDistanceToNow(new Date(lead.created_at), { addSuffix: true })
+            : 'Never'
+
+          return {
+            id: lead.id,
+            name: fullName,
+            email: lead.email,
+            phone: lead.phone,
+            company: undefined, // Could fetch from company_id if needed
+            title: lead.job_title,
+            status,
+            lastContact,
+          }
+        })
+        setContacts(mappedContacts)
+      }
+    } catch (error) {
+      console.error('Error loading contacts:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    contact.company.toLowerCase().includes(searchTerm.toLowerCase())
+    (contact.email && contact.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (contact.company && contact.company.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   const getStatusColor = (status: string) => {
@@ -92,12 +121,36 @@ export function CRMContacts() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-end">
-        <Button>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Import from Leads
+        </Button>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           New Contact
         </Button>
       </div>
+
+      {/* Create Lead Modal */}
+      <CreateLeadModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onLeadCreated={() => {
+          setIsCreateModalOpen(false)
+          loadContacts()
+        }}
+      />
+
+      {/* Import Lead Modal */}
+      <ImportLeadModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onLeadImported={() => {
+          setIsImportModalOpen(false)
+          loadContacts()
+        }}
+      />
 
       {/* Search and Filters */}
       <Card>
@@ -126,62 +179,79 @@ export function CRMContacts() {
           <CardTitle>All Contacts ({filteredContacts.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {filteredContacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-4 flex-1">
-                  <Avatar>
-                    <AvatarImage src={contact.avatar} />
-                    <AvatarFallback>
-                      {contact.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium">{contact.name}</h3>
-                      <Badge className={getStatusColor(contact.status)}>
-                        {contact.status}
-                      </Badge>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : filteredContacts.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No contacts found</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredContacts.map((contact) => (
+                <div
+                  key={contact.id}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <Avatar>
+                      <AvatarImage src={contact.avatar} />
+                      <AvatarFallback>
+                        {contact.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium">{contact.name}</h3>
+                        <Badge className={getStatusColor(contact.status)}>
+                          {contact.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                        {contact.email && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="w-3 h-3" />
+                            {contact.email}
+                          </span>
+                        )}
+                        {contact.phone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3" />
+                            {contact.phone}
+                          </span>
+                        )}
+                        {contact.company && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            {contact.company}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {contact.title && `${contact.title} • `}Last contact: {contact.lastContact}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Mail className="w-3 h-3" />
-                        {contact.email}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-3 h-3" />
-                        {contact.phone}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Building2 className="w-3 h-3" />
-                        {contact.company}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {contact.title} • Last contact: {contact.lastContact}
-                    </p>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>View Details</DropdownMenuItem>
+                      <DropdownMenuItem>Edit Contact</DropdownMenuItem>
+                      <DropdownMenuItem>Add Activity</DropdownMenuItem>
+                      <DropdownMenuItem>Create Deal</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>View Details</DropdownMenuItem>
-                    <DropdownMenuItem>Edit Contact</DropdownMenuItem>
-                    <DropdownMenuItem>Add Activity</DropdownMenuItem>
-                    <DropdownMenuItem>Create Deal</DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

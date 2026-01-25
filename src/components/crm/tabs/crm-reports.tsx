@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession } from '@/components/providers/session-provider'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { 
@@ -9,11 +10,98 @@ import {
   TrendingUp,
   BarChart3,
   PieChart,
-  LineChart
+  LineChart,
+  Loader2
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { fetchLeads, fetchLeadStages, type Lead, type LeadStage } from '@/lib/database-functions'
 
 export function CRMReports() {
+  const { data: session } = useSession()
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    totalDeals: 0,
+    winRate: 0,
+    avgDealSize: 0,
+    totalCalls: 0,
+    totalEmails: 0,
+    totalMeetings: 0,
+  })
+  const [stageData, setStageData] = useState<Array<{ name: string; count: number }>>([])
+
+  useEffect(() => {
+    loadReportData()
+  }, [session?.user?.company_id])
+
+  const loadReportData = async () => {
+    if (!session?.user?.company_id) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      setLoading(true)
+      const spaceId = session.user.company_id
+
+      // Fetch leads
+      const leadsResult = await fetchLeads({ spaceId })
+      const leads = leadsResult.success ? leadsResult.leads || [] : []
+
+      // Fetch stages
+      const stagesResult = await fetchLeadStages(spaceId)
+      const stages = stagesResult.success ? stagesResult.stages || [] : []
+
+      // Calculate revenue
+      const totalRevenue = leads
+        .filter(l => l.status === 'closed_won' && l.budget)
+        .reduce((sum, l) => sum + (l.budget || 0), 0)
+
+      // Calculate deals
+      const totalDeals = leads.filter(l => l.status && l.status !== 'new').length
+      const dealsWon = leads.filter(l => l.status === 'closed_won').length
+      const dealsLost = leads.filter(l => l.status === 'closed_lost').length
+      const totalClosed = dealsWon + dealsLost
+      const winRate = totalClosed > 0 ? (dealsWon / totalClosed) * 100 : 0
+
+      // Calculate average deal size
+      const wonDeals = leads.filter(l => l.status === 'closed_won' && l.budget)
+      const avgDealSize = wonDeals.length > 0
+        ? wonDeals.reduce((sum, l) => sum + (l.budget || 0), 0) / wonDeals.length
+        : 0
+
+      // Calculate activity counts (placeholder - would need actual activity data)
+      const totalCalls = 0
+      const totalEmails = 0
+      const totalMeetings = 0
+
+      // Calculate stage distribution
+      const stageCounts: Record<string, number> = {}
+      leads.forEach(lead => {
+        const stageName = stages.find(s => s.id === lead.stage_id)?.name || lead.status || 'New'
+        stageCounts[stageName] = (stageCounts[stageName] || 0) + 1
+      })
+      const stageDataArray = Object.entries(stageCounts).map(([name, count]) => ({
+        name,
+        count,
+      }))
+
+      setStats({
+        totalRevenue,
+        totalDeals,
+        winRate,
+        avgDealSize,
+        totalCalls,
+        totalEmails,
+        totalMeetings,
+      })
+      setStageData(stageDataArray)
+    } catch (error) {
+      console.error('Error loading report data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -38,75 +126,84 @@ export function CRMReports() {
         </TabsList>
 
         <TabsContent value="sales" className="space-y-6 mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Revenue Trend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center border-2 border-dashed rounded-lg">
-                  <div className="text-center">
-                    <LineChart className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">Revenue chart will be displayed here</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Deals by Stage</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-center justify-center border-2 border-dashed rounded-lg">
-                  <div className="text-center">
-                    <PieChart className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">Pie chart will be displayed here</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales Performance Metrics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold">$2.45M</div>
-                  <div className="text-sm text-muted-foreground mt-1">Total Revenue</div>
-                  <div className="flex items-center justify-center gap-1 text-xs text-green-600 mt-2">
-                    <TrendingUp className="w-3 h-3" />
-                    +23% from last month
-                  </div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold">89</div>
-                  <div className="text-sm text-muted-foreground mt-1">Total Deals</div>
-                  <div className="flex items-center justify-center gap-1 text-xs text-green-600 mt-2">
-                    <TrendingUp className="w-3 h-3" />
-                    +8% from last month
-                  </div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold">65.7%</div>
-                  <div className="text-sm text-muted-foreground mt-1">Win Rate</div>
-                  <div className="flex items-center justify-center gap-1 text-xs text-green-600 mt-2">
-                    <TrendingUp className="w-3 h-3" />
-                    +5% from last month
-                  </div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold">$106K</div>
-                  <div className="text-sm text-muted-foreground mt-1">Avg Deal Size</div>
-                  <div className="flex items-center justify-center gap-1 text-xs text-green-600 mt-2">
-                    <TrendingUp className="w-3 h-3" />
-                    +3% from last month
-                  </div>
-                </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Revenue Trend</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64 flex items-center justify-center border-2 border-dashed rounded-lg">
+                      <div className="text-center">
+                        <LineChart className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">Revenue chart will be displayed here</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Deals by Stage</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {stageData.length === 0 ? (
+                      <div className="h-64 flex items-center justify-center border-2 border-dashed rounded-lg">
+                        <div className="text-center">
+                          <PieChart className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground">No stage data available</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-64 flex items-center justify-center">
+                        <div className="space-y-2 w-full">
+                          {stageData.map((stage) => (
+                            <div key={stage.name} className="flex items-center justify-between">
+                              <span className="text-sm">{stage.name}</span>
+                              <span className="font-medium">{stage.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sales Performance Metrics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold">
+                        ${(stats.totalRevenue / 1000000).toFixed(2)}M
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">Total Revenue</div>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold">{stats.totalDeals}</div>
+                      <div className="text-sm text-muted-foreground mt-1">Total Deals</div>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold">{stats.winRate.toFixed(1)}%</div>
+                      <div className="text-sm text-muted-foreground mt-1">Win Rate</div>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold">
+                        ${stats.avgDealSize > 0 ? (stats.avgDealSize / 1000).toFixed(0) + 'K' : '0'}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">Avg Deal Size</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="pipeline" className="space-y-6 mt-6">
@@ -156,15 +253,15 @@ export function CRMReports() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold">156</div>
+                  <div className="text-2xl font-bold">{stats.totalCalls}</div>
                   <div className="text-sm text-muted-foreground mt-1">Total Calls</div>
                 </div>
                 <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold">89</div>
+                  <div className="text-2xl font-bold">{stats.totalEmails}</div>
                   <div className="text-sm text-muted-foreground mt-1">Emails Sent</div>
                 </div>
                 <div className="text-center p-4 border rounded-lg">
-                  <div className="text-2xl font-bold">34</div>
+                  <div className="text-2xl font-bold">{stats.totalMeetings}</div>
                   <div className="text-sm text-muted-foreground mt-1">Meetings</div>
                 </div>
               </div>
