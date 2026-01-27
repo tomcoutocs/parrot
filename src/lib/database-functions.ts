@@ -67,20 +67,46 @@ export function hasSystemAdminPrivileges(role: string): boolean {
 
 // Helper function to set application context for RLS
 async function setAppContext() {
-  if (!supabase) return
+  if (!supabase) {
+    console.warn('setAppContext: Supabase not configured')
+    return
+  }
   
   const currentUser = getCurrentUser()
-  if (currentUser) {
-    try {
-      // Set user context for RLS policies
-      await supabase.rpc('set_user_context', {
-        user_id: currentUser.id,
-        user_role: currentUser.role,
-        company_id: currentUser.companyId || null
+  if (!currentUser) {
+    console.warn('setAppContext: No current user found')
+    return
+  }
+  
+  try {
+    console.log('setAppContext: Setting user context:', {
+      user_id: currentUser.id,
+      user_role: currentUser.role,
+      company_id: currentUser.companyId
+    })
+    
+    // Set user context for RLS policies
+    const { data, error } = await supabase.rpc('set_user_context', {
+      user_id: currentUser.id,
+      user_role: currentUser.role,
+      company_id: currentUser.companyId || null
+    })
+    
+    if (error) {
+      console.error('setAppContext: RPC call failed:', error)
+      console.error('setAppContext: Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
       })
-    } catch (error) {
-      // Silent error handling - if RPC function doesn't exist, we'll fall back
+    } else {
+      console.log('setAppContext: Successfully set user context')
     }
+  } catch (error: any) {
+    console.error('setAppContext: Exception setting context:', error)
+    console.error('setAppContext: Exception type:', typeof error)
+    console.error('setAppContext: Exception message:', error?.message)
   }
 }
 
@@ -8521,6 +8547,37 @@ export async function updateLead(
   }
 }
 
+// Get a lead by ID
+export async function getLeadById(leadId: string): Promise<{ success: boolean; lead?: Lead; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .eq('user_id', currentUser.id)
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, lead: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch lead' }
+  }
+}
+
 // Delete a lead
 export async function deleteLead(leadId: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -8569,30 +8626,137 @@ export async function fetchLeadStages(spaceId?: string): Promise<{ success: bool
 
     await setAppContext()
 
-    let query = supabase
+    // Build query to find stages that match user_id
+    // Since RLS is disabled, we can query directly
+    const targetSpaceId = spaceId || currentUser.companyId
+    
+    console.log('Fetching stages:', {
+      userId: currentUser.id,
+      targetSpaceId: targetSpaceId || 'null',
+      spaceIdParam: spaceId || 'undefined'
+    })
+
+    // Get all stages for this user (since everything is global, don't filter by space)
+    let { data, error } = await supabase
       .from('lead_stages')
       .select('*')
       .eq('user_id', currentUser.id)
       .order('stage_order', { ascending: true })
-
-    if (spaceId) {
-      query = query.eq('space_id', spaceId)
-    } else if (currentUser.companyId) {
-      query = query.eq('space_id', currentUser.companyId)
-    }
-
-    const { data, error } = await query
+    
+    console.log('Initial query result:', {
+      dataLength: data?.length || 0,
+      error: error ? { code: error.code, message: error.message } : null,
+      stageNames: data?.map(s => s.name) || [],
+      userId: currentUser.id
+    })
 
     if (error) {
+      console.error('Error fetching stages:', error)
       return { success: false, error: error.message }
     }
 
-    // If no stages exist, create default stages
-    if (!data || data.length === 0) {
-      const defaultStages = await createDefaultStages(currentUser.id, spaceId || currentUser.companyId)
-      return { success: true, stages: defaultStages }
+    // Remove duplicates by name (keep the first occurrence based on stage_order)
+    if (data && data.length > 0) {
+      const originalCount = data.length
+      const uniqueStagesMap = new Map<string, typeof data[0]>()
+      data.forEach(stage => {
+        const stageNameLower = stage.name.toLowerCase().trim()
+        const existing = uniqueStagesMap.get(stageNameLower)
+        if (!existing || stage.stage_order < existing.stage_order) {
+          uniqueStagesMap.set(stageNameLower, stage)
+        } else {
+          console.warn(`Duplicate stage found: "${stage.name}" (ID: ${stage.id}, order: ${stage.stage_order}). Keeping existing (order: ${existing.stage_order}).`)
+        }
+      })
+      data = Array.from(uniqueStagesMap.values()).sort((a, b) => a.stage_order - b.stage_order)
+      
+      if (data.length < originalCount) {
+        console.log(`Removed ${originalCount - data.length} duplicate stage(s)`)
+      }
     }
 
+    // Since everything is global, don't filter by space_id
+    // Just use all stages for this user
+    console.log('Using all stages for user (no space filtering, deduplicated):', {
+      dataLength: data?.length || 0,
+      stageNames: data?.map(s => s.name) || []
+    })
+
+    // If no stages exist, create default stages
+    if (!data || data.length === 0) {
+      console.log('No stages found, creating default stages for space:', targetSpaceId)
+      const defaultStages = await createDefaultStages(currentUser.id, targetSpaceId)
+      if (defaultStages && defaultStages.length > 0) {
+        console.log('Created default stages:', defaultStages.map(s => s.name))
+        return { success: true, stages: defaultStages }
+      } else {
+        console.error('Failed to create default stages - returned empty array')
+        // Try one more time to fetch in case they were created but not returned
+        const { data: retryData, error: retryError } = await supabase
+          .from('lead_stages')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .order('stage_order', { ascending: true })
+        
+        // Filter by space_id if needed
+        let filteredRetryData = retryData
+        if (targetSpaceId && filteredRetryData) {
+          filteredRetryData = filteredRetryData.filter(stage => 
+            stage.space_id === targetSpaceId || stage.space_id === null
+          )
+        }
+        
+        // Deduplicate retry data
+        if (filteredRetryData && filteredRetryData.length > 0) {
+          const uniqueRetryMap = new Map<string, typeof filteredRetryData[0]>()
+          filteredRetryData.forEach(stage => {
+            const stageNameLower = stage.name.toLowerCase().trim()
+            const existing = uniqueRetryMap.get(stageNameLower)
+            if (!existing || stage.stage_order < existing.stage_order) {
+              uniqueRetryMap.set(stageNameLower, stage)
+            }
+          })
+          filteredRetryData = Array.from(uniqueRetryMap.values()).sort((a, b) => a.stage_order - b.stage_order)
+        }
+        
+        if (retryError) {
+          console.error('Retry query error:', retryError)
+        }
+        
+        if (filteredRetryData && filteredRetryData.length > 0) {
+          console.log('Found stages on retry:', filteredRetryData.length, filteredRetryData.map(s => s.name))
+          return { success: true, stages: filteredRetryData }
+        }
+        
+        // Last resort: return all stages for this user regardless of space (deduplicated)
+        if (retryData && retryData.length > 0) {
+          const uniqueRetryMap = new Map<string, typeof retryData[0]>()
+          retryData.forEach(stage => {
+            const stageNameLower = stage.name.toLowerCase().trim()
+            const existing = uniqueRetryMap.get(stageNameLower)
+            if (!existing || stage.stage_order < existing.stage_order) {
+              uniqueRetryMap.set(stageNameLower, stage)
+            }
+          })
+          const deduplicatedRetryData = Array.from(uniqueRetryMap.values()).sort((a, b) => a.stage_order - b.stage_order)
+          console.log('Found stages without space filter (deduplicated):', deduplicatedRetryData.length, deduplicatedRetryData.map(s => s.name))
+          return { success: true, stages: deduplicatedRetryData }
+        }
+        
+        // Last resort: return empty array and let the UI handle it
+        console.error('All attempts to fetch/create stages failed')
+        return { success: false, error: 'Failed to create default stages. Please check database permissions and RLS settings.' }
+      }
+    }
+
+    console.log(`Found ${data.length} stages for user ${currentUser.id}`)
+    console.log('Returning stages:', data.map(s => ({ name: s.name, id: s.id, order: s.stage_order, space_id: s.space_id })))
+    
+    // Ensure we have at least some stages
+    if (data.length === 0) {
+      console.warn('No stages found for user - this should trigger default stage creation')
+    }
+    
     return { success: true, stages: data }
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to fetch lead stages' }
@@ -8601,7 +8765,10 @@ export async function fetchLeadStages(spaceId?: string): Promise<{ success: bool
 
 // Create default stages
 async function createDefaultStages(userId: string, spaceId?: string): Promise<LeadStage[]> {
-  if (!supabase) return []
+  if (!supabase) {
+    console.error('Supabase not configured in createDefaultStages')
+    return []
+  }
 
   const defaultStages = [
     { name: 'New', stage_order: 0, color: '#3b82f6', is_default: true },
@@ -8613,18 +8780,204 @@ async function createDefaultStages(userId: string, spaceId?: string): Promise<Le
     { name: 'Closed Lost', stage_order: 6, color: '#ef4444', is_default: true },
   ]
 
-  const { data } = await supabase
-    .from('lead_stages')
-    .insert(
-      defaultStages.map(stage => ({
-        user_id: userId,
-        space_id: spaceId || null,
-        ...stage,
-      }))
+  try {
+    await setAppContext()
+    
+    console.log(`Creating default stages for user ${userId}, space ${spaceId || 'null'}`)
+    
+    // Check if any stages already exist for this user/space combination
+    let query = supabase
+      .from('lead_stages')
+      .select('name')
+      .eq('user_id', userId)
+    
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else {
+      query = query.is('space_id', null)
+    }
+    
+    const { data: existingStages, error: checkError } = await query
+    
+    if (checkError) {
+      console.error('Error checking existing stages:', checkError)
+      // Continue anyway - might be a permissions issue
+    }
+    
+    // Filter out stages that already exist
+    const existingNames = new Set((existingStages || []).map(s => s.name.toLowerCase()))
+    const stagesToCreate = defaultStages.filter(stage => 
+      !existingNames.has(stage.name.toLowerCase())
     )
-    .select()
+    
+    if (stagesToCreate.length === 0) {
+      console.log('All default stages already exist, fetching existing stages')
+      // Fetch and return existing stages
+      let fetchQuery = supabase
+        .from('lead_stages')
+        .select('*')
+        .eq('user_id', userId)
+        .order('stage_order', { ascending: true })
+      
+      if (spaceId) {
+        fetchQuery = fetchQuery.eq('space_id', spaceId)
+      } else {
+        fetchQuery = fetchQuery.is('space_id', null)
+      }
+      
+      const { data: fetchedStages, error: fetchError } = await fetchQuery
+      
+      if (fetchError) {
+        console.error('Error fetching existing stages:', fetchError)
+        return []
+      }
+      
+      return fetchedStages || []
+    }
+    
+    // Insert only the stages that don't exist
+    const insertData = stagesToCreate.map(stage => ({
+      user_id: userId,
+      space_id: spaceId || null,
+      ...stage,
+    }))
+    
+    console.log(`Attempting to insert ${insertData.length} stages:`, insertData.map(s => s.name))
+    console.log('Insert data sample:', JSON.stringify(insertData[0], null, 2))
+    console.log('User ID:', userId, 'Space ID:', spaceId || 'null')
+    
+    // Verify we have a valid user ID
+    if (!userId || typeof userId !== 'string') {
+      console.error('Invalid user ID:', userId)
+      return []
+    }
+    
+    // Verify app context was set (check if we can query current_setting)
+    try {
+      const { data: contextCheck, error: contextError } = await supabase.rpc('get_current_user_context', {})
+      if (contextError) {
+        console.warn('Could not verify user context (get_current_user_context not available)')
+      } else {
+        console.log('Current user context:', contextCheck)
+      }
+    } catch (e) {
+      console.warn('Could not check user context:', e)
+    }
+    
+    const { data, error } = await supabase
+      .from('lead_stages')
+      .insert(insertData)
+      .select()
 
-  return data || []
+    if (error) {
+      // Log error in multiple ways to catch serialization issues
+      console.error('=== ERROR CREATING DEFAULT STAGES ===')
+      console.error('Error object:', error)
+      console.error('Error type:', typeof error)
+      console.error('Error constructor:', error?.constructor?.name)
+      console.error('Error code:', error?.code)
+      console.error('Error message:', error?.message)
+      console.error('Error hint:', error?.hint)
+      console.error('Error details:', error?.details)
+      
+      // Check if this is an RLS error
+      const errorMessage = error?.message || ''
+      const isRLSError = errorMessage.toLowerCase().includes('row-level security') || 
+                         errorMessage.toLowerCase().includes('rls') ||
+                         error?.code === '42501' // Insufficient privilege
+      
+      if (isRLSError) {
+        console.error('⚠️ RLS POLICY ERROR DETECTED ⚠️')
+        console.error('This error suggests the RLS policies may not have been updated for custom auth.')
+        console.error('Please ensure you have run the following SQL scripts:')
+        console.error('1. database-fixes/fix_lead_stages_rls_custom_auth.sql')
+        console.error('2. database-fixes/fix_leads_rls_custom_auth.sql')
+        console.error('3. database-fixes/fix_lead_customization_settings_rls_custom_auth.sql')
+        console.error('')
+        console.error('Also verify that the set_user_context RPC function exists and is working.')
+      }
+      
+      // Try JSON stringify
+      try {
+        console.error('Error JSON:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+      } catch (e) {
+        console.error('Could not stringify error:', e)
+      }
+      
+      // Try to get error properties
+      const errorProps = Object.getOwnPropertyNames(error)
+      console.error('Error properties:', errorProps)
+      errorProps.forEach(prop => {
+        try {
+          console.error(`Error.${prop}:`, (error as any)[prop])
+        } catch (e) {
+          console.error(`Could not access error.${prop}`)
+        }
+      })
+      
+      // Even if there's an error, check if data was returned (sometimes Supabase returns both)
+      const dataArray = data as LeadStage[] | null
+      if (dataArray && Array.isArray(dataArray) && dataArray.length > 0) {
+        console.log('Data was returned despite error, using it:', dataArray.length)
+        return dataArray
+      }
+      
+      // If it's a unique constraint violation, try to fetch existing stages
+      if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+        console.log('Unique constraint violation, fetching existing stages instead')
+        let fetchQuery = supabase
+          .from('lead_stages')
+          .select('*')
+          .eq('user_id', userId)
+          .order('stage_order', { ascending: true })
+        
+        if (spaceId) {
+          fetchQuery = fetchQuery.eq('space_id', spaceId)
+        } else {
+          fetchQuery = fetchQuery.is('space_id', null)
+        }
+        
+        const { data: fetchedStages, error: fetchError } = await fetchQuery
+        
+        if (!fetchError && fetchedStages) {
+          return fetchedStages
+        }
+      }
+      
+      return []
+    }
+
+    console.log(`Successfully created ${data?.length || 0} default stages`)
+    
+    // If we created some but not all, fetch all stages to return complete list
+    if (data && data.length < defaultStages.length) {
+      let fetchQuery = supabase
+        .from('lead_stages')
+        .select('*')
+        .eq('user_id', userId)
+        .order('stage_order', { ascending: true })
+      
+      if (spaceId) {
+        fetchQuery = fetchQuery.eq('space_id', spaceId)
+      } else {
+        fetchQuery = fetchQuery.is('space_id', null)
+      }
+      
+      const { data: allStages, error: fetchError } = await fetchQuery
+      
+      if (!fetchError && allStages) {
+        return allStages
+      }
+    }
+    
+    return data || []
+  } catch (error: any) {
+    console.error('Exception creating default stages:', error)
+    console.error('Exception type:', typeof error)
+    console.error('Exception message:', error?.message)
+    console.error('Exception stack:', error?.stack)
+    return []
+  }
 }
 
 // Create a lead stage
@@ -8704,6 +9057,36 @@ export async function updateLeadStage(
     return { success: true, stage: data }
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to update lead stage' }
+  }
+}
+
+// Delete a lead stage
+export async function deleteLeadStage(stageId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('lead_stages')
+      .delete()
+      .eq('id', stageId)
+      .eq('user_id', currentUser.id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete lead stage' }
   }
 }
 
@@ -10373,27 +10756,35 @@ export async function getLeadCustomizationSettings(): Promise<{ success: boolean
   try {
     await setAppContext()
     
+    // Get the single global settings record (no space_id needed)
     const { data, error } = await supabase
-      .from('app_settings')
+      .from('lead_customization_settings')
       .select('*')
-      .eq('setting_key', 'lead_customization')
+      .limit(1)
       .single()
 
     if (error) {
       if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
-        return { success: true, data: {} }
+        // No settings found, return empty/default settings
+        return { success: true, data: { default_stages_template: 'standard' } }
       }
       return { success: false, error: error.message || 'Failed to fetch settings' }
     }
 
-    if (data && data.setting_value) {
-      const settings = typeof data.setting_value === 'string' 
-        ? JSON.parse(data.setting_value) 
-        : data.setting_value
+    if (data) {
+      // Map database columns to settings object
+      const settings: LeadCustomizationSettings = {
+        primary_color: data.primary_color,
+        logo_url: data.logo_url || undefined,
+        company_name: data.company_name || undefined,
+        default_thank_you_message: data.default_thank_you_message || undefined,
+        default_redirect_url: data.default_redirect_url || undefined,
+        default_stages_template: data.default_stages_template || 'standard',
+      }
       return { success: true, data: settings }
     }
 
-    return { success: true, data: {} }
+    return { success: true, data: { default_stages_template: 'standard' } }
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to fetch customization settings' }
   }
@@ -10407,40 +10798,73 @@ export async function saveLeadCustomizationSettings(settings: Partial<LeadCustom
   try {
     await setAppContext()
     
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+    
+    // Get current settings to merge
     const currentResult = await getLeadCustomizationSettings()
     const currentSettings = currentResult.data || {}
     const updatedSettings = { ...currentSettings, ...settings }
 
-    const { error: upsertError } = await supabase
-      .from('app_settings')
-      .upsert({
-        setting_key: 'lead_customization',
-        setting_value: updatedSettings,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'setting_key'
-      })
+    console.log('Saving lead customization settings:', {
+      settings: updatedSettings
+    })
+
+    // Prepare data for upsert - convert empty strings to null for optional fields
+    const settingsData = {
+      primary_color: updatedSettings.primary_color || '#3b82f6',
+      logo_url: updatedSettings.logo_url?.trim() || null,
+      company_name: updatedSettings.company_name?.trim() || null,
+      default_thank_you_message: updatedSettings.default_thank_you_message?.trim() || null,
+      default_redirect_url: updatedSettings.default_redirect_url?.trim() || null,
+      default_stages_template: updatedSettings.default_stages_template || 'standard',
+    }
+
+    // Check if settings exist, if not create, if yes update
+    const existingResult = await getLeadCustomizationSettings()
+    let upsertError
+    
+    if (existingResult.success && existingResult.data) {
+      // Update existing record (get the first one)
+      const { data: existingData } = await supabase
+        .from('lead_customization_settings')
+        .select('id')
+        .limit(1)
+        .single()
+      
+      if (existingData?.id) {
+        const { error } = await supabase
+          .from('lead_customization_settings')
+          .update(settingsData)
+          .eq('id', existingData.id)
+        upsertError = error
+      } else {
+        // No existing record, create new one
+        const { error } = await supabase
+          .from('lead_customization_settings')
+          .insert(settingsData)
+        upsertError = error
+      }
+    } else {
+      // No existing record, create new one
+      const { error } = await supabase
+        .from('lead_customization_settings')
+        .insert(settingsData)
+      upsertError = error
+    }
 
     if (upsertError) {
-      if (upsertError.message?.includes('does not exist')) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('lead_customization_settings', JSON.stringify(updatedSettings))
-        }
-        return { success: true }
-      }
+      console.error('Error upserting settings:', upsertError)
       return { success: false, error: upsertError.message || 'Failed to save settings' }
     }
 
+    console.log('Successfully saved lead customization settings')
     return { success: true }
   } catch (error: any) {
     console.error('Error saving customization settings:', error)
-    if (typeof window !== 'undefined') {
-      const currentResult = await getLeadCustomizationSettings()
-      const currentSettings = currentResult.data || {}
-      const updatedSettings = { ...currentSettings, ...settings }
-      localStorage.setItem('lead_customization_settings', JSON.stringify(updatedSettings))
-    }
-    return { success: true }
+    return { success: false, error: error.message || 'Failed to save settings' }
   }
 }
 

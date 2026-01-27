@@ -54,6 +54,7 @@ ALTER TABLE lead_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lead_scoring_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lead_workflows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lead_workflow_triggers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lead_customization_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lead_workflow_actions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lead_workflow_executions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lead_campaigns ENABLE ROW LEVEL SECURITY;
@@ -212,6 +213,31 @@ CREATE POLICY "Users can update their sources"
 -- Users can delete their own sources
 CREATE POLICY "Users can delete their sources"
   ON lead_sources FOR DELETE
+  USING (user_id = auth.uid());
+
+-- ============================================================================
+-- RLS POLICIES: LEAD CUSTOMIZATION SETTINGS
+-- ============================================================================
+
+-- Users can view their own customization settings
+CREATE POLICY "Users can view their customization settings"
+  ON lead_customization_settings FOR SELECT
+  USING (user_id = auth.uid());
+
+-- Users can create their own customization settings
+CREATE POLICY "Users can create customization settings"
+  ON lead_customization_settings FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+-- Users can update their own customization settings
+CREATE POLICY "Users can update their customization settings"
+  ON lead_customization_settings FOR UPDATE
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Users can delete their own customization settings
+CREATE POLICY "Users can delete their customization settings"
+  ON lead_customization_settings FOR DELETE
   USING (user_id = auth.uid());
 
 -- ============================================================================

@@ -43,21 +43,30 @@ import { LeadAnalytics } from './tabs/lead-analytics'
 import { LeadSettings } from './tabs/lead-settings'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
+import { hasAdminPrivileges } from '@/lib/role-helpers'
 
 interface LeadGenerationLayoutProps {
   activeTab: string
   onTabChange: (tab: string) => void
 }
 
-const navigationItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'pipeline', label: 'Pipeline', icon: Users },
-  { id: 'capture', label: 'Capture', icon: FileText },
-  { id: 'automation', label: 'Automation', icon: Zap },
-  { id: 'campaigns', label: 'Campaigns', icon: Target },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'settings', label: 'Settings', icon: Settings },
-]
+// Navigation items - settings only shown to admins
+const getNavigationItems = (isAdmin: boolean) => {
+  const items = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'pipeline', label: 'Pipeline', icon: Users },
+    { id: 'capture', label: 'Capture', icon: FileText },
+    { id: 'automation', label: 'Automation', icon: Zap },
+    { id: 'campaigns', label: 'Campaigns', icon: Target },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  ]
+  
+  if (isAdmin) {
+    items.push({ id: 'settings', label: 'Settings', icon: Settings })
+  }
+  
+  return items
+}
 
 export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationLayoutProps) {
   const { data: session } = useSession()
@@ -114,6 +123,10 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
     }
   }, [session?.user?.id])
 
+  // Check if user is admin
+  const isAdmin = hasAdminPrivileges(session?.user?.role)
+  const navigationItems = getNavigationItems(isAdmin)
+
   // Get current tab display name
   const getTabDisplayName = () => {
     const tab = navigationItems.find(item => item.id === activeTab)
@@ -135,6 +148,10 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
       case 'analytics':
         return <LeadAnalytics />
       case 'settings':
+        // Only admins can access settings
+        if (!isAdmin) {
+          return <LeadGenerationDashboard />
+        }
         return <LeadSettings />
       default:
         return <LeadGenerationDashboard />

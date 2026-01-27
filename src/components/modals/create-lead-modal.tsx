@@ -13,7 +13,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select'
-import { createLead, fetchLeadStages, fetchLeadSources } from '@/lib/database-functions'
+import { createLead, fetchLeadStages, getLeadCustomizationSettings } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
 import { toastSuccess, toastError } from '@/lib/toast'
 import type { LeadStage, LeadSource } from '@/lib/database-functions'
@@ -24,28 +24,16 @@ interface CreateLeadModalProps {
   onLeadCreated: () => void
 }
 
-// Default stage options
-const defaultStages = [
-  { id: 'new', name: 'New' },
-  { id: 'qualified', name: 'Qualified' },
-  { id: 'contacted', name: 'Contacted' },
-  { id: 'proposal', name: 'Proposal' },
-  { id: 'negotiation', name: 'Negotiation' },
-  { id: 'closed-won', name: 'Closed Won' },
-  { id: 'closed-lost', name: 'Closed Lost' },
-]
-
-// Default source options
+// Default source options (hardcoded list)
 const defaultSources = [
   { id: 'website', name: 'Website' },
   { id: 'referral', name: 'Referral' },
-  { id: 'cold-call', name: 'Cold Call' },
-  { id: 'social-media', name: 'Social Media' },
-  { id: 'advertisement', name: 'Advertisement' },
-  { id: 'webinar', name: 'Webinar' },
+  { id: 'email', name: 'Email' },
+  { id: 'linkedin', name: 'LinkedIn' },
+  { id: 'social_media', name: 'Social Media' },
+  { id: 'advertising', name: 'Advertising' },
   { id: 'event', name: 'Event' },
-  { id: 'partner', name: 'Partner' },
-  { id: 'email-campaign', name: 'Email Campaign' },
+  { id: 'other', name: 'Other' },
 ]
 
 export default function CreateLeadModal({ 
@@ -65,42 +53,170 @@ export default function CreateLeadModal({
   const [notes, setNotes] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [stages, setStages] = useState<LeadStage[]>([])
-  const [sources, setSources] = useState<LeadSource[]>([])
+  // Sources are hardcoded - no need to fetch from database
+  const sources = defaultSources
+
+  // Get stable references for dependencies
+  const userId = session?.user?.id
+  const companyId = session?.user?.company_id
 
   useEffect(() => {
     const loadData = async () => {
-      if (!session?.user?.id) return
-
-      const stagesResult = await fetchLeadStages(session.user.company_id)
-      const sourcesResult = await fetchLeadSources(session.user.company_id)
-
-      // Use database stages if available, otherwise use defaults
-      if (stagesResult.success && stagesResult.stages && stagesResult.stages.length > 0) {
-        setStages(stagesResult.stages)
-        // Set default stage (first one or "New")
-        const defaultStage = stagesResult.stages.find(s => s.name.toLowerCase() === 'new') || stagesResult.stages[0]
-        if (defaultStage) {
-          setStageId(defaultStage.id)
-        }
-      } else {
-        // Use default stages
-        setStages(defaultStages as LeadStage[])
-        setStageId('new')
+      if (!userId) {
+        console.log('Waiting for session user ID...')
+        return
       }
 
-      // Use database sources if available, otherwise use defaults
-      if (sourcesResult.success && sourcesResult.sources && sourcesResult.sources.length > 0) {
-        setSources(sourcesResult.sources)
-      } else {
-        // Use default sources
-        setSources(defaultSources as LeadSource[])
+      // Reset stages while loading
+      setStages([])
+      setStageId('')
+
+      try {
+        // Fetch customization settings to get the stages template (global)
+        const settingsResult = await getLeadCustomizationSettings()
+        const template = settingsResult.success && settingsResult.data?.default_stages_template 
+          ? settingsResult.data.default_stages_template 
+          : 'standard'
+
+        console.log('Template from settings:', template, 'Settings result:', settingsResult)
+
+        const stagesResult = await fetchLeadStages(companyId || undefined)
+        console.log('Stages fetch result:', {
+          success: stagesResult.success,
+          stagesCount: stagesResult.stages?.length || 0,
+          error: stagesResult.error,
+          stageNames: stagesResult.stages?.map(s => s.name) || []
+        })
+
+        // Always use stages from database (settings)
+        // fetchLeadStages will create default stages if none exist
+        if (stagesResult.success && stagesResult.stages && stagesResult.stages.length > 0) {
+          // Remove duplicates by name (keep the first occurrence)
+          const uniqueStagesMap = new Map<string, LeadStage>()
+          stagesResult.stages.forEach(stage => {
+            const stageNameLower = stage.name.toLowerCase().trim()
+            if (!uniqueStagesMap.has(stageNameLower)) {
+              uniqueStagesMap.set(stageNameLower, stage)
+            } else {
+              console.warn(`Duplicate stage found: "${stage.name}" (ID: ${stage.id}). Keeping first occurrence.`)
+            }
+          })
+          
+          const uniqueStages = Array.from(uniqueStagesMap.values())
+          console.log('After deduplication:', {
+            originalCount: stagesResult.stages.length,
+            uniqueCount: uniqueStages.length,
+            duplicates: stagesResult.stages.length - uniqueStages.length
+          })
+          
+          let filteredStages = [...uniqueStages]
+
+          // Filter stages based on template setting
+          console.log('All stages before filtering:', uniqueStages.map(s => ({ name: s.name, lower: s.name.toLowerCase().trim() })))
+          
+          if (template === 'simple') {
+            // Simple template: New, Qualified, Closed Won, Closed Lost
+            const simpleStageNames = ['new', 'qualified', 'closed won', 'closed lost']
+            filteredStages = uniqueStages.filter(stage => {
+              const stageNameLower = stage.name.toLowerCase().trim()
+              const matches = simpleStageNames.includes(stageNameLower)
+              if (!matches) {
+                console.log(`Stage "${stage.name}" (${stageNameLower}) not in simple template`)
+              }
+              return matches
+            })
+            console.log('Filtered stages (simple):', filteredStages.map(s => s.name))
+          } else if (template === 'standard') {
+            // Standard template: New, Contacted, Qualified, Proposal, Closed Won, Closed Lost
+            // Include Negotiation if it exists
+            const standardStageNames = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed won', 'closed lost']
+            filteredStages = stagesResult.stages.filter(stage => {
+              const stageNameLower = stage.name.toLowerCase().trim()
+              const matches = standardStageNames.includes(stageNameLower)
+              if (!matches) {
+                console.log(`Stage "${stage.name}" (${stageNameLower}) not in standard template`)
+              }
+              return matches
+            })
+            console.log('Filtered stages (standard):', filteredStages.map(s => s.name))
+          } else if (template === 'custom') {
+            // For 'custom', show all stages (no filtering)
+            console.log('Using all stages (custom):', filteredStages.map(s => s.name))
+          }
+
+          // Sort stages by stage_order
+          filteredStages.sort((a, b) => a.stage_order - b.stage_order)
+
+          console.log('Final stages to display:', filteredStages.map(s => ({ name: s.name, order: s.stage_order })))
+
+          if (filteredStages.length === 0) {
+            console.warn('No stages match the template filter. Showing all stages as fallback.')
+            filteredStages = uniqueStages.sort((a, b) => a.stage_order - b.stage_order)
+          }
+
+          // Final check - if still no stages, log a warning
+          if (filteredStages.length === 0) {
+            console.error('CRITICAL: No stages available after all filtering!')
+            console.error('Template:', template)
+            console.error('All stages from DB:', stagesResult.stages.map(s => s.name))
+            console.error('This should not happen - stages should have been created')
+          }
+
+          console.log('Setting stages in component:', filteredStages.length, filteredStages.map(s => s.name))
+          console.log('Stage IDs:', filteredStages.map(s => s.id))
+          
+          // Verify stages have valid IDs
+          const validStages = filteredStages.filter(s => s.id && s.name)
+          console.log('Valid stages (with ID and name):', validStages.length, validStages.map(s => ({ id: s.id, name: s.name })))
+          
+          setStages(validStages)
+          
+          // Set default stage (first one or "New")
+          const defaultStage = validStages.find(s => s.name.toLowerCase().trim() === 'new') || validStages[0]
+          if (defaultStage) {
+            console.log('Setting default stage:', defaultStage.name, defaultStage.id)
+            setStageId(defaultStage.id)
+          } else {
+            console.warn('No default stage found - valid stages:', validStages)
+            setStageId('')
+          }
+        } else {
+          // If fetch failed, show error but don't use hardcoded stages
+          console.error('Failed to load stages from settings:', {
+            success: stagesResult.success,
+            error: stagesResult.error,
+            stagesCount: stagesResult.stages?.length || 0,
+            companyId: companyId,
+            userId: userId
+          })
+          
+          // Show more detailed error message
+          const errorMsg = stagesResult.error || 'Failed to load stages'
+          console.error('Full error details:', stagesResult)
+          
+          // If no stages but no error, try to create default stages manually
+          if (!stagesResult.error && (!stagesResult.stages || stagesResult.stages.length === 0)) {
+            console.log('No stages found and no error - stages may need to be created')
+            toastError('No stages found. Please check settings or contact an admin.')
+          } else {
+            toastError(errorMsg)
+          }
+          
+          setStages([])
+          setStageId('')
+        }
+      } catch (error: any) {
+        console.error('Error loading stages:', error)
+        toastError(error.message || 'Failed to load stages')
+        setStages([])
+        setStageId('')
       }
     }
 
     if (isOpen) {
       loadData()
     }
-  }, [isOpen, session])
+  }, [isOpen, userId, companyId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -121,7 +237,8 @@ export default function CreateLeadModal({
         phone: phone.trim() || undefined,
         job_title: jobTitle.trim() || undefined,
         stage_id: stageId || undefined,
-        source_id: sourceId && sourceId !== 'none' ? sourceId : undefined,
+        source_id: undefined, // Sources are hardcoded, store type in custom_fields instead
+        custom_fields: sourceId && sourceId !== 'none' ? { source_type: sourceId } : {},
         score: score || 0,
         notes: notes.trim() || undefined,
         status: 'new',
@@ -228,9 +345,9 @@ export default function CreateLeadModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="stage">Stage</Label>
-              <Select value={stageId} onValueChange={setStageId}>
+              <Select value={stageId} onValueChange={setStageId} disabled={stages.length === 0}>
                 <SelectTrigger id="stage">
-                  <SelectValue placeholder="Select stage" />
+                  <SelectValue placeholder={stages.length > 0 ? "Select stage" : "No stages available"} />
                 </SelectTrigger>
                 <SelectContent>
                   {stages.map((stage) => (
@@ -240,6 +357,11 @@ export default function CreateLeadModal({
                   ))}
                 </SelectContent>
               </Select>
+              {stages.length === 0 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  No stages found. Please check settings or contact an admin.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="source">Source</Label>
