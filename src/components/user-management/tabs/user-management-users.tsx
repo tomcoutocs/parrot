@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { 
   Search, 
+  Users,
   Mail,
   Shield,
   UserCheck,
@@ -258,6 +259,14 @@ export function UserManagementUsers() {
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Users className="w-6 h-6 text-foreground" />
+          <h1 className="text-2xl font-semibold text-foreground">Users</h1>
+        </div>
+      </div>
+
       {/* Users List */}
       <Card>
         <CardHeader>
