@@ -5328,7 +5328,12 @@ export async function getCompanyFolders(
       return { success: false, error: error.message }
     }
 
-    return { success: true, folders: data || [] }
+    // Filter out the "Setup Instructions" system folder
+    const filteredFolders = (data || []).filter(
+      folder => !(folder.name === 'Setup Instructions' && folder.is_system_folder === true)
+    )
+
+    return { success: true, folders: filteredFolders }
   } catch (error) {
     return { success: false, error: 'Failed to fetch company folders' }
   }

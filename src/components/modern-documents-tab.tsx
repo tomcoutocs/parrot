@@ -219,7 +219,11 @@ export function ModernDocumentsTab({ activeSpace }: ModernDocumentsTabProps) {
           setDocuments(docsResult.documents || [])
         }
         if (foldersResult.success) {
-          setFolders(foldersResult.folders || [])
+          // Filter out the "Setup Instructions" system folder
+          const filteredFolders = (foldersResult.folders || []).filter(
+            folder => !(folder.name === 'Setup Instructions' && folder.is_system_folder === true)
+          )
+          setFolders(filteredFolders)
         }
         if (richDocsResult.success) {
           setRichDocuments(richDocsResult.documents || [])
