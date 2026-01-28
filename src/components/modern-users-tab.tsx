@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { UserPlus, Search, MoreHorizontal, Shield, User as UserIcon, Edit, Trash2 } from "lucide-react"
+import { UserPlus, Search, MoreHorizontal, Shield, User as UserIcon, Edit, Trash2, Mail, Clock, X, RotateCw } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,9 +19,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { fetchUsersOptimized, fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { fetchCompanyUsers } from "@/lib/company-detail-functions"
-import { User, Company } from "@/lib/supabase"
+import { User, Company, UserInvitation } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
-import { updateUser, deleteUser, assignCompanyToInternalUser } from "@/lib/database-functions"
+import { updateUser, deleteUser, assignCompanyToInternalUser, getPendingInvitations, resendInvitation, cancelInvitation } from "@/lib/database-functions"
 import { toastSuccess, toastError } from "@/lib/toast"
 import { useSession } from "@/components/providers/session-provider"
 import { LoadingSpinner } from "@/components/ui/loading-states"
@@ -47,6 +47,10 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
+  const [pendingInvitations, setPendingInvitations] = useState<UserInvitation[]>([])
+  const [loadingInvitations, setLoadingInvitations] = useState(false)
+  const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null)
+  const [cancellingInvitationId, setCancellingInvitationId] = useState<string | null>(null)
 
   // Form state for creating users
   const [formData, setFormData] = useState({
@@ -85,6 +89,33 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     type: "client" as "internal" | "client",
     spaces: [] as string[],
   })
+
+  // Load pending invitations
+  useEffect(() => {
+    const loadInvitations = async () => {
+      if (!activeSpace) return // Only show invitations when a space is selected
+      
+      setLoadingInvitations(true)
+      try {
+        const result = await getPendingInvitations(activeSpace)
+        if (result.success && result.data) {
+          // Filter out expired invitations
+          const now = new Date()
+          const validInvitations = result.data.filter(inv => {
+            const expiresAt = new Date(inv.expires_at)
+            return inv.status === 'pending' && expiresAt > now
+          })
+          setPendingInvitations(validInvitations)
+        }
+      } catch (error) {
+        console.error("Error loading invitations:", error)
+      } finally {
+        setLoadingInvitations(false)
+      }
+    }
+
+    loadInvitations()
+  }, [activeSpace])
 
   useEffect(() => {
     const loadData = async () => {
@@ -549,9 +580,22 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
           spaces: [],
         })
         
-        // Reload users to show any pending invitations
+        // Reload users and invitations
         const companiesData = await fetchCompaniesOptimized()
         setCompanies(companiesData)
+        
+        // Reload pending invitations
+        if (activeSpace) {
+          const invitationsResult = await getPendingInvitations(activeSpace)
+          if (invitationsResult.success && invitationsResult.data) {
+            const now = new Date()
+            const validInvitations = invitationsResult.data.filter(inv => {
+              const expiresAt = new Date(inv.expires_at)
+              return inv.status === 'pending' && expiresAt > now
+            })
+            setPendingInvitations(validInvitations)
+          }
+        }
         
         // Reload users based on activeSpace
         if (activeSpace) {
@@ -590,6 +634,77 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
     } catch (error) {
       console.error("Error sending invitation:", error)
       toastError("An error occurred while sending the invitation")
+    }
+  }
+
+  const handleResendInvitation = async (invitationId: string) => {
+    setResendingInvitationId(invitationId)
+    try {
+      const response = await fetch('/api/invitations/resend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invitation_id: invitationId,
+          company_name: companies.find(c => c.id === activeSpace)?.name || 'Company',
+          inviter_name: session?.user?.name || 'Administrator'
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toastSuccess('Invitation resent successfully')
+        // Reload invitations
+        if (activeSpace) {
+          const invitationsResult = await getPendingInvitations(activeSpace)
+          if (invitationsResult.success && invitationsResult.data) {
+            const now = new Date()
+            const validInvitations = invitationsResult.data.filter(inv => {
+              const expiresAt = new Date(inv.expires_at)
+              return inv.status === 'pending' && expiresAt > now
+            })
+            setPendingInvitations(validInvitations)
+          }
+        }
+      } else {
+        toastError(result.error || 'Failed to resend invitation')
+      }
+    } catch (error) {
+      console.error('Error resending invitation:', error)
+      toastError('An error occurred while resending the invitation')
+    } finally {
+      setResendingInvitationId(null)
+    }
+  }
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    setCancellingInvitationId(invitationId)
+    try {
+      const result = await cancelInvitation(invitationId)
+      if (result.success) {
+        toastSuccess('Invitation cancelled')
+        // Reload invitations
+        if (activeSpace) {
+          const invitationsResult = await getPendingInvitations(activeSpace)
+          if (invitationsResult.success && invitationsResult.data) {
+            const now = new Date()
+            const validInvitations = invitationsResult.data.filter(inv => {
+              const expiresAt = new Date(inv.expires_at)
+              return inv.status === 'pending' && expiresAt > now
+            })
+            setPendingInvitations(validInvitations)
+          }
+        }
+      } else {
+        toastError(result.error || 'Failed to cancel invitation')
+      }
+    } catch (error) {
+      console.error('Error cancelling invitation:', error)
+      toastError('An error occurred while cancelling the invitation')
+    } finally {
+      setCancellingInvitationId(null)
     }
   }
 
@@ -910,6 +1025,122 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
         )}
         </div>
       </div>
+
+      {/* Pending Invitations Section */}
+      {activeSpace && (
+        <Card className="border-border/60">
+          <div className="px-6 py-4 border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-muted-foreground" />
+              <h2 className="text-lg font-semibold text-foreground">Pending Invites</h2>
+              {pendingInvitations.length > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {pendingInvitations.length}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="p-6">
+            {loadingInvitations ? (
+              <div className="flex items-center justify-center py-8">
+                <LoadingSpinner size="sm" />
+              </div>
+            ) : pendingInvitations.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Mail className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No pending invitations</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingInvitations.map((invitation) => {
+                  const expiresAt = new Date(invitation.expires_at)
+                  const daysUntilExpiry = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                  const isExpiringSoon = daysUntilExpiry <= 2
+                  
+                  return (
+                    <div
+                      key={invitation.id}
+                      className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/40 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className="flex-shrink-0">
+                          <Avatar className="w-10 h-10">
+                            <AvatarFallback className="bg-primary/10 text-primary">
+                              {(invitation.full_name || invitation.email || "U")
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {invitation.full_name || invitation.email}
+                            </p>
+                            <Badge variant="outline" className={`gap-1 ${getRoleBadge(invitation.role)}`}>
+                              {getRoleIcon(invitation.role)}
+                              <span className="capitalize text-xs">{invitation.role}</span>
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{invitation.email}</p>
+                          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              <span>
+                                Expires in {daysUntilExpiry} {daysUntilExpiry === 1 ? 'day' : 'days'}
+                              </span>
+                            </div>
+                            <span>
+                              Sent {new Date(invitation.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResendInvitation(invitation.id)}
+                          disabled={resendingInvitationId === invitation.id}
+                          className="gap-2"
+                        >
+                          {resendingInvitationId === invitation.id ? (
+                            <>
+                              <LoadingSpinner size="sm" />
+                              Resending...
+                            </>
+                          ) : (
+                            <>
+                              <RotateCw className="w-3.5 h-3.5" />
+                              Resend
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCancelInvitation(invitation.id)}
+                          disabled={cancellingInvitationId === invitation.id}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          {cancellingInvitationId === invitation.id ? (
+                            <LoadingSpinner size="sm" />
+                          ) : (
+                            <X className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Filters & Search */}
       <div className="flex items-center gap-3">
