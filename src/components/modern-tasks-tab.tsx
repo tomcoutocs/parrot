@@ -101,16 +101,30 @@ function transformTaskToDesignTask(task: TaskWithDetails): DesignTask & { origin
       // Handle both ISO string and YYYY-MM-DD format
       let date: Date
       if (typeof task.due_date === 'string' && task.due_date.includes('T')) {
-        // ISO string - parse and use local timezone components
+        // ISO string (e.g., 2026-02-01T00:00:00+00:00) - extract UTC date components
+        // The database may return ISO strings with UTC time, so we need to extract UTC components
+        // and then create a local date with those components to display correctly
         const isoDate = new Date(task.due_date)
-        // Use local timezone methods to avoid date shifts
-        date = new Date(isoDate.getFullYear(), isoDate.getMonth(), isoDate.getDate())
+        // Extract UTC date components and create a local date
+        // This ensures we get the correct calendar date regardless of timezone
+        const year = isoDate.getUTCFullYear()
+        const month = isoDate.getUTCMonth()
+        const day = isoDate.getUTCDate()
+        // Create a local date with the UTC date components
+        // This will display as the correct date in the user's timezone
+        date = new Date(year, month, day)
       } else {
         // YYYY-MM-DD format - parse directly as local date
+        // This creates a date at local midnight, which ensures the date displays correctly
         const [yearStr, monthStr, dayStr] = task.due_date.split('-')
-        date = new Date(parseInt(yearStr), parseInt(monthStr) - 1, parseInt(dayStr))
+        const year = parseInt(yearStr)
+        const month = parseInt(monthStr) - 1
+        const day = parseInt(dayStr)
+        date = new Date(year, month, day)
       }
       // Format using local date components
+      // The date was created correctly (UTC for ISO strings, local for YYYY-MM-DD)
+      // so getMonth/getDate will return the correct values
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const day = String(date.getDate()).padStart(2, '0')
       const year = String(date.getFullYear()).slice(-2)
@@ -1048,20 +1062,76 @@ export function ModernTasksTab({ activeSpace }: ModernTasksTabProps) {
     setShowEditTaskModal(true)
   }
 
-  const handleBulkUpdate = async (updates: Partial<Task>) => {
+  const handleBulkUpdate = async (updates: Record<string, unknown>) => {
     if (selectedTasks.length === 0 || !session?.user?.id) return
 
     try {
+      // Map BulkEditBar field names to database field names
+      const dbUpdates: Partial<Task> = {}
+
+      // Handle assignee -> assigned_to
+      if ('assignee' in updates) {
+        dbUpdates.assigned_to = updates.assignee === "" || updates.assignee === null || updates.assignee === undefined 
+          ? undefined 
+          : (typeof updates.assignee === 'string' ? updates.assignee : undefined)
+      }
+
+      // Handle dueDate -> due_date
+      if ('dueDate' in updates) {
+        if (updates.dueDate && typeof updates.dueDate === 'string' && updates.dueDate.trim() !== '') {
+          try {
+            // Handle YYYY-MM-DD format (from calendar component)
+            if (updates.dueDate.includes('-') && /^\d{4}-\d{2}-\d{2}$/.test(updates.dueDate)) {
+              // Already in YYYY-MM-DD format, use as-is
+              dbUpdates.due_date = updates.dueDate
+              console.log('Bulk update - saving due_date:', {
+                received: updates.dueDate,
+                saving: dbUpdates.due_date
+              })
+            } else if (updates.dueDate.includes('/')) {
+              // Handle MM/dd/yy format (legacy support)
+              const [month, day, year] = updates.dueDate.split("/")
+              const fullYear = `20${year}`
+              // Store as YYYY-MM-DD string (date-only, no time)
+              dbUpdates.due_date = `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+              console.log('Bulk update - converting and saving due_date:', {
+                received: updates.dueDate,
+                saving: dbUpdates.due_date
+              })
+            } else {
+              dbUpdates.due_date = undefined
+            }
+          } catch (e) {
+            console.error('Error parsing due date:', e)
+            dbUpdates.due_date = undefined
+          }
+        } else {
+          dbUpdates.due_date = undefined
+        }
+      }
+
+      // Handle priority - map labels to database values
+      if ('priority' in updates && updates.priority) {
+        const priorityMap: Record<string, 'low' | 'normal' | 'high' | 'urgent' | 'medium'> = {
+          'urgent': 'urgent',
+          'high': 'high',
+          'normal': 'medium', // Map 'normal' to 'medium' for database compatibility
+          'low': 'low',
+          'medium': 'medium' // Keep 'medium' as is for backwards compatibility
+        }
+        const priorityValue = typeof updates.priority === 'string' ? updates.priority.toLowerCase() : 'medium'
+        const mappedPriority = priorityMap[priorityValue] || 'medium'
+        // Map 'medium' back to 'normal' for Task type (which uses 'normal' not 'medium')
+        dbUpdates.priority = (mappedPriority === 'medium' ? 'normal' : mappedPriority) as 'low' | 'normal' | 'high' | 'urgent'
+      }
+
       // Update all selected tasks
       const updatePromises = selectedTasks.map(taskId => {
         const task = tasksMap.get(taskId)
         if (!task) return Promise.resolve()
 
-        const updateData: Partial<Task> = { ...updates }
-        // Ensure we preserve existing fields that aren't being updated
-        if (!updateData.status && task.status) updateData.status = task.status
-        if (!updateData.priority && task.priority) updateData.priority = task.priority
-        if (!updateData.assigned_to && task.assigned_to) updateData.assigned_to = task.assigned_to
+        // Use the mapped database updates
+        const updateData: Partial<Task> = { ...dbUpdates }
 
         return updateTask(taskId, updateData, session.user.id)
       })

@@ -375,7 +375,7 @@ export async function createTaskCommentNotification(
     // Get task assignees and previous commenters
     const { data: task } = await supabase
       .from('tasks')
-      .select('id, assigned_user_id, project_id')
+      .select('id, assigned_to, project_id')
       .eq('id', taskId)
       .single()
 
@@ -405,9 +405,9 @@ export async function createTaskCommentNotification(
       }
     })
 
-    // Add legacy assigned_user_id if it exists
-    if (task.assigned_user_id && task.assigned_user_id !== commentedById) {
-      uniqueUserIds.add(task.assigned_user_id)
+    // Add legacy assigned_to if it exists
+    if (task.assigned_to && task.assigned_to !== commentedById) {
+      uniqueUserIds.add(task.assigned_to)
     }
 
     // Add previous commenters
@@ -495,17 +495,17 @@ export async function createTaskUpdateNotification(
 
     const assigneeIds = assignments?.map(a => a.user_id).filter(id => id !== updatedById) || []
 
-    // Also check legacy assigned_user_id field
+    // Also check legacy assigned_to field
     const { data: task } = await supabase
       .from('tasks')
-      .select('assigned_user_id')
+      .select('assigned_to')
       .eq('id', taskId)
       .single()
 
-    if (task?.assigned_user_id && 
-        task.assigned_user_id !== updatedById && 
-        !assigneeIds.includes(task.assigned_user_id)) {
-      assigneeIds.push(task.assigned_user_id)
+    if (task?.assigned_to && 
+        task.assigned_to !== updatedById && 
+        !assigneeIds.includes(task.assigned_to)) {
+      assigneeIds.push(task.assigned_to)
     }
 
     if (assigneeIds.length === 0) {

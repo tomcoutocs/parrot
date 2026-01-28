@@ -49,7 +49,7 @@ interface BookmarkLink {
   faviconUrl?: string
 }
 
-// Helper function to extract domain from URL
+// Helper function to extract root domain from URL
 function getDomainFromUrl(url: string): string {
   try {
     // Handle relative URLs
@@ -57,7 +57,33 @@ function getDomainFromUrl(url: string): string {
       return ''
     }
     const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`)
-    return urlObj.hostname.replace('www.', '')
+    let hostname = urlObj.hostname.replace('www.', '')
+    
+    // Extract root domain (eTLD+1) by taking the last 2 parts
+    // This handles cases like:
+    // - app.slack.com -> slack.com
+    // - drive.google.com -> google.com
+    // - subdomain.example.co.uk -> example.co.uk (handles country code TLDs)
+    const parts = hostname.split('.')
+    
+    // Common country code TLDs that need special handling
+    const countryCodeTLDs = ['co.uk', 'com.au', 'co.nz', 'co.za', 'com.br', 'com.mx', 'co.jp', 'com.cn']
+    
+    // Check if it ends with a country code TLD
+    const lastTwoParts = parts.slice(-2).join('.')
+    if (countryCodeTLDs.some(tld => hostname.endsWith('.' + tld) || hostname.endsWith(tld))) {
+      // For country code TLDs, take last 3 parts (e.g., example.co.uk)
+      if (parts.length >= 3) {
+        return parts.slice(-3).join('.')
+      }
+    }
+    
+    // For regular domains, take last 2 parts
+    if (parts.length >= 2) {
+      return parts.slice(-2).join('.')
+    }
+    
+    return hostname
   } catch {
     return ''
   }
@@ -68,6 +94,7 @@ function getFaviconUrl(url: string): string {
   const domain = getDomainFromUrl(url)
   if (!domain) return ''
   // Use Google's favicon service as a reliable source
+  // This will fetch the favicon from the root domain
   return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
 }
 
@@ -213,7 +240,10 @@ export function QuickLinksCard({ activeSpace }: QuickLinksCardProps) {
         ) : (
           links.map((link) => {
           const Icon = iconMap[link.iconName] || ExternalLink
-          const faviconUrl = link.faviconUrl || getFaviconUrl(link.url)
+          // Always use the root domain favicon URL to ensure correct logo
+          // If stored faviconUrl exists but might be wrong, regenerate from root domain
+          const rootDomainFavicon = getFaviconUrl(link.url)
+          const faviconUrl = rootDomainFavicon || link.faviconUrl
           
           return (
             <div
