@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
-import { hasAdminPrivileges } from '@/lib/role-helpers'
+import { isInternalUser, canAccessApp } from '@/lib/role-helpers'
+import { toastError } from '@/lib/toast'
 import { InvoicingLayout } from '@/components/invoicing/invoicing-layout'
 import { Loader2 } from 'lucide-react'
 
@@ -19,10 +20,24 @@ function InvoicingContent() {
       return
     }
 
-    // Check if user is admin
-    if (session && !hasAdminPrivileges(session.user.role)) {
-      router.push('/apps')
-      return
+    // Check if user is internal user and has permission
+    if (session) {
+      const userRole = session.user.role
+      const tabPermissions = session.user.tab_permissions || []
+      
+      // Regular users (clients) cannot access this app
+      if (userRole === 'user') {
+        toastError('Access denied: This app is only available to internal users')
+        router.push('/apps')
+        return
+      }
+      
+      // Internal users need explicit permission
+      if (!isInternalUser(userRole) || !canAccessApp('invoicing', userRole, tabPermissions)) {
+        toastError('Access denied: You do not have permission to access this app')
+        router.push('/apps')
+        return
+      }
     }
   }, [session, status, router])
 
@@ -45,8 +60,11 @@ function InvoicingContent() {
     return null
   }
 
-  // Double-check admin role before rendering
-  if (!hasAdminPrivileges(session.user.role)) {
+  // Double-check access before rendering
+  const userRole = session.user.role
+  const tabPermissions = session.user.tab_permissions || []
+  
+  if (userRole === 'user' || !isInternalUser(userRole) || !canAccessApp('invoicing', userRole, tabPermissions)) {
     return null
   }
 

@@ -10,13 +10,15 @@ import { fetchLeads, fetchLeadStages, updateLead, createLeadActivity, type Lead,
 import { useSession } from '@/components/providers/session-provider'
 import { fetchLeadSources } from '@/lib/database-functions'
 import LeadDetailModal from '@/components/modals/lead-detail-modal'
-import { Plus, Mail, Phone, ChevronRight, Briefcase, Calendar } from 'lucide-react'
+import { Plus, Mail, Phone, ChevronRight, Briefcase, Calendar, Building2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string; filters: any }) {
   const { data: session } = useSession()
   const [leads, setLeads] = useState<Lead[]>([])
   const [stages, setStages] = useState<LeadStage[]>([])
   const [sources, setSources] = useState<any[]>([])
+  const [companies, setCompanies] = useState<Record<string, string>>({}) // Map company_id to company name
   const [loading, setLoading] = useState(true)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -68,6 +70,23 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
 
         if (leadsResult.success && leadsResult.leads) {
           setLeads(leadsResult.leads)
+          
+          // Fetch company names for leads that have company_id
+          const companyIds = [...new Set(leadsResult.leads.map(lead => lead.company_id).filter(Boolean) as string[])]
+          if (companyIds.length > 0 && supabase) {
+            const { data: companiesData } = await supabase
+              .from('companies')
+              .select('id, name')
+              .in('id', companyIds)
+            
+            if (companiesData) {
+              const companyMap: Record<string, string> = {}
+              companiesData.forEach(company => {
+                companyMap[company.id] = company.name
+              })
+              setCompanies(companyMap)
+            }
+          }
         }
       } catch (error) {
         console.error('Error loading lead data:', error)
@@ -252,11 +271,11 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                       {stageLeads.length > 0 && (
                         <div className="hidden sm:grid grid-cols-12 gap-4 px-4 py-2 bg-muted/30 text-xs font-medium text-muted-foreground border-b">
                           <div className="col-span-3">Name</div>
-                          <div className="col-span-2">Contact</div>
-                          <div className="col-span-2">Job Title</div>
-                          <div className="col-span-1 text-center">Score</div>
+                          <div className="col-span-2">Company Name</div>
+                          <div className="col-span-3">Email</div>
+                          <div className="col-span-1">Title</div>
                           <div className="col-span-2 text-center">Source</div>
-                          <div className="col-span-2 text-center">Created</div>
+                          <div className="col-span-1 text-center">Created</div>
                         </div>
                       )}
 
@@ -297,34 +316,44 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                                         <span className="font-medium text-sm truncate hover:underline">
                                           {getLeadName(lead)}
                                         </span>
-                                        {/* Mobile: Show email below name */}
+                                        {/* Mobile: Show email and company below name */}
                                         <span className="sm:hidden text-xs text-muted-foreground truncate">
-                                          {lead.email || lead.phone || 'No contact'}
+                                          {lead.email || 'No email'}
                                         </span>
+                                        {lead.company_id && companies[lead.company_id] && (
+                                          <span className="sm:hidden text-xs text-muted-foreground truncate">
+                                            {companies[lead.company_id]}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
 
-                                    {/* Contact Column */}
-                                    <div className="hidden sm:flex col-span-2 flex-col gap-1 text-sm text-muted-foreground">
-                                      {lead.email && (
-                                        <div className="flex items-center gap-1">
-                                          <Mail className="h-3 w-3 flex-shrink-0" />
-                                          <span className="truncate text-xs">{lead.email}</span>
-                                        </div>
-                                      )}
-                                      {lead.phone && (
-                                        <div className="flex items-center gap-1">
-                                          <Phone className="h-3 w-3 flex-shrink-0" />
-                                          <span className="truncate text-xs">{lead.phone}</span>
-                                        </div>
-                                      )}
-                                      {!lead.email && !lead.phone && (
-                                        <span className="text-xs">No contact</span>
+                                    {/* Company Name Column */}
+                                    <div className="hidden sm:flex col-span-2 items-center gap-1 text-sm text-muted-foreground">
+                                      {lead.company_id && companies[lead.company_id] ? (
+                                        <>
+                                          <Building2 className="h-3 w-3 flex-shrink-0" />
+                                          <span className="truncate text-xs">{companies[lead.company_id]}</span>
+                                        </>
+                                      ) : (
+                                        <span className="text-xs">—</span>
                                       )}
                                     </div>
 
-                                    {/* Job Title Column */}
-                                    <div className="hidden sm:flex col-span-2 items-center gap-1 text-sm text-muted-foreground">
+                                    {/* Email Column */}
+                                    <div className="hidden sm:flex col-span-3 items-center gap-1 text-sm text-muted-foreground">
+                                      {lead.email ? (
+                                        <>
+                                          <Mail className="h-3 w-3 flex-shrink-0" />
+                                          <span className="truncate text-xs">{lead.email}</span>
+                                        </>
+                                      ) : (
+                                        <span className="text-xs">—</span>
+                                      )}
+                                    </div>
+
+                                    {/* Title Column */}
+                                    <div className="hidden sm:flex col-span-1 items-center gap-1 text-sm text-muted-foreground">
                                       {lead.job_title ? (
                                         <>
                                           <Briefcase className="h-3 w-3 flex-shrink-0" />
@@ -335,16 +364,6 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                                       )}
                                     </div>
 
-                                    {/* Score Column */}
-                                    <div className="col-span-6 sm:col-span-1 flex items-center justify-center">
-                                      <Badge 
-                                        variant={lead.score >= 80 ? 'default' : lead.score >= 50 ? 'secondary' : 'outline'} 
-                                        className="text-xs"
-                                      >
-                                        {lead.score}
-                                      </Badge>
-                                    </div>
-
                                     {/* Source Column */}
                                     <div className="col-span-6 sm:col-span-2 flex items-center justify-center">
                                       <Badge variant="outline" className="text-xs">
@@ -353,7 +372,7 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
                                     </div>
 
                                     {/* Created Date Column */}
-                                    <div className="hidden sm:flex col-span-2 items-center justify-center gap-1 text-xs text-muted-foreground">
+                                    <div className="hidden sm:flex col-span-1 items-center justify-center gap-1 text-xs text-muted-foreground">
                                       <Calendar className="h-3 w-3 flex-shrink-0" />
                                       <span>{formatDate(lead.created_at)}</span>
                                     </div>
@@ -424,6 +443,23 @@ export function LeadKanbanBoard({ searchQuery, filters }: { searchQuery: string;
 
               if (leadsResult.success && leadsResult.leads) {
                 setLeads(leadsResult.leads)
+                
+                // Fetch company names for leads that have company_id
+                const companyIds = [...new Set(leadsResult.leads.map(lead => lead.company_id).filter(Boolean) as string[])]
+                if (companyIds.length > 0 && supabase) {
+                  const { data: companiesData } = await supabase
+                    .from('companies')
+                    .select('id, name')
+                    .in('id', companyIds)
+                  
+                  if (companiesData) {
+                    const companyMap: Record<string, string> = {}
+                    companiesData.forEach(company => {
+                      companyMap[company.id] = company.name
+                    })
+                    setCompanies(companyMap)
+                  }
+                }
               }
             } catch (error) {
               console.error('Error reloading lead data:', error)

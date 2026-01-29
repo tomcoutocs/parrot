@@ -20,7 +20,8 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
-  Search
+  Search,
+  UserPlus
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +42,7 @@ import { AutomationWorkflows } from './tabs/automation-workflows'
 import { LeadCampaigns } from './tabs/lead-campaigns'
 import { LeadAnalytics } from './tabs/lead-analytics'
 import { LeadSettings } from './tabs/lead-settings'
+import { LeadReferrals } from './tabs/lead-referrals'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { hasAdminPrivileges } from '@/lib/role-helpers'
@@ -59,6 +61,7 @@ const getNavigationItems = (isAdmin: boolean) => {
     { id: 'automation', label: 'Automation', icon: Zap },
     { id: 'campaigns', label: 'Campaigns', icon: Target },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'referrals', label: 'Referrals', icon: UserPlus },
   ]
   
   if (isAdmin) {
@@ -147,6 +150,8 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
         return <LeadCampaigns />
       case 'analytics':
         return <LeadAnalytics />
+      case 'referrals':
+        return <LeadReferrals />
       case 'settings':
         // Only admins can access settings
         if (!isAdmin) {

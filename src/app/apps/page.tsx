@@ -36,7 +36,7 @@ import { supabase } from '@/lib/supabase'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
-import { hasSystemAdminPrivileges, hasAdminPrivileges } from '@/lib/role-helpers'
+import { hasSystemAdminPrivileges, hasAdminPrivileges, isInternalUser, canAccessApp } from '@/lib/role-helpers'
 import { toastError } from '@/lib/toast'
 
 export default function AppsPage() {
@@ -199,43 +199,41 @@ export default function AppsPage() {
   const hasAppPermission = (appId: string): boolean => {
     if (!session?.user) return false
     
-    // Check for system admin only apps
-    const app = allApps.find(a => a.id === appId)
-    if (app && (app as any).systemAdminOnly) {
-      return hasSystemAdminPrivileges(session.user.role)
-    }
-    
-    if (hasSystemAdminPrivileges(session.user.role)) return true // System admins have all permissions
-    if (hasAdminPrivileges(session.user.role)) return true // Admins have all permissions
-    
+    const userRole = session.user.role
     const tabPermissions = session.user.tab_permissions || []
     
-    // Check for new format (app:tab) - user needs at least one tab permission
-    const hasAnyTab = tabPermissions.some(perm => perm.startsWith(`${appId}:`))
-    
-    // Check for old format (just app name) - grants all tabs
-    const hasAppLevel = tabPermissions.includes(appId)
-    
-    return hasAnyTab || hasAppLevel
+    // Use the centralized canAccessApp function
+    return canAccessApp(appId, userRole, tabPermissions)
   }
 
   // Set availability based on user role and permissions
   const apps = allApps.map(app => {
-    // Admin-only apps require admin or system_admin role AND app permission
+    const userRole = session?.user?.role as string | undefined
+    
+    // Regular users (clients) can only access Client Portal
+    if (userRole === 'user') {
+      if (app.id === 'client-portal') {
+        return app
+      }
+      return { ...app, available: false }
+    }
+    
+    // Admin-only apps require admin, manager, internal, or system_admin role AND app permission
     if (app.adminOnly) {
-      if (!hasAdminPrivileges(session?.user?.role)) {
+      // Regular users cannot access admin-only apps
+      if (userRole === 'user') {
         return { ...app, available: false }
       }
       // System admins and admins have all permissions, so they can access
-      if (hasSystemAdminPrivileges(session?.user?.role) || hasAdminPrivileges(session?.user?.role)) {
+      if (hasSystemAdminPrivileges(userRole) || hasAdminPrivileges(userRole)) {
         return app
       }
-      // Even admins need explicit permission (unless they have all permissions)
+      // For internal users and managers, check if they have explicit permission
       if (!hasAppPermission(app.id)) {
         return { ...app, available: false }
       }
     }
-    // For non-admin-only apps, check permissions
+    // For non-admin-only apps (like Client Portal), check permissions
     if (!hasAppPermission(app.id)) {
       return { ...app, available: false }
     }
@@ -243,17 +241,26 @@ export default function AppsPage() {
   })
 
   const handleAppClick = (appId: string) => {
+    const userRole = session?.user?.role
+    
     if (appId === 'client-portal') {
       // Redirect to the current dashboard
-      if (hasAdminPrivileges(session?.user?.role)) {
+      if (hasAdminPrivileges(userRole)) {
         router.push('/dashboard')
       } else {
         router.push('/dashboard?tab=user-dashboard')
       }
     } else if (appId === 'crm' || appId === 'lead-generation' || appId === 'invoicing' || appId === 'user-management' || appId === 'analytics' || appId === 'platform-customization' || appId === 'automations') {
       // Admin-only apps - check role before allowing access
-      if (!hasAdminPrivileges(session?.user?.role)) {
-        return // Don't navigate if not admin or system admin
+      // Regular users should not be able to access these
+      if (userRole === 'user') {
+        toastError('Access denied: This app is only available to internal users')
+        return
+      }
+      // For internal users and above, check permissions
+      if (!hasAppPermission(appId)) {
+        toastError('Access denied: You do not have permission to access this app')
+        return
       }
       router.push(`/apps/${appId}`)
     } else {

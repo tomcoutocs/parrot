@@ -13,10 +13,10 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select'
-import { createLead, fetchLeadStages, getLeadCustomizationSettings } from '@/lib/database-functions'
+import { createLead, fetchLeadStages, getLeadCustomizationSettings, fetchReferralClients } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
 import { toastSuccess, toastError } from '@/lib/toast'
-import type { LeadStage, LeadSource } from '@/lib/database-functions'
+import type { LeadStage, LeadSource, ReferralClient } from '@/lib/database-functions'
 
 interface CreateLeadModalProps {
   isOpen: boolean
@@ -51,8 +51,10 @@ export default function CreateLeadModal({
   const [sourceId, setSourceId] = useState<string>('none')
   const [score, setScore] = useState<number>(0)
   const [notes, setNotes] = useState('')
+  const [referralId, setReferralId] = useState<string>('none')
   const [isLoading, setIsLoading] = useState(false)
   const [stages, setStages] = useState<LeadStage[]>([])
+  const [referrals, setReferrals] = useState<ReferralClient[]>([])
   // Sources are hardcoded - no need to fetch from database
   const sources = defaultSources
 
@@ -72,6 +74,12 @@ export default function CreateLeadModal({
       setStageId('')
 
       try {
+        // Fetch referral clients
+        const referralsResult = await fetchReferralClients(companyId || undefined)
+        if (referralsResult.success && referralsResult.referrals) {
+          setReferrals(referralsResult.referrals.filter(r => r.is_active))
+        }
+
         // Fetch customization settings to get the stages template (global)
         const settingsResult = await getLeadCustomizationSettings()
         const template = settingsResult.success && settingsResult.data?.default_stages_template 
@@ -238,6 +246,7 @@ export default function CreateLeadModal({
         job_title: jobTitle.trim() || undefined,
         stage_id: stageId || undefined,
         source_id: undefined, // Sources are hardcoded, store type in custom_fields instead
+        referral_id: referralId && referralId !== 'none' ? referralId : undefined,
         custom_fields: sourceId && sourceId !== 'none' ? { source_type: sourceId } : {},
         score: score || 0,
         notes: notes.trim() || undefined,
@@ -253,6 +262,7 @@ export default function CreateLeadModal({
         setPhone('')
         setJobTitle('')
         setSourceId('none')
+        setReferralId('none')
         setScore(0)
         setNotes('')
         
@@ -374,6 +384,22 @@ export default function CreateLeadModal({
                   {sources.map((source) => (
                     <SelectItem key={source.id} value={source.id}>
                       {source.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="referral">Referral Client</Label>
+              <Select value={referralId} onValueChange={(value) => setReferralId(value)}>
+                <SelectTrigger id="referral">
+                  <SelectValue placeholder="Select referral client" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {referrals.map((referral) => (
+                    <SelectItem key={referral.id} value={referral.id}>
+                      {referral.name} {referral.company_name ? `(${referral.company_name})` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>

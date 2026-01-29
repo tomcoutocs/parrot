@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
-import { getLeadById, fetchLeadStages, type Lead, type LeadStage } from '@/lib/database-functions'
+import { getLeadById, fetchLeadStages, deleteLead, type Lead, type LeadStage } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
-import { toastError } from '@/lib/toast'
-import { Calendar, Mail, Phone, Briefcase, FileText, Tag, DollarSign, Clock, User } from 'lucide-react'
+import { toastError, toastSuccess } from '@/lib/toast'
+import { Calendar, Mail, Phone, Briefcase, FileText, Tag, DollarSign, Clock, User, Edit, Trash2 } from 'lucide-react'
+import EditLeadModal from './edit-lead-modal'
+import { DeleteConfirmationDialog } from '@/components/ui/confirmation-dialog'
 
 interface LeadDetailModalProps {
   isOpen: boolean
@@ -28,6 +30,9 @@ export default function LeadDetailModal({
   const [lead, setLead] = useState<Lead | null>(null)
   const [stages, setStages] = useState<LeadStage[]>([])
   const [loading, setLoading] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   
   // Store onClose in a ref to avoid dependency array issues
   const onCloseRef = useRef(onClose)
@@ -120,6 +125,48 @@ export default function LeadDetailModal({
       other: 'Other'
     }
     return sourceNames[sourceType] || sourceType
+  }
+
+  const handleDelete = async () => {
+    if (!lead) return
+
+    setDeleting(true)
+    try {
+      const result = await deleteLead(lead.id)
+      if (result.success) {
+        toastSuccess('Lead deleted successfully')
+        setShowDeleteDialog(false)
+        onLeadUpdated?.()
+        onClose()
+      } else {
+        toastError(result.error || 'Failed to delete lead')
+      }
+    } catch (error: any) {
+      toastError(error.message || 'An error occurred while deleting the lead')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleEditSuccess = () => {
+    // Reload lead data after edit
+    if (leadId) {
+      const loadLead = async () => {
+        setLoading(true)
+        try {
+          const leadResult = await getLeadById(leadId)
+          if (leadResult.success && leadResult.lead) {
+            setLead(leadResult.lead)
+            onLeadUpdated?.()
+          }
+        } catch (error: any) {
+          console.error('Error reloading lead:', error)
+        } finally {
+          setLoading(false)
+        }
+      }
+      loadLead()
+    }
   }
 
   if (!isOpen) return null
@@ -343,7 +390,25 @@ export default function LeadDetailModal({
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-2 pt-4">
+            <div className="flex justify-between items-center pt-4">
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="flex items-center gap-2 text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              </div>
               <Button variant="outline" onClick={onClose}>
                 Close
               </Button>
@@ -355,6 +420,25 @@ export default function LeadDetailModal({
           </div>
         )}
       </DialogContent>
+
+      {/* Edit Modal */}
+      {lead && (
+        <EditLeadModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onLeadUpdated={handleEditSuccess}
+          lead={lead}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        itemName={getLeadName()}
+        isLoading={deleting}
+      />
     </Dialog>
   )
 }

@@ -4,38 +4,84 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { FileText, Mail, Phone, Building2 } from 'lucide-react'
 
-const templates = [
+export interface TemplateField {
+  label: string
+  type: 'text' | 'email' | 'phone' | 'textarea' | 'select'
+  required: boolean
+  placeholder?: string
+  options?: string[]
+}
+
+export interface FormTemplate {
+  id: string
+  name: string
+  description: string
+  icon: any
+  fields: TemplateField[]
+}
+
+export const templates: FormTemplate[] = [
   {
     id: 'contact',
     name: 'Contact Form',
     description: 'Basic contact information capture',
     icon: Mail,
-    fields: ['Name', 'Email', 'Message'],
+    fields: [
+      { label: 'Name', type: 'text', required: true, placeholder: 'Enter your name' },
+      { label: 'Email', type: 'email', required: true, placeholder: 'Enter your email' },
+      { label: 'Message', type: 'textarea', required: true, placeholder: 'Enter your message' },
+    ],
   },
   {
     id: 'demo',
     name: 'Demo Request',
     description: 'Capture leads interested in a demo',
     icon: Phone,
-    fields: ['Name', 'Email', 'Company', 'Phone'],
+    fields: [
+      { label: 'Name', type: 'text', required: true, placeholder: 'Enter your name' },
+      { label: 'Email', type: 'email', required: true, placeholder: 'Enter your email' },
+      { label: 'Company', type: 'text', required: false, placeholder: 'Enter your company name' },
+      { label: 'Phone', type: 'phone', required: false, placeholder: 'Enter your phone number' },
+    ],
   },
   {
     id: 'newsletter',
     name: 'Newsletter Signup',
     description: 'Simple email capture for newsletters',
     icon: FileText,
-    fields: ['Email'],
+    fields: [
+      { label: 'Email', type: 'email', required: true, placeholder: 'Enter your email' },
+    ],
   },
   {
     id: 'enterprise',
     name: 'Enterprise Contact',
     description: 'Comprehensive form for enterprise leads',
     icon: Building2,
-    fields: ['Name', 'Email', 'Company', 'Phone', 'Company Size', 'Industry'],
+    fields: [
+      { label: 'Name', type: 'text', required: true, placeholder: 'Enter your name' },
+      { label: 'Email', type: 'email', required: true, placeholder: 'Enter your email' },
+      { label: 'Company', type: 'text', required: true, placeholder: 'Enter your company name' },
+      { label: 'Phone', type: 'phone', required: false, placeholder: 'Enter your phone number' },
+      { 
+        label: 'Company Size', 
+        type: 'select', 
+        required: false, 
+        placeholder: 'Select company size',
+        options: ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+']
+      },
+      { 
+        label: 'Industry', 
+        type: 'select', 
+        required: false, 
+        placeholder: 'Select industry',
+        options: ['Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing', 'Other']
+      },
+    ],
   },
 ]
 
-export function FormTemplates({ onSelectTemplate }: { onSelectTemplate: (id: string) => void }) {
+export function FormTemplates({ onSelectTemplate }: { onSelectTemplate: (template: FormTemplate) => void }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {templates.map((template) => {
@@ -57,19 +103,19 @@ export function FormTemplates({ onSelectTemplate }: { onSelectTemplate: (id: str
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Fields:</p>
                 <div className="flex flex-wrap gap-1">
-                  {template.fields.map((field) => (
+                  {template.fields.map((field, index) => (
                     <span
-                      key={field}
+                      key={index}
                       className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground"
                     >
-                      {field}
+                      {field.label}
                     </span>
                   ))}
                 </div>
                 <Button
                   variant="outline"
                   className="w-full mt-4"
-                  onClick={() => onSelectTemplate(template.id)}
+                  onClick={() => onSelectTemplate(template)}
                 >
                   Use Template
                 </Button>

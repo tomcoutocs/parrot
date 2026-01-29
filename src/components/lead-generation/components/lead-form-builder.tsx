@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, Trash2, GripVertical, Save } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createLeadForm } from '@/lib/database-functions'
+import { createLeadForm, updateLeadForm, fetchLeadFormFields, type LeadForm } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
 import { toastSuccess, toastError } from '@/lib/toast'
 
@@ -26,9 +26,10 @@ interface FormField {
 
 interface LeadFormBuilderProps {
   onFormCreated?: () => void
+  form?: LeadForm | null
 }
 
-export function LeadFormBuilder({ onFormCreated }: LeadFormBuilderProps = {}) {
+export function LeadFormBuilder({ onFormCreated, form }: LeadFormBuilderProps = {}) {
   const { data: session } = useSession()
   const [formName, setFormName] = useState('')
   const [formTitle, setFormTitle] = useState('New Lead Form')
@@ -39,6 +40,54 @@ export function LeadFormBuilder({ onFormCreated }: LeadFormBuilderProps = {}) {
   ])
   const [aiPersonalization, setAiPersonalization] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [loadingForm, setLoadingForm] = useState(false)
+
+  // Load form data when editing
+  useEffect(() => {
+    const loadFormData = async () => {
+      if (!form) {
+        // Reset to defaults for new form
+        setFormName('')
+        setFormTitle('New Lead Form')
+        setFormDescription('')
+        setFields([
+          { id: '1', type: 'text', label: 'Full Name', placeholder: 'Enter your full name', required: true },
+          { id: '2', type: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
+        ])
+        setAiPersonalization(true)
+        return
+      }
+
+      setLoadingForm(true)
+      try {
+        setFormName(form.name)
+        setFormTitle(form.title)
+        setFormDescription(form.description || '')
+        setAiPersonalization(form.ai_personalization_enabled)
+
+        // Load form fields
+        const fieldsResult = await fetchLeadFormFields(form.id)
+        if (fieldsResult.success && fieldsResult.fields) {
+          const mappedFields: FormField[] = fieldsResult.fields.map((field, index) => ({
+            id: field.id || `field_${index}`,
+            type: field.field_type as FieldType,
+            label: field.label,
+            placeholder: field.placeholder || undefined,
+            required: field.is_required,
+            options: field.options || [],
+          }))
+          setFields(mappedFields)
+        }
+      } catch (error: any) {
+        console.error('Error loading form data:', error)
+        toastError('Failed to load form data')
+      } finally {
+        setLoadingForm(false)
+      }
+    }
+
+    loadFormData()
+  }, [form])
 
   const addField = (type: FieldType) => {
     const newField: FormField = {
@@ -80,44 +129,69 @@ export function LeadFormBuilder({ onFormCreated }: LeadFormBuilderProps = {}) {
     setSaving(true)
 
     try {
-      const result = await createLeadForm({
-        space_id: session.user.company_id,
-        name: formName,
-        title: formTitle,
-        description: formDescription || undefined,
-        ai_personalization_enabled: aiPersonalization,
-        fields: fields.map((field, index) => ({
-          field_type: field.type,
-          label: field.label,
-          placeholder: field.placeholder,
-          is_required: field.required,
-          field_order: index,
-          options: field.options || [],
-        })),
-      })
+      const fieldsData = fields.map((field, index) => ({
+        field_type: field.type,
+        label: field.label,
+        placeholder: field.placeholder,
+        is_required: field.required,
+        field_order: index,
+        options: field.options || [],
+      }))
+
+      let result
+      if (form) {
+        // Update existing form
+        result = await updateLeadForm(form.id, {
+          name: formName,
+          title: formTitle,
+          description: formDescription || undefined,
+          ai_personalization_enabled: aiPersonalization,
+          fields: fieldsData,
+        })
+      } else {
+        // Create new form
+        result = await createLeadForm({
+          space_id: session.user.company_id,
+          name: formName,
+          title: formTitle,
+          description: formDescription || undefined,
+          ai_personalization_enabled: aiPersonalization,
+          fields: fieldsData,
+        })
+      }
 
       if (result.success) {
-        toastSuccess('Form saved successfully')
-        // Reset form
-        setFormName('')
-        setFormTitle('New Lead Form')
-        setFormDescription('')
-        setFields([
-          { id: '1', type: 'text', label: 'Full Name', placeholder: 'Enter your full name', required: true },
-          { id: '2', type: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
-        ])
+        toastSuccess(form ? 'Form updated successfully' : 'Form saved successfully')
+        // Reset form if creating new
+        if (!form) {
+          setFormName('')
+          setFormTitle('New Lead Form')
+          setFormDescription('')
+          setFields([
+            { id: '1', type: 'text', label: 'Full Name', placeholder: 'Enter your full name', required: true },
+            { id: '2', type: 'email', label: 'Email', placeholder: 'Enter your email', required: true },
+          ])
+        }
         // Call callback if provided
         if (onFormCreated) {
           onFormCreated()
         }
       } else {
-        toastError(result.error || 'Failed to save form')
+        toastError(result.error || `Failed to ${form ? 'update' : 'save'} form`)
       }
     } catch (error: any) {
-      toastError(error.message || 'Failed to save form')
+      toastError(error.message || `Failed to ${form ? 'update' : 'save'} form`)
     } finally {
       setSaving(false)
     }
+  }
+
+  if (loadingForm) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-muted-foreground">Loading form...</div>
+      </div>
+    )
   }
 
   return (
@@ -126,8 +200,8 @@ export function LeadFormBuilder({ onFormCreated }: LeadFormBuilderProps = {}) {
       <div className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle>Form Configuration</CardTitle>
-            <CardDescription>Customize your lead capture form</CardDescription>
+            <CardTitle>{form ? 'Edit Form' : 'Form Configuration'}</CardTitle>
+            <CardDescription>{form ? 'Update your lead capture form' : 'Customize your lead capture form'}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -201,7 +275,7 @@ export function LeadFormBuilder({ onFormCreated }: LeadFormBuilderProps = {}) {
             <div className="flex justify-end">
               <Button onClick={handleSave} disabled={saving}>
                 <Save className="w-4 h-4 mr-2" />
-                {saving ? 'Saving...' : 'Save Form'}
+                {saving ? (form ? 'Updating...' : 'Saving...') : (form ? 'Update Form' : 'Save Form')}
               </Button>
             </div>
             {fields.map((field) => (

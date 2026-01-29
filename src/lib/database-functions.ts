@@ -8206,6 +8206,7 @@ export interface Lead {
   space_id?: string
   company_id?: string
   assigned_to?: string
+  referral_id?: string
   first_name?: string
   last_name?: string
   email?: string
@@ -8235,6 +8236,21 @@ export interface Lead {
   updated_at: string
   last_contacted_at?: string
   last_activity_at?: string
+}
+
+export interface ReferralClient {
+  id: string
+  space_id?: string
+  name: string
+  email?: string
+  phone?: string
+  company_name?: string
+  contact_person?: string
+  notes?: string
+  commission_rate?: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface LeadForm {
@@ -8384,11 +8400,14 @@ export async function fetchLeads(filters?: {
     let query = supabase
       .from('leads')
       .select('*')
-      .eq('user_id', currentUser.id)
       .order('created_at', { ascending: false })
 
+    // Filter by space_id - RLS will handle user permissions
     if (filters?.spaceId) {
       query = query.eq('space_id', filters.spaceId)
+    } else if (currentUser.companyId) {
+      // Default to user's space if no filter provided
+      query = query.eq('space_id', currentUser.companyId)
     }
 
     if (filters?.stageId) {
@@ -8436,6 +8455,7 @@ export async function createLead(leadData: {
   space_id?: string
   company_id?: string
   assigned_to?: string
+  referral_id?: string
   first_name?: string
   last_name?: string
   email?: string
@@ -8481,6 +8501,7 @@ export async function createLead(leadData: {
         job_title: leadData.job_title || null,
         stage_id: leadData.stage_id || null,
         source_id: leadData.source_id || null,
+        referral_id: leadData.referral_id || null,
         score: leadData.score || 0,
         status: leadData.status || 'new',
         form_id: leadData.form_id || null,
@@ -8534,16 +8555,20 @@ export async function updateLead(
 
     await setAppContext()
 
+    // Filter by id only - RLS will handle user permissions based on space_id
     const { data, error } = await supabase
       .from('leads')
       .update(updates)
       .eq('id', leadId)
-      .eq('user_id', currentUser.id)
       .select()
-      .single()
+      .maybeSingle() // Use maybeSingle() instead of single() to handle no rows gracefully
 
     if (error) {
       return { success: false, error: error.message }
+    }
+
+    if (!data) {
+      return { success: false, error: 'Lead not found or access denied' }
     }
 
     return { success: true, lead: data }
@@ -8566,20 +8591,182 @@ export async function getLeadById(leadId: string): Promise<{ success: boolean; l
 
     await setAppContext()
 
+    // Filter by id only - RLS will handle user permissions based on space_id
     const { data, error } = await supabase
       .from('leads')
       .select('*')
       .eq('id', leadId)
-      .eq('user_id', currentUser.id)
+      .maybeSingle() // Use maybeSingle() instead of single() to handle no rows gracefully
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    if (!data) {
+      return { success: false, error: 'Lead not found' }
+    }
+
+    return { success: true, lead: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch lead' }
+  }
+}
+
+// ============================================================================
+// REFERRAL CLIENT FUNCTIONS
+// ============================================================================
+
+// Fetch referral clients
+export async function fetchReferralClients(spaceId?: string): Promise<{ success: boolean; referrals?: ReferralClient[]; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('referral_clients')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (spaceId) {
+      query = query.eq('space_id', spaceId)
+    } else if (currentUser.companyId) {
+      query = query.eq('space_id', currentUser.companyId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, referrals: data || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch referral clients' }
+  }
+}
+
+// Create a referral client
+export async function createReferralClient(referralData: {
+  space_id?: string
+  name: string
+  email?: string
+  phone?: string
+  company_name?: string
+  contact_person?: string
+  notes?: string
+  commission_rate?: number
+  is_active?: boolean
+}): Promise<{ success: boolean; referral?: ReferralClient; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('referral_clients')
+      .insert({
+        space_id: referralData.space_id || currentUser.companyId || null,
+        name: referralData.name,
+        email: referralData.email || null,
+        phone: referralData.phone || null,
+        company_name: referralData.company_name || null,
+        contact_person: referralData.contact_person || null,
+        notes: referralData.notes || null,
+        commission_rate: referralData.commission_rate || null,
+        is_active: referralData.is_active !== undefined ? referralData.is_active : true,
+      })
+      .select()
       .single()
 
     if (error) {
       return { success: false, error: error.message }
     }
 
-    return { success: true, lead: data }
+    return { success: true, referral: data }
   } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to fetch lead' }
+    return { success: false, error: error.message || 'Failed to create referral client' }
+  }
+}
+
+// Update a referral client
+export async function updateReferralClient(
+  referralId: string,
+  updates: Partial<ReferralClient>
+): Promise<{ success: boolean; referral?: ReferralClient; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('referral_clients')
+      .update(updates)
+      .eq('id', referralId)
+      .select()
+      .maybeSingle()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    if (!data) {
+      return { success: false, error: 'Referral client not found or access denied' }
+    }
+
+    return { success: true, referral: data }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update referral client' }
+  }
+}
+
+// Delete a referral client
+export async function deleteReferralClient(referralId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('referral_clients')
+      .delete()
+      .eq('id', referralId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete referral client' }
   }
 }
 
@@ -8597,11 +8784,11 @@ export async function deleteLead(leadId: string): Promise<{ success: boolean; er
 
     await setAppContext()
 
+    // Filter by id only - RLS will handle user permissions based on space_id
     const { error } = await supabase
       .from('leads')
       .delete()
       .eq('id', leadId)
-      .eq('user_id', currentUser.id)
 
     if (error) {
       return { success: false, error: error.message }
@@ -8631,29 +8818,19 @@ export async function fetchLeadStages(spaceId?: string): Promise<{ success: bool
 
     await setAppContext()
 
-    // Build query to find stages that match user_id
-    // Since RLS is disabled, we can query directly
+    // Filter by space_id - RLS will handle user permissions
     const targetSpaceId = spaceId || currentUser.companyId
     
-    console.log('Fetching stages:', {
-      userId: currentUser.id,
-      targetSpaceId: targetSpaceId || 'null',
-      spaceIdParam: spaceId || 'undefined'
-    })
-
-    // Get all stages for this user (since everything is global, don't filter by space)
-    let { data, error } = await supabase
+    let query = supabase
       .from('lead_stages')
       .select('*')
-      .eq('user_id', currentUser.id)
       .order('stage_order', { ascending: true })
-    
-    console.log('Initial query result:', {
-      dataLength: data?.length || 0,
-      error: error ? { code: error.code, message: error.message } : null,
-      stageNames: data?.map(s => s.name) || [],
-      userId: currentUser.id
-    })
+
+    if (targetSpaceId) {
+      query = query.eq('space_id', targetSpaceId)
+    }
+
+    let { data, error } = await query
 
     if (error) {
       console.error('Error fetching stages:', error)
@@ -9116,10 +9293,10 @@ export async function fetchLeadSources(spaceId?: string): Promise<{ success: boo
     let query = supabase
       .from('lead_sources')
       .select('*')
-      .eq('user_id', currentUser.id)
       .eq('is_active', true)
       .order('created_at', { ascending: false })
 
+    // Filter by space_id - RLS will handle user permissions
     if (spaceId) {
       query = query.eq('space_id', spaceId)
     } else if (currentUser.companyId) {
@@ -9207,9 +9384,9 @@ export async function fetchLeadForms(spaceId?: string): Promise<{ success: boole
     let query = supabase
       .from('lead_forms')
       .select('*')
-      .eq('user_id', currentUser.id)
       .order('created_at', { ascending: false })
 
+    // Filter by space_id - RLS will handle user permissions
     if (spaceId) {
       query = query.eq('space_id', spaceId)
     } else if (currentUser.companyId) {
@@ -9338,6 +9515,139 @@ export async function fetchLeadFormFields(formId: string): Promise<{ success: bo
     return { success: true, fields: data || [] }
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to fetch form fields' }
+  }
+}
+
+// Update a lead form
+export async function updateLeadForm(
+  formId: string,
+  formData: {
+    name?: string
+    title?: string
+    description?: string
+    thank_you_message?: string
+    redirect_url?: string
+    ai_personalization_enabled?: boolean
+    form_settings?: Record<string, any>
+    is_active?: boolean
+    fields?: Array<{
+      field_type: string
+      label: string
+      placeholder?: string
+      is_required: boolean
+      field_order: number
+      options?: any[]
+      validation_rules?: Record<string, any>
+    }>
+  }
+): Promise<{ success: boolean; form?: LeadForm; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    // Update the form
+    const updateData: any = {}
+    if (formData.name !== undefined) updateData.name = formData.name
+    if (formData.title !== undefined) updateData.title = formData.title
+    if (formData.description !== undefined) updateData.description = formData.description || null
+    if (formData.thank_you_message !== undefined) updateData.thank_you_message = formData.thank_you_message || null
+    if (formData.redirect_url !== undefined) updateData.redirect_url = formData.redirect_url || null
+    if (formData.ai_personalization_enabled !== undefined) updateData.ai_personalization_enabled = formData.ai_personalization_enabled
+    if (formData.form_settings !== undefined) updateData.form_settings = formData.form_settings || {}
+    if (formData.is_active !== undefined) updateData.is_active = formData.is_active
+
+    const { data: form, error: formError } = await supabase
+      .from('lead_forms')
+      .update(updateData)
+      .eq('id', formId)
+      .select()
+      .maybeSingle()
+
+    if (formError) {
+      return { success: false, error: formError.message }
+    }
+
+    if (!form) {
+      return { success: false, error: 'Form not found or access denied' }
+    }
+
+    // Update form fields if provided
+    if (formData.fields && formData.fields.length > 0) {
+      // Delete existing fields
+      await supabase
+        .from('lead_form_fields')
+        .delete()
+        .eq('form_id', formId)
+
+      // Insert new fields
+      const { error: fieldsError } = await supabase
+        .from('lead_form_fields')
+        .insert(
+          formData.fields.map(field => ({
+            form_id: formId,
+            field_type: field.field_type,
+            label: field.label,
+            placeholder: field.placeholder || null,
+            is_required: field.is_required,
+            field_order: field.field_order,
+            options: field.options || [],
+            validation_rules: field.validation_rules || {},
+          }))
+        )
+
+      if (fieldsError) {
+        console.error('Error updating form fields:', fieldsError)
+        // Continue anyway - form is updated
+      }
+    }
+
+    return { success: true, form }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update lead form' }
+  }
+}
+
+// Delete a lead form
+export async function deleteLeadForm(formId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    // Delete form fields first (cascade should handle this, but being explicit)
+    await supabase
+      .from('lead_form_fields')
+      .delete()
+      .eq('form_id', formId)
+
+    // Delete the form
+    const { error } = await supabase
+      .from('lead_forms')
+      .delete()
+      .eq('id', formId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete lead form' }
   }
 }
 
@@ -9541,9 +9851,9 @@ export async function fetchLeadWorkflows(spaceId?: string): Promise<{ success: b
     let query = supabase
       .from('lead_workflows')
       .select('*')
-      .eq('user_id', currentUser.id)
       .order('created_at', { ascending: false })
 
+    // Filter by space_id - RLS will handle user permissions
     if (spaceId) {
       query = query.eq('space_id', spaceId)
     } else if (currentUser.companyId) {
@@ -9799,9 +10109,9 @@ export async function fetchLeadCampaigns(spaceId?: string): Promise<{ success: b
     let query = supabase
       .from('lead_campaigns')
       .select('*')
-      .eq('user_id', currentUser.id)
       .order('created_at', { ascending: false })
 
+    // Filter by space_id - RLS will handle user permissions
     if (spaceId) {
       query = query.eq('space_id', spaceId)
     } else if (currentUser.companyId) {
@@ -10390,10 +10700,10 @@ export async function fetchLeadScoringRules(spaceId?: string): Promise<{ success
     let query = supabase
       .from('lead_scoring_rules')
       .select('*')
-      .eq('user_id', currentUser.id)
       .eq('is_active', true)
       .order('rule_order', { ascending: true })
 
+    // Filter by space_id - RLS will handle user permissions
     if (spaceId) {
       query = query.eq('space_id', spaceId)
     } else if (currentUser.companyId) {

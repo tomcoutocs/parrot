@@ -13,6 +13,7 @@ export interface Client {
   address: string | null
   tax_id: string | null
   notes: string | null
+  referral_id: string | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -25,6 +26,7 @@ export interface CreateClientData {
   address?: string
   tax_id?: string
   notes?: string
+  referral_id?: string
 }
 
 /**
@@ -56,6 +58,7 @@ export async function createClient(
         address: data.address || null,
         tax_id: data.tax_id || null,
         notes: data.notes || null,
+        referral_id: data.referral_id || null,
         is_active: true,
       })
       .select()
@@ -149,6 +152,7 @@ export async function updateClient(
         address: data.address || null,
         tax_id: data.tax_id || null,
         notes: data.notes || null,
+        referral_id: data.referral_id || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', clientId)

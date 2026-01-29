@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from '@/components/providers/session-provider'
 import { UserManagementLayout } from '@/components/user-management/user-management-layout'
 import { Loader2 } from 'lucide-react'
-import { hasAdminPrivileges } from '@/lib/role-helpers'
+import { isInternalUser, canAccessApp } from '@/lib/role-helpers'
+import { toastError } from '@/lib/toast'
 
 function UserManagementContent() {
   const { data: session, status } = useSession()
@@ -19,10 +20,24 @@ function UserManagementContent() {
       return
     }
 
-    // Check if user is admin
-    if (session && !hasAdminPrivileges(session.user.role)) {
-      router.push('/apps')
-      return
+    // Check if user is internal user and has permission
+    if (session) {
+      const userRole = session.user.role
+      const tabPermissions = session.user.tab_permissions || []
+      
+      // Regular users (clients) cannot access this app
+      if (userRole === 'user') {
+        toastError('Access denied: This app is only available to internal users')
+        router.push('/apps')
+        return
+      }
+      
+      // Internal users need explicit permission
+      if (!isInternalUser(userRole) || !canAccessApp('user-management', userRole, tabPermissions)) {
+        toastError('Access denied: You do not have permission to access this app')
+        router.push('/apps')
+        return
+      }
     }
   }, [session, status, router])
 
@@ -45,8 +60,11 @@ function UserManagementContent() {
     return null
   }
 
-  // Double-check admin role before rendering
-  if (!hasAdminPrivileges(session.user.role)) {
+  // Double-check access before rendering
+  const userRole = session.user.role
+  const tabPermissions = session.user.tab_permissions || []
+  
+  if (userRole === 'user' || !isInternalUser(userRole) || !canAccessApp('user-management', userRole, tabPermissions)) {
     return null
   }
 
