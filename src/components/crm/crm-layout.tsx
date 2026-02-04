@@ -18,7 +18,8 @@ import {
   HelpCircle,
   ChevronLeft,
   ChevronRight,
-  Search
+  Search,
+  Phone
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +39,7 @@ import { CRMContacts } from './tabs/crm-contacts'
 import { CRMDeals } from './tabs/crm-deals'
 import { CRMAccounts } from './tabs/crm-accounts'
 import { CRMActivities } from './tabs/crm-activities'
+import { CRMCallLogs } from './tabs/crm-call-logs'
 import { CRMReports } from './tabs/crm-reports'
 import { CRMSettings } from './tabs/crm-settings'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -54,6 +56,7 @@ const navigationItems = [
   { id: 'deals', label: 'Deals', icon: Briefcase },
   { id: 'accounts', label: 'Accounts', icon: Building2 },
   { id: 'activities', label: 'Activities', icon: Calendar },
+  { id: 'call-logs', label: 'Call Logs', icon: Phone },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -157,6 +160,8 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
         return <CRMAccounts />
       case 'activities':
         return <CRMActivities />
+      case 'call-logs':
+        return <CRMCallLogs />
       case 'reports':
         return <CRMReports />
       case 'settings':

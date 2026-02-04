@@ -25,6 +25,8 @@ import { formatDistanceToNow } from 'date-fns'
 import CreateLeadModal from '@/components/modals/create-lead-modal'
 import { CreateSpaceModal } from '@/components/modals/create-space-modal'
 import CreateActivityModal from '@/components/modals/create-activity-modal'
+import LogCallModal from '@/components/modals/log-call-modal'
+import SendEmailModal from '@/components/modals/send-email-modal'
 
 export function CRMDashboard() {
   const { data: session } = useSession()
@@ -55,6 +57,8 @@ export function CRMDashboard() {
   const [isCreateDealModalOpen, setIsCreateDealModalOpen] = useState(false)
   const [isCreateAccountModalOpen, setIsCreateAccountModalOpen] = useState(false)
   const [isCreateActivityModalOpen, setIsCreateActivityModalOpen] = useState(false)
+  const [isLogCallModalOpen, setIsLogCallModalOpen] = useState(false)
+  const [isSendEmailModalOpen, setIsSendEmailModalOpen] = useState(false)
 
   useEffect(() => {
     loadCRMData()
@@ -297,6 +301,22 @@ export function CRMDashboard() {
           loadCRMData()
         }}
       />
+      <LogCallModal
+        isOpen={isLogCallModalOpen}
+        onClose={() => setIsLogCallModalOpen(false)}
+        onCallLogged={() => {
+          setIsLogCallModalOpen(false)
+          loadCRMData()
+        }}
+      />
+      <SendEmailModal
+        isOpen={isSendEmailModalOpen}
+        onClose={() => setIsSendEmailModalOpen(false)}
+        onEmailSent={() => {
+          setIsSendEmailModalOpen(false)
+          loadCRMData()
+        }}
+      />
 
       {/* Stats Grid */}
       {loading ? (
@@ -351,11 +371,11 @@ export function CRMDashboard() {
               <Calendar className="w-4 h-4 mr-2" />
               Schedule Activity
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => setIsSendEmailModalOpen(true)}>
               <Mail className="w-4 h-4 mr-2" />
               Send Email
             </Button>
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => setIsLogCallModalOpen(true)}>
               <Phone className="w-4 h-4 mr-2" />
               Log Call
             </Button>
