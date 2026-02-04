@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Legend } from 'recharts'
+import { useTheme } from '@/components/providers/theme-provider'
 
 export function InvoicingReports() {
   const { data: session } = useSession()
@@ -33,6 +34,10 @@ export function InvoicingReports() {
   })
 
   const spaceId = session?.user?.company_id || null
+  const { resolvedTheme } = useTheme()
+  
+  // Get computed foreground color - use useMemo to ensure it updates with theme
+  const foregroundColor = resolvedTheme === 'dark' ? 'oklch(0.8074 0.0142 93.0137)' : 'oklch(0.15 0 0)'
 
   useEffect(() => {
     loadReportData()
@@ -199,12 +204,29 @@ export function InvoicingReports() {
                   </CardHeader>
                   <CardContent>
                     {revenueData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={250}>
+                      <ResponsiveContainer width="100%" height={250} key={resolvedTheme}>
                         <BarChart data={revenueData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="month" />
-                          <YAxis />
-                          <Tooltip />
+                          <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" opacity={0.2} />
+                          <XAxis 
+                            dataKey="month" 
+                            tick={{ fill: foregroundColor, fontSize: 12, fontWeight: 400 }}
+                            axisLine={{ stroke: 'oklch(var(--border))' }}
+                            tickLine={{ stroke: 'oklch(var(--border))' }}
+                          />
+                          <YAxis 
+                            tick={{ fill: foregroundColor, fontSize: 12, fontWeight: 400 }}
+                            axisLine={{ stroke: 'oklch(var(--border))' }}
+                            tickLine={{ stroke: 'oklch(var(--border))' }}
+                          />
+                          <Tooltip 
+                            contentStyle={{
+                              backgroundColor: 'oklch(var(--background))',
+                              border: '1px solid oklch(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                            labelStyle={{ color: 'oklch(var(--foreground))' }}
+                            itemStyle={{ color: 'oklch(var(--foreground))' }}
+                          />
                           <Bar dataKey="revenue" fill="#0088FE" />
                         </BarChart>
                       </ResponsiveContainer>
@@ -240,7 +262,15 @@ export function InvoicingReports() {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip />
+                          <Tooltip 
+                            contentStyle={{
+                              backgroundColor: 'oklch(var(--background))',
+                              border: '1px solid oklch(var(--border))',
+                              borderRadius: '8px'
+                            }}
+                            labelStyle={{ color: 'oklch(var(--foreground))' }}
+                            itemStyle={{ color: 'oklch(var(--foreground))' }}
+                          />
                         </RechartsPieChart>
                       </ResponsiveContainer>
                     ) : (

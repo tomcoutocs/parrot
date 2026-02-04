@@ -70,4 +70,3 @@ export function canAccessApp(
   
   return hasAnyTab || hasAppLevel
 }
-

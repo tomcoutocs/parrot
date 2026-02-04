@@ -5,10 +5,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { ArrowRight } from 'lucide-react'
-import { fetchLeads, type Lead } from '@/lib/database-functions'
+import { ArrowRight, Trash2 } from 'lucide-react'
+import { fetchLeads, deleteLead, type Lead } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
 import { useRouter } from 'next/navigation'
+import { toastSuccess, toastError } from '@/lib/toast'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 function formatTimeAgo(date: string): string {
   const now = new Date()
@@ -26,6 +37,8 @@ export function RecentLeads() {
   const router = useRouter()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
+  const [deleteLeadId, setDeleteLeadId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     const loadLeads = async () => {
@@ -66,6 +79,26 @@ export function RecentLeads() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'L'
   }
 
+  const handleDelete = async () => {
+    if (!deleteLeadId) return
+
+    setDeleting(true)
+    try {
+      const result = await deleteLead(deleteLeadId)
+      if (result.success) {
+        toastSuccess('Lead deleted successfully')
+        setLeads(leads.filter(lead => lead.id !== deleteLeadId))
+        setDeleteLeadId(null)
+      } else {
+        toastError(result.error || 'Failed to delete lead')
+      }
+    } catch (error: any) {
+      toastError(error.message || 'An error occurred while deleting the lead')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -92,7 +125,7 @@ export function RecentLeads() {
         ) : (
           <div className="space-y-4">
             {leads.map((lead) => (
-              <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+              <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors group">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10">
                     <AvatarFallback>{getInitials(lead)}</AvatarFallback>
@@ -107,11 +140,40 @@ export function RecentLeads() {
                     Score: {lead.score}
                   </Badge>
                   <Badge variant="outline">{lead.status}</Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => setDeleteLeadId(lead.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         )}
+        
+        <AlertDialog open={!!deleteLeadId} onOpenChange={(open) => !open && setDeleteLeadId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Lead</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this lead? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                disabled={deleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   )

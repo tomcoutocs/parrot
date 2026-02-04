@@ -178,6 +178,105 @@
     background-color: var(--color-background) !important;
     color: var(--color-foreground) !important;
   }
+  
+  /* Fix Recharts text color in dark mode - comprehensive targeting with highest specificity */
+  svg.recharts-surface text,
+  svg.recharts-surface tspan,
+  .recharts-wrapper svg text,
+  .recharts-wrapper svg tspan,
+  .recharts-cartesian-axis-tick text,
+  .recharts-cartesian-axis text,
+  .recharts-xAxis text,
+  .recharts-yAxis text,
+  .recharts-xAxis .recharts-cartesian-axis-tick text,
+  .recharts-yAxis .recharts-cartesian-axis-tick text,
+  .recharts-cartesian-axis-tick-value,
+  .recharts-label,
+  .recharts-cartesian-axis-tick-value text,
+  .recharts-label text {
+    fill: oklch(var(--foreground)) !important;
+    color: oklch(var(--foreground)) !important;
+  }
+  
+  /* Force all SVG text elements in recharts to use foreground color */
+  .recharts-wrapper text[class*="recharts"],
+  .recharts-wrapper tspan[class*="recharts"],
+  .recharts-wrapper text,
+  .recharts-wrapper tspan,
+  .recharts-wrapper svg .recharts-cartesian-axis-tick text,
+  .recharts-wrapper svg .recharts-cartesian-axis text {
+    fill: oklch(var(--foreground)) !important;
+  }
+  
+  /* Ensure axis labels use foreground color */
+  .recharts-cartesian-axis .recharts-label,
+  .recharts-cartesian-axis .recharts-label text {
+    fill: oklch(var(--foreground)) !important;
+  }
+  
+  /* Fix Recharts legend text color - comprehensive targeting */
+  .recharts-legend-wrapper text,
+  .recharts-legend-wrapper tspan,
+  .recharts-legend-item-text,
+  .recharts-legend-wrapper .recharts-legend-item text,
+  .recharts-legend-wrapper .recharts-legend-item tspan {
+    fill: oklch(var(--foreground)) !important;
+  }
+  
+  /* Fix Recharts legend wrapper text (HTML elements) */
+  .recharts-legend-wrapper .recharts-legend-item span,
+  .recharts-legend-wrapper span {
+    color: oklch(var(--foreground)) !important;
+  }
+  
+  /* Ensure all text in legend items uses foreground color */
+  .recharts-legend-item {
+    color: oklch(var(--foreground)) !important;
+  }
+  
+  .recharts-legend-item * {
+    color: oklch(var(--foreground)) !important;
+  }
+  
+  /* Aggressive targeting of tspan elements - highest specificity for all nesting levels */
+  .recharts-wrapper svg text tspan,
+  .recharts-wrapper svg tspan,
+  svg.recharts-surface text tspan,
+  svg.recharts-surface tspan,
+  .recharts-cartesian-axis-tick text tspan,
+  .recharts-cartesian-axis text tspan,
+  .recharts-xAxis text tspan,
+  .recharts-yAxis text tspan,
+  .recharts-xAxis .recharts-cartesian-axis-tick text tspan,
+  .recharts-yAxis .recharts-cartesian-axis-tick text tspan,
+  .recharts-wrapper svg g text tspan,
+  .recharts-wrapper svg g g text tspan,
+  .recharts-wrapper svg g g g text tspan,
+  .recharts-wrapper svg g g g g text tspan,
+  .recharts-wrapper svg g g g g g text tspan,
+  .recharts-wrapper svg g[class*="recharts"] text tspan,
+  .recharts-wrapper svg g[class*="recharts"] tspan {
+    fill: oklch(var(--foreground)) !important;
+    color: oklch(var(--foreground)) !important;
+  }
+  
+  /* Target all tspan elements regardless of nesting - universal selector */
+  .recharts-wrapper tspan,
+  .recharts-wrapper svg tspan,
+  svg.recharts-surface tspan,
+  .recharts-wrapper svg * tspan {
+    fill: oklch(var(--foreground)) !important;
+  }
+  
+  /* Dark mode specific override - force white text */
+  .dark .recharts-wrapper svg text tspan,
+  .dark .recharts-wrapper svg tspan,
+  .dark svg.recharts-surface text tspan,
+  .dark svg.recharts-surface tspan,
+  .dark .recharts-wrapper svg * tspan {
+    fill: oklch(0.8074 0.0142 93.0137) !important;
+    color: oklch(0.8074 0.0142 93.0137) !important;
+  }
 }
 
 /* Prose styling for TipTap editor */

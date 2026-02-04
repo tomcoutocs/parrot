@@ -1,6 +1,7 @@
 "use client"
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts'
+import { useTheme } from '@/components/providers/theme-provider'
 
 interface LineChartProps {
   data: Array<{ name: string; value: number; [key: string]: any }>
@@ -28,6 +29,24 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null
 }
 
+const CustomLegend = ({ payload }: any) => {
+  if (!payload || !payload.length) return null
+  
+  return (
+    <div className="flex items-center justify-center gap-4 pt-5">
+      {payload.map((entry: any, index: number) => (
+        <div key={index} className="flex items-center gap-2" style={{ color: 'oklch(var(--foreground))' }}>
+          <div 
+            className="w-3 h-3 rounded-full" 
+            style={{ backgroundColor: entry.color }}
+          />
+          <span style={{ color: 'oklch(var(--foreground))' }}>{entry.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function AnalyticsLineChart({ 
   data, 
   dataKey = 'value', 
@@ -46,10 +65,14 @@ export function AnalyticsLineChart({
 
   const ChartComponent = showArea ? AreaChart : LineChart
   const DataComponent = showArea ? Area : Line
+  const { resolvedTheme } = useTheme()
+  
+  // Get computed foreground color - use useMemo to ensure it updates with theme
+  const foregroundColor = resolvedTheme === 'dark' ? 'oklch(0.8074 0.0142 93.0137)' : 'oklch(0.15 0 0)'
 
   return (
     <div className="w-full h-full">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" key={resolvedTheme}>
         <ChartComponent 
           data={data} 
           margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
@@ -68,24 +91,34 @@ export function AnalyticsLineChart({
           />
           <XAxis 
             dataKey="name" 
-            tick={{ fill: 'oklch(var(--foreground))', fontSize: 12 }}
+            tick={{ fill: foregroundColor, fontSize: 12, fontWeight: 400 }}
             axisLine={{ stroke: 'oklch(var(--border))' }}
             tickLine={{ stroke: 'oklch(var(--border))' }}
-            label={xAxisLabel ? { value: xAxisLabel, position: 'insideBottom', offset: -5, fill: 'oklch(var(--foreground))', fontSize: 12 } : undefined}
+            label={xAxisLabel ? { 
+              value: xAxisLabel, 
+              position: 'insideBottom', 
+              offset: -5, 
+              fill: foregroundColor, 
+              fontSize: 12,
+              style: { fill: foregroundColor, color: foregroundColor }
+            } : undefined}
           />
           <YAxis 
-            tick={{ fill: 'oklch(var(--foreground))', fontSize: 12 }}
+            tick={{ fill: foregroundColor, fontSize: 12, fontWeight: 400 }}
             axisLine={{ stroke: 'oklch(var(--border))' }}
             tickLine={{ stroke: 'oklch(var(--border))' }}
-            label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: 'insideLeft', fill: 'oklch(var(--foreground))', fontSize: 12 } : undefined}
+            label={yAxisLabel ? { 
+              value: yAxisLabel, 
+              angle: -90, 
+              position: 'insideLeft', 
+              fill: foregroundColor, 
+              fontSize: 12,
+              style: { fill: foregroundColor, color: foregroundColor }
+            } : undefined}
             tickFormatter={(value) => value.toLocaleString()}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Legend 
-            wrapperStyle={{ paddingTop: '20px', color: 'oklch(var(--foreground))' }}
-            iconType="line"
-            formatter={(value) => <span style={{ color: 'oklch(var(--foreground))' }}>{value}</span>}
-          />
+          <Legend content={<CustomLegend />} />
           {showArea ? (
             <Area
               type="monotone"

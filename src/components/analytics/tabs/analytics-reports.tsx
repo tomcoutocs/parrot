@@ -48,7 +48,6 @@ import { fetchCompaniesOptimized } from '@/lib/simplified-database-functions'
 import { fetchUsersOptimized } from '@/lib/simplified-database-functions'
 import type { Company, User } from '@/lib/supabase'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
-import { useDebouncedCallback } from '@/hooks/use-debounce'
 
 interface ReportField {
   id: string
@@ -252,8 +251,17 @@ export function AnalyticsReports() {
   const [generating, setGenerating] = useState(false)
   const isInitialMount = useRef(true)
   const skipAutoGenerate = useRef(false)
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const handleGenerateReportRef = useRef<(() => Promise<void>) | undefined>(undefined)
+  const isGeneratingRef = useRef(false)
 
   const handleGenerateReport = useCallback(async () => {
+    // Prevent concurrent calls
+    if (isGeneratingRef.current) {
+      return
+    }
+    
+    isGeneratingRef.current = true
     setGenerating(true)
     try {
       // Calculate date range
@@ -283,12 +291,19 @@ export function AnalyticsReports() {
           from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       }
 
-      // Generate report based on selections with filters
-      const analyticsData = await getAnalyticsStats(
+      // Generate report based on selections with filters - add timeout
+      const analyticsDataPromise = getAnalyticsStats(
         { from, to },
         selectedSpaceId && selectedSpaceId !== 'all' ? selectedSpaceId : undefined,
         selectedUserId && selectedUserId !== 'all' ? selectedUserId : undefined
       )
+      
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 30000)
+      )
+      
+      const analyticsData = await Promise.race([analyticsDataPromise, timeoutPromise]) as Awaited<ReturnType<typeof getAnalyticsStats>>
       
       // Build report data based on selected fields
       const data: any[] = []
@@ -367,25 +382,36 @@ export function AnalyticsReports() {
       setReportData(data)
     } catch (error) {
       console.error('Error generating report:', error)
+      setReportData([])
     } finally {
       setGenerating(false)
+      isGeneratingRef.current = false
     }
   }, [selectedFields, dateRange, chartType, selectedSpaceId, selectedUserId])
 
-  // Debounced version for live preview (500ms delay)
-  const debouncedGenerateReport = useDebouncedCallback(handleGenerateReport, 500)
+  // Keep ref updated with latest function
+  useEffect(() => {
+    handleGenerateReportRef.current = handleGenerateReport
+  }, [handleGenerateReport])
 
-  // Auto-generate report when configuration changes
+  // Generate initial report only once on mount
+  useEffect(() => {
+    if (isInitialMount.current && selectedFields.length > 0) {
+      isInitialMount.current = false
+      const timeout = setTimeout(() => {
+        if (handleGenerateReportRef.current && !isGeneratingRef.current) {
+          handleGenerateReportRef.current()
+        }
+      }, 1000)
+      return () => clearTimeout(timeout)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Auto-generate report when configuration changes (but not on initial mount)
   useEffect(() => {
     // Skip on initial mount
     if (isInitialMount.current) {
-      isInitialMount.current = false
-      // Generate initial report after a short delay
-      setTimeout(() => {
-        if (selectedFields.length > 0) {
-          handleGenerateReport()
-        }
-      }, 300)
       return
     }
 
@@ -395,15 +421,39 @@ export function AnalyticsReports() {
       return
     }
 
-    // Only generate if we have selected fields
-    if (selectedFields.length === 0) {
-      setReportData([])
+    // Skip if already generating
+    if (isGeneratingRef.current) {
       return
     }
 
-    // Trigger debounced generation
-    debouncedGenerateReport()
-  }, [selectedFields, dateRange, chartType, selectedSpaceId, selectedUserId, debouncedGenerateReport, handleGenerateReport])
+    // Only generate if we have selected fields
+    if (selectedFields.length === 0) {
+      setReportData([])
+      setGenerating(false)
+      return
+    }
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+
+    // Debounce the report generation
+    debounceTimerRef.current = setTimeout(() => {
+      if (handleGenerateReportRef.current && !isGeneratingRef.current) {
+        handleGenerateReportRef.current()
+      }
+      debounceTimerRef.current = null
+    }, 1000)
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+    }
+  }, [selectedFields, dateRange, chartType, selectedSpaceId, selectedUserId])
 
   // Load saved report if report ID is in URL
   useEffect(() => {

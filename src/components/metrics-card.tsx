@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown } from "lucide-react"
 import { fetchCompaniesOptimized } from "@/lib/simplified-database-functions"
 import { fetchCompanyReportsData } from "@/lib/api-integrations"
 import { LoadingSpinner } from "@/components/ui/loading-states"
+import { useTheme } from "@/components/providers/theme-provider"
 
 interface PerformanceDataPoint {
   date: string
@@ -32,6 +33,7 @@ interface MetricsCardProps {
 }
 
 export function MetricsCard({ activeSpace }: MetricsCardProps) {
+  const { resolvedTheme } = useTheme()
   const [activeMetric, setActiveMetric] = useState<MetricType>("revenue")
   const [dateRange, setDateRange] = useState<DateRange>("30")
   const [loading, setLoading] = useState(true)
@@ -48,6 +50,9 @@ export function MetricsCard({ activeSpace }: MetricsCardProps) {
     blendedROAS: 0,
     avgCPA: 0,
   })
+  
+  // Get computed foreground color - use useMemo to ensure it updates with theme
+  const foregroundColor = resolvedTheme === 'dark' ? 'oklch(0.8074 0.0142 93.0137)' : 'oklch(0.15 0 0)'
 
   // Load company data and fetch reports
   useEffect(() => {
@@ -226,28 +231,30 @@ export function MetricsCard({ activeSpace }: MetricsCardProps) {
         </div>
       ) : (
         <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" key={resolvedTheme}>
             <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" opacity={0.2} vertical={false} />
             <XAxis 
               dataKey="date" 
               axisLine={false}
               tickLine={false}
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              tick={{ fill: foregroundColor, fontSize: 12, fontWeight: 400 }}
             />
             <YAxis 
               axisLine={false}
               tickLine={false}
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              tick={{ fill: foregroundColor, fontSize: 12, fontWeight: 400 }}
               tickFormatter={chartConfig.formatter}
             />
             <Tooltip 
               contentStyle={{ 
-                backgroundColor: 'white', 
-                border: '1px solid #e5e7eb',
+                backgroundColor: 'oklch(var(--background))', 
+                border: '1px solid oklch(var(--border))',
                 borderRadius: '8px',
                 fontSize: '12px'
               }}
+              labelStyle={{ color: 'oklch(var(--foreground))' }}
+              itemStyle={{ color: 'oklch(var(--foreground))' }}
               formatter={chartConfig.formatter}
             />
             <Line 
