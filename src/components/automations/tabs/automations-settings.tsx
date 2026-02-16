@@ -1,10 +1,16 @@
 "use client"
 
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings, Key, Webhook } from 'lucide-react'
+import { Key, Webhook } from 'lucide-react'
+import { ApiKeysModal } from '../components/api-keys-modal'
+import { WebhooksModal } from '../components/webhooks-modal'
 
 export function AutomationsSettings() {
+  const [apiKeysOpen, setApiKeysOpen] = useState(false)
+  const [webhooksOpen, setWebhooksOpen] = useState(false)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -28,7 +34,7 @@ export function AutomationsSettings() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={() => setApiKeysOpen(true)}>
               Manage API Keys
             </Button>
           </CardContent>
@@ -45,12 +51,15 @@ export function AutomationsSettings() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={() => setWebhooksOpen(true)}>
               Manage Webhooks
             </Button>
           </CardContent>
         </Card>
       </div>
+
+      <ApiKeysModal isOpen={apiKeysOpen} onClose={() => setApiKeysOpen(false)} />
+      <WebhooksModal isOpen={webhooksOpen} onClose={() => setWebhooksOpen(false)} />
     </div>
   )
 }

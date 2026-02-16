@@ -6,11 +6,13 @@ import { createTask } from '@/lib/database-functions'
 
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = getCurrentUser()
-    if (!currentUser) {
+    const body = await request.json().catch(() => ({}))
+    const { automationId, triggerData, webhookTrigger } = body
+
+    if (!automationId) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
+        { success: false, error: 'Automation ID is required' },
+        { status: 400 }
       )
     }
 
@@ -18,15 +20,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Database not configured' },
         { status: 500 }
-      )
-    }
-
-    const { automationId, triggerData } = await request.json()
-
-    if (!automationId) {
-      return NextResponse.json(
-        { success: false, error: 'Automation ID is required' },
-        { status: 400 }
       )
     }
 
@@ -45,18 +38,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify user has access
-    const hasAccess = 
-      automation.user_id === currentUser.id ||
-      (automation.space_id && currentUser.companyId === automation.space_id) ||
-      currentUser.role === 'system_admin' ||
-      currentUser.role === 'admin'
+    const currentUser = getCurrentUser()
+    const isWebhookTrigger = webhookTrigger === true
 
-    if (!hasAccess) {
-      return NextResponse.json(
-        { success: false, error: 'Access denied' },
-        { status: 403 }
-      )
+    // For webhook triggers, skip auth (webhook token already verified)
+    if (!isWebhookTrigger) {
+      if (!currentUser) {
+        return NextResponse.json(
+          { success: false, error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+      const hasAccess =
+        automation.user_id === currentUser.id ||
+        (automation.space_id && currentUser.companyId === automation.space_id) ||
+        currentUser.role === 'system_admin' ||
+        currentUser.role === 'admin'
+      if (!hasAccess) {
+        return NextResponse.json(
+          { success: false, error: 'Access denied' },
+          { status: 403 }
+        )
+      }
     }
 
     // Create execution record
@@ -82,15 +85,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const executingUserId = isWebhookTrigger ? automation.user_id : currentUser?.id
+    const executingSpaceId = automation.space_id || currentUser?.companyId || undefined
+
     // Execute automation workflow
-    // This is a simplified version - in production, this would be a queue-based system
     try {
       const executionResult = await executeWorkflow(
         automation.nodes || [],
         automation.connections || [],
         triggerData || {},
-        currentUser.id,
-        automation.space_id || currentUser.companyId || undefined
+        executingUserId,
+        executingSpaceId
       )
 
       const executionEnd = new Date()

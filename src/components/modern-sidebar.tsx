@@ -185,7 +185,7 @@ export function ModernSidebar({
                   variant="ghost"
                   size="sm"
                   onClick={() => router.push('/apps')}
-                  className="gap-2 h-auto p-0 hover:bg-transparent"
+                  className="gap-2 h-[35px] px-3 hover:bg-transparent"
                 >
                   <Grid3x3 className="w-4 h-4" />
                   <span>Apps</span>

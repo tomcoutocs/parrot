@@ -200,6 +200,11 @@ export async function createAutomation(
 
     const finalSpaceId = spaceId || currentUser.companyId || null
 
+    const finalTriggerConfig = { ...triggerConfig }
+    if (triggerType === 'webhook' && !finalTriggerConfig.webhook_token) {
+      finalTriggerConfig.webhook_token = crypto.randomUUID()
+    }
+
     const { data, error } = await supabase
       .from('automations')
       .insert({
@@ -208,7 +213,7 @@ export async function createAutomation(
         name,
         description,
         trigger_type: triggerType,
-        trigger_config: triggerConfig,
+        trigger_config: finalTriggerConfig,
         is_active: false,
         is_public: false,
       })

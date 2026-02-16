@@ -13,9 +13,6 @@ import {
   BarChart3,
   Settings,
   Grid3x3,
-  LogOut,
-  User,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -24,14 +21,6 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { NotificationBell } from '@/components/notifications/notification-bell'
 import { supabase } from '@/lib/supabase'
 import { InvoicingDashboard } from './tabs/invoicing-dashboard'
 import { InvoicingInvoices } from './tabs/invoicing-invoices'
@@ -46,7 +35,8 @@ import { InvoicingCalendar } from './tabs/invoicing-calendar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
-import { HelpCircle } from 'lucide-react'
+import { hasSystemAdminPrivileges } from '@/lib/role-helpers'
+import { AppsLayoutHeader } from '@/components/apps/apps-layout-header'
 
 interface InvoicingLayoutProps {
   activeTab: string
@@ -122,11 +112,9 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
     }
   }, [session?.user?.id])
 
-  // Get current tab display name
-  const getTabDisplayName = () => {
-    const tab = navigationItems.find(item => item.id === activeTab)
-    return tab ? tab.label : 'Invoicing'
-  }
+  // Get current tab display name and icon
+  const currentTab = navigationItems.find(item => item.id === activeTab) || navigationItems[0]
+  const getTabDisplayName = () => currentTab?.label ?? 'Invoicing'
 
   const renderContent = () => {
     switch (activeTab) {
@@ -156,9 +144,21 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-background">
+      <AppsLayoutHeader
+        pageTitle={getTabDisplayName()}
+        pageIcon={currentTab?.icon}
+        userProfilePicture={userProfilePicture}
+        userName={session?.user?.name || 'User'}
+        showSystemAdmin={hasSystemAdminPrivileges(session?.user?.role)}
+        onSupportClick={() => setShowSupportTicketModal(true)}
+        onUserSettingsClick={() => setShowUserSettingsModal(true)}
+        onSignOut={handleSignOut}
+      />
+
+      <div className="flex flex-1 min-h-0">
       {/* Sidebar Navigation */}
-      <aside className={`bg-sidebar border-r border-border/50 h-screen flex flex-col transition-all duration-200 relative z-10 ${
+      <aside className={`bg-background border-r border-border/50 flex flex-col transition-all duration-200 relative z-10 ${
         isCollapsed ? "w-16" : "w-60"
       }`}>
         {/* Sidebar Header */}
@@ -170,7 +170,7 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
                   variant="ghost"
                   size="sm"
                   onClick={() => router.push('/apps')}
-                  className="gap-2 h-auto p-0 hover:bg-transparent"
+                  className="gap-2 h-[35px] px-3 hover:bg-transparent"
                 >
                   <Grid3x3 className="w-4 h-4" />
                   <span>Apps</span>
@@ -228,70 +228,11 @@ export function InvoicingLayout({ activeTab, onTabChange }: InvoicingLayoutProps
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 relative z-0">
-        {/* Top Bar */}
-        <div className="h-14 border-b border-border/50 flex items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
-            <h2 className="text-lg font-medium">{getTabDisplayName()}</h2>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <NotificationBell />
-            <button
-              onClick={() => setShowSupportTicketModal(true)}
-              className="p-2 hover:bg-muted rounded-md transition-colors"
-              title="Create Support Ticket"
-            >
-              <HelpCircle className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <div className="w-px h-5 bg-border mx-1" />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 hover:bg-muted px-2 py-1 -mx-2 rounded-md transition-colors">
-                  <Avatar className="w-7 h-7">
-                    <AvatarImage src={userProfilePicture || undefined} />
-                    <AvatarFallback className="bg-muted text-xs">
-                      {session?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium">{session?.user?.name || 'User'}</span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem
-                  onClick={() => router.push('/apps')}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <Grid3x3 className="w-4 h-4" />
-                  <span>Back to Apps</span>
-                </DropdownMenuItem>
-                <div className="w-px h-px bg-border mx-2 my-1" />
-                <DropdownMenuItem
-                  onClick={() => setShowUserSettingsModal(true)}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <User className="w-4 h-4" />
-                  <span>User Settings</span>
-                </DropdownMenuItem>
-                <div className="w-px h-px bg-border mx-2 my-1" />
-                <DropdownMenuItem
-                  onClick={handleSignOut}
-                  className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 flex flex-col min-w-0 relative z-0 overflow-y-auto">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {renderContent()}
         </div>
+      </div>
       </div>
 
       {/* Support Ticket Modal */}

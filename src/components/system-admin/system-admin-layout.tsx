@@ -33,6 +33,7 @@ import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { supabase } from '@/lib/supabase'
 import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
 import { HelpCircle } from 'lucide-react'
+import { AppsLayoutHeader } from '@/components/apps/apps-layout-header'
 
 interface SystemAdminLayoutProps {
   activeTab: string
@@ -101,10 +102,8 @@ export function SystemAdminLayout({ activeTab, onTabChange }: SystemAdminLayoutP
     }
   }, [session?.user?.id])
 
-  const getTabDisplayName = () => {
-    const item = navigationItems.find(item => item.id === activeTab)
-    return item ? item.label : 'System Admin'
-  }
+  const currentTab = navigationItems.find(item => item.id === activeTab) || navigationItems[0]
+  const getTabDisplayName = () => currentTab?.label ?? 'System Admin'
 
   const renderContent = () => {
     switch (activeTab) {
@@ -126,9 +125,21 @@ export function SystemAdminLayout({ activeTab, onTabChange }: SystemAdminLayoutP
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-background">
+      <AppsLayoutHeader
+        pageTitle={getTabDisplayName()}
+        pageIcon={currentTab?.icon}
+        userProfilePicture={userProfilePicture}
+        userName={session?.user?.name || 'User'}
+        showSystemAdmin={true}
+        onSupportClick={() => setShowSupportTicketModal(true)}
+        onUserSettingsClick={() => setShowUserSettingsModal(true)}
+        onSignOut={handleSignOut}
+      />
+
+      <div className="flex flex-1 min-h-0">
       {/* Sidebar */}
-      <div className={`${isCollapsed ? 'w-16' : 'w-64'} border-r border-border/50 bg-card transition-all duration-300 flex flex-col`}>
+      <div className={`${isCollapsed ? 'w-16' : 'w-64'} border-r border-border/50 bg-background transition-all duration-300 flex flex-col`}>
         {/* Logo/Header */}
         <div className="h-14 border-b border-border/50 flex items-center justify-between px-4">
           {!isCollapsed && (
@@ -206,57 +217,11 @@ export function SystemAdminLayout({ activeTab, onTabChange }: SystemAdminLayoutP
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 relative z-0">
-        {/* Top Bar */}
-        <div className="h-14 border-b border-border/50 flex items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-medium">{getTabDisplayName()}</h2>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <NotificationBell />
-            <button
-              onClick={() => setShowSupportTicketModal(true)}
-              className="p-2 hover:bg-muted rounded-md transition-colors"
-              title="Create Support Ticket"
-            >
-              <HelpCircle className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <div className="w-px h-5 bg-border mx-1" />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-muted transition-colors">
-                  <Avatar className="w-7 h-7">
-                    <AvatarImage src={userProfilePicture || undefined} />
-                    <AvatarFallback>
-                      {session.user.name?.charAt(0).toUpperCase() || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowUserSettingsModal(true)}>
-                  <User className="w-4 h-4 mr-2" />
-                  User Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push('/apps')}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Back to Apps
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 flex flex-col min-w-0 relative z-0 overflow-y-auto">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {renderContent()}
         </div>
+      </div>
       </div>
 
       {/* Support Ticket Modal */}

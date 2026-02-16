@@ -28,6 +28,7 @@ export function AutomationsBuilder() {
   const [automationDescription, setAutomationDescription] = useState('')
   const [triggerType, setTriggerType] = useState<'webhook' | 'schedule' | 'event' | 'api' | 'manual'>('webhook')
   const [currentAutomationId, setCurrentAutomationId] = useState<string | null>(null)
+  const [loadedTriggerConfig, setLoadedTriggerConfig] = useState<Record<string, unknown> | null>(null)
   const [nodes, setNodes] = useState<WorkflowNode[]>([])
   const [connections, setConnections] = useState<WorkflowConnection[]>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -48,6 +49,7 @@ export function AutomationsBuilder() {
           setAutomationName(automation.name)
           setAutomationDescription(automation.description || '')
           setTriggerType(automation.trigger_type)
+          setLoadedTriggerConfig((automation.trigger_config as Record<string, unknown>) || {})
           
           // Convert database nodes to workflow nodes
           const workflowNodes: WorkflowNode[] = automation.nodes.map(node => ({
@@ -102,12 +104,19 @@ export function AutomationsBuilder() {
       const spaceId = session?.user?.company_id || null
 
       if (currentAutomationId) {
-        // Update existing automation
-        await updateAutomation(currentAutomationId, {
+        // Update existing automation - ensure webhook_token for webhook triggers
+        const updates: { name: string; description: string; trigger_type: typeof triggerType; trigger_config?: Record<string, unknown> } = {
           name: automationName,
           description: automationDescription,
           trigger_type: triggerType,
-        })
+        }
+        if (triggerType === 'webhook') {
+          const triggerConfig = loadedTriggerConfig || {}
+          updates.trigger_config = !triggerConfig.webhook_token
+            ? { ...triggerConfig, webhook_token: crypto.randomUUID() }
+            : triggerConfig
+        }
+        await updateAutomation(currentAutomationId, updates)
 
         // Save nodes
         const nodesToSave = nodes.map((node, index) => ({
