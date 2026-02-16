@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { getLeadById, fetchLeadStages, deleteLead, type Lead, type LeadStage } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
 import { toastError, toastSuccess } from '@/lib/toast'
-import { Calendar, Mail, Phone, Briefcase, FileText, Tag, DollarSign, Clock, User, Edit, Trash2 } from 'lucide-react'
+import { Calendar, Mail, Phone, Briefcase, FileText, Tag, DollarSign, Clock, User, Edit, Trash2, Sparkles } from 'lucide-react'
 import EditLeadModal from './edit-lead-modal'
 import { DeleteConfirmationDialog } from '@/components/ui/confirmation-dialog'
 
@@ -146,6 +146,11 @@ export default function LeadDetailModal({
     } finally {
       setDeleting(false)
     }
+  }
+
+  const handleEnrich = () => {
+    // Feature locked - enrichment API costs per call. Shown for visibility only.
+    toastError('Contact enrichment is coming soon. This feature will be available in a future plan.')
   }
 
   const handleEditSuccess = () => {
@@ -389,9 +394,60 @@ export default function LeadDetailModal({
               </div>
             </div>
 
+            {/* Enriched Data (if available) */}
+            {lead.enriched_data && Object.keys(lead.enriched_data).length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Enriched Data
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    {(lead.enriched_data as Record<string, unknown>).position && (
+                      <div>
+                        <div className="text-muted-foreground">Position</div>
+                        <div className="font-medium">{(lead.enriched_data as Record<string, unknown>).position as string}</div>
+                      </div>
+                    )}
+                    {(lead.enriched_data as Record<string, unknown>).company && (
+                      <div>
+                        <div className="text-muted-foreground">Company</div>
+                        <div className="font-medium">{(lead.enriched_data as Record<string, unknown>).company as string}</div>
+                      </div>
+                    )}
+                    {(lead.social_profiles as Record<string, unknown>)?.linkedin && (
+                      <div>
+                        <div className="text-muted-foreground">LinkedIn</div>
+                        <a
+                          href={(lead.social_profiles as Record<string, unknown>).linkedin as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          View profile
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Actions */}
             <div className="flex justify-between items-center pt-4">
               <div className="flex gap-2">
+                {lead.email && (
+                  <Button
+                    variant="outline"
+                    onClick={handleEnrich}
+                    className="flex items-center gap-2"
+                    title="Contact enrichment - coming soon"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Enrich
+                  </Button>
+                )}
                 <Button 
                   variant="outline" 
                   onClick={() => setShowEditModal(true)}

@@ -9,6 +9,7 @@ import {
   FileText, 
   Zap, 
   Target,
+  Workflow,
   BarChart3, 
   Settings, 
   Plus,
@@ -40,6 +41,7 @@ import { LeadPipeline } from './tabs/lead-pipeline'
 import { LeadCapture } from './tabs/lead-capture'
 import { AutomationWorkflows } from './tabs/automation-workflows'
 import { LeadCampaigns } from './tabs/lead-campaigns'
+import { CampaignBuilderTab } from './tabs/campaign-builder-tab'
 import { LeadAnalytics } from './tabs/lead-analytics'
 import { LeadSettings } from './tabs/lead-settings'
 import { LeadReferrals } from './tabs/lead-referrals'
@@ -60,6 +62,7 @@ const getNavigationItems = (isAdmin: boolean) => {
     { id: 'capture', label: 'Capture', icon: FileText },
     { id: 'automation', label: 'Automation', icon: Zap },
     { id: 'campaigns', label: 'Campaigns', icon: Target },
+    { id: 'campaign-builder', label: 'Campaign Builder', icon: Workflow },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'referrals', label: 'Referrals', icon: UserPlus },
   ]
@@ -148,6 +151,8 @@ export function LeadGenerationLayout({ activeTab, onTabChange }: LeadGenerationL
         return <AutomationWorkflows />
       case 'campaigns':
         return <LeadCampaigns />
+      case 'campaign-builder':
+        return <CampaignBuilderTab onNavigateToCampaigns={() => onTabChange('campaigns')} />
       case 'analytics':
         return <LeadAnalytics />
       case 'referrals':

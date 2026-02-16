@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Edit, Trash2, Play, Pause, Calendar, DollarSign, Target } from 'lucide-react'
+import { Plus, Edit, Trash2, Play, Pause, Calendar, DollarSign, Target, Workflow } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { CampaignSequenceBuilder, type SequenceStep } from '../components/campaign-sequence-builder'
 
 export function LeadCampaigns() {
   const { data: session } = useSession()
@@ -39,6 +40,7 @@ export function LeadCampaigns() {
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingCampaign, setEditingCampaign] = useState<LeadCampaign | null>(null)
+  const [buildingCampaign, setBuildingCampaign] = useState<LeadCampaign | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -137,11 +139,11 @@ export function LeadCampaigns() {
         }
       } else {
         const result = await createLeadCampaign(campaignPayload)
-        if (result.success) {
+        if (result.success && result.campaign) {
           toastSuccess('Campaign created successfully')
           setShowCreateModal(false)
           loadCampaigns()
-          // Dispatch event to refresh dashboard stats
+          setBuildingCampaign(result.campaign)
           window.dispatchEvent(new CustomEvent('campaignChanged'))
         } else {
           toastError(result.error || 'Failed to create campaign')
@@ -169,6 +171,26 @@ export function LeadCampaigns() {
     } catch (error) {
       console.error('Error deleting campaign:', error)
       toastError('An error occurred while deleting the campaign')
+    }
+  }
+
+  const handleSaveSequence = async (steps: SequenceStep[]) => {
+    if (!buildingCampaign) return
+    try {
+      const result = await updateLeadCampaign(buildingCampaign.id, {
+        campaign_settings: {
+          ...(buildingCampaign.campaign_settings || {}),
+          sequence_steps: steps,
+        },
+      })
+      if (result.success) {
+        toastSuccess('Sequence saved')
+        setBuildingCampaign({ ...buildingCampaign, campaign_settings: { ...buildingCampaign.campaign_settings, sequence_steps: steps } })
+      } else {
+        toastError(result.error || 'Failed to save sequence')
+      }
+    } catch (error) {
+      toastError('Failed to save sequence')
     }
   }
 
@@ -224,6 +246,22 @@ export function LeadCampaigns() {
     )
   }
 
+  // Show sequence builder when building a campaign
+  if (buildingCampaign) {
+    const steps = (buildingCampaign.campaign_settings?.sequence_steps as SequenceStep[]) || []
+    return (
+      <CampaignSequenceBuilder
+        campaignName={buildingCampaign.name}
+        campaignId={buildingCampaign.id}
+        initialSteps={steps}
+        isActive={buildingCampaign.status === 'active'}
+        onSave={handleSaveSequence}
+        onToggleActive={() => buildingCampaign && handleToggleStatus(buildingCampaign)}
+        onBack={() => setBuildingCampaign(null)}
+      />
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -244,6 +282,9 @@ export function LeadCampaigns() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Target className="w-12 h-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">No campaigns created yet</p>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
+              Create a campaign and build a sequence with steps like emails, calls, waits, and conditions.
+            </p>
             <Button onClick={handleCreate}>
               <Plus className="w-4 h-4 mr-2" />
               Create Your First Campaign
@@ -269,6 +310,10 @@ export function LeadCampaigns() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setBuildingCampaign(campaign)}>
+                        <Workflow className="w-4 h-4 mr-2" />
+                        Build sequence
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleEdit(campaign)}>
                         <Edit className="w-4 h-4 mr-2" />
                         Edit

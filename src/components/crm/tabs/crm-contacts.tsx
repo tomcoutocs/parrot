@@ -28,6 +28,7 @@ import { fetchLeads, type Lead } from '@/lib/database-functions'
 import { formatDistanceToNow } from 'date-fns'
 import CreateLeadModal from '@/components/modals/create-lead-modal'
 import ImportLeadModal from '@/components/modals/import-lead-modal'
+import { MergeDuplicatesModal } from '@/components/modals/merge-duplicates-modal'
 
 interface Contact {
   id: string
@@ -48,6 +49,7 @@ export function CRMContacts() {
   const [loading, setLoading] = useState(true)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false)
 
   useEffect(() => {
     loadContacts()
@@ -122,6 +124,9 @@ export function CRMContacts() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" onClick={() => setIsMergeModalOpen(true)}>
+          Merge Duplicates
+        </Button>
         <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Import from Leads
@@ -150,6 +155,14 @@ export function CRMContacts() {
           setIsImportModalOpen(false)
           loadContacts()
         }}
+      />
+
+      {/* Merge Duplicates Modal */}
+      <MergeDuplicatesModal
+        isOpen={isMergeModalOpen}
+        onClose={() => setIsMergeModalOpen(false)}
+        spaceId={session?.user?.company_id}
+        onMerged={loadContacts}
       />
 
       {/* Search and Filters */}

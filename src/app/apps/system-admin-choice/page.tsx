@@ -69,7 +69,7 @@ export default function SystemAdminChoicePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Platform Access Card */}
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-primary/50" onClick={handlePlatformClick}>
+          <Card className="glass-app-card cursor-pointer transition-all duration-200 hover:shadow-lg" onClick={handlePlatformClick}>
             <CardHeader>
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">

@@ -8800,6 +8800,403 @@ export async function deleteLead(leadId: string): Promise<{ success: boolean; er
   }
 }
 
+// Find duplicate leads (by email or phone within same space)
+export async function findDuplicateLeads(spaceId?: string): Promise<{
+  success: boolean
+  duplicates?: Array<{ key: string; keyType: 'email' | 'phone'; leads: Lead[] }>
+  error?: string
+}> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const targetSpaceId = spaceId || currentUser.companyId
+    if (!targetSpaceId) {
+      return { success: false, error: 'Space not found' }
+    }
+
+    const { data: leads, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('space_id', targetSpaceId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    // Group by email (non-empty)
+    const byEmail = new Map<string, Lead[]>()
+    const byPhone = new Map<string, Lead[]>()
+    for (const lead of leads || []) {
+      const email = (lead.email || '').trim().toLowerCase()
+      const phone = (lead.phone || '').trim().replace(/\D/g, '')
+      if (email) {
+        if (!byEmail.has(email)) byEmail.set(email, [])
+        byEmail.get(email)!.push(lead)
+      }
+      if (phone && phone.length >= 7) {
+        if (!byPhone.has(phone)) byPhone.set(phone, [])
+        byPhone.get(phone)!.push(lead)
+      }
+    }
+
+    const duplicates: Array<{ key: string; keyType: 'email' | 'phone'; leads: Lead[] }> = []
+    for (const [email, group] of byEmail) {
+      if (group.length > 1) {
+        duplicates.push({ key: email, keyType: 'email', leads: group })
+      }
+    }
+    for (const [phone, group] of byPhone) {
+      if (group.length > 1) {
+        duplicates.push({ key: phone, keyType: 'phone', leads: group })
+      }
+    }
+
+    return { success: true, duplicates }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to find duplicates' }
+  }
+}
+
+// Merge two leads: keep primary, merge data from secondary, reassign activities, delete secondary
+export async function mergeLeads(
+  primaryLeadId: string,
+  secondaryLeadId: string
+): Promise<{ success: boolean; lead?: Lead; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data: primary, error: primaryErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', primaryLeadId)
+      .single()
+
+    const { data: secondary, error: secondaryErr } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', secondaryLeadId)
+      .single()
+
+    if (primaryErr || !primary) {
+      return { success: false, error: 'Primary lead not found' }
+    }
+    if (secondaryErr || !secondary) {
+      return { success: false, error: 'Secondary lead not found' }
+    }
+
+    if (primary.space_id !== secondary.space_id) {
+      return { success: false, error: 'Cannot merge leads from different spaces' }
+    }
+
+    // Merge fields: prefer non-empty from primary, fallback to secondary
+    const merged: Record<string, any> = { ...primary }
+    const mergeField = (key: string) => {
+      const p = primary[key]
+      const s = secondary[key]
+      if (p !== null && p !== undefined && p !== '') return
+      if (s !== null && s !== undefined && s !== '') {
+        merged[key] = s
+      }
+    }
+    mergeField('first_name')
+    mergeField('last_name')
+    mergeField('email')
+    mergeField('phone')
+    mergeField('job_title')
+    mergeField('notes')
+    mergeField('company_id')
+    mergeField('assigned_to')
+    mergeField('stage_id')
+    mergeField('source_id')
+    if (primary.score === 0 && secondary.score > 0) merged.score = secondary.score
+    if (primary.budget == null && secondary.budget != null) merged.budget = secondary.budget
+    if (primary.timeline == null && secondary.timeline) merged.timeline = secondary.timeline
+    if (primary.need == null && secondary.need) merged.need = secondary.need
+    if (primary.authority == null && secondary.authority != null) merged.authority = secondary.authority
+
+    // Merge custom_fields
+    const cfPrimary = (primary.custom_fields as Record<string, any>) || {}
+    const cfSecondary = (secondary.custom_fields as Record<string, any>) || {}
+    merged.custom_fields = { ...cfSecondary, ...cfPrimary }
+
+    // Merge tags (unique)
+    const tagsPrimary = new Set(primary.tags || [])
+    ;(secondary.tags || []).forEach((t: string) => tagsPrimary.add(t))
+    merged.tags = Array.from(tagsPrimary)
+
+    // Merge enriched_data
+    const enPrimary = (primary.enriched_data as Record<string, any>) || {}
+    const enSecondary = (secondary.enriched_data as Record<string, any>) || {}
+    merged.enriched_data = { ...enSecondary, ...enPrimary }
+
+    // Merge social_profiles
+    const spPrimary = (primary.social_profiles as Record<string, any>) || {}
+    const spSecondary = (secondary.social_profiles as Record<string, any>) || {}
+    merged.social_profiles = { ...spSecondary, ...spPrimary }
+
+    // Reassign activities from secondary to primary
+    await supabase.from('lead_activities').update({ lead_id: primaryLeadId }).eq('lead_id', secondaryLeadId)
+
+    // Reassign campaign associations - avoid unique violation by only updating where primary doesn't have that campaign
+    const { data: primaryCampaigns } = await supabase
+      .from('lead_campaign_associations')
+      .select('campaign_id')
+      .eq('lead_id', primaryLeadId)
+    const primaryCampaignIds = new Set((primaryCampaigns || []).map((r) => r.campaign_id))
+
+    const { data: secondaryAssocs } = await supabase
+      .from('lead_campaign_associations')
+      .select('id, campaign_id')
+      .eq('lead_id', secondaryLeadId)
+
+    for (const assoc of secondaryAssocs || []) {
+      if (primaryCampaignIds.has(assoc.campaign_id)) {
+        await supabase.from('lead_campaign_associations').delete().eq('id', assoc.id)
+      } else {
+        await supabase
+          .from('lead_campaign_associations')
+          .update({ lead_id: primaryLeadId })
+          .eq('id', assoc.id)
+      }
+    }
+
+    // Update primary with merged data
+    const { data: updated, error: updateErr } = await supabase
+      .from('leads')
+      .update({
+        first_name: merged.first_name,
+        last_name: merged.last_name,
+        email: merged.email,
+        phone: merged.phone,
+        job_title: merged.job_title,
+        notes: merged.notes,
+        company_id: merged.company_id,
+        assigned_to: merged.assigned_to,
+        stage_id: merged.stage_id,
+        source_id: merged.source_id,
+        score: merged.score,
+        budget: merged.budget,
+        timeline: merged.timeline,
+        need: merged.need,
+        authority: merged.authority,
+        custom_fields: merged.custom_fields,
+        tags: merged.tags,
+        enriched_data: merged.enriched_data,
+        social_profiles: merged.social_profiles,
+      })
+      .eq('id', primaryLeadId)
+      .select()
+      .single()
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message }
+    }
+
+    // Delete secondary lead (cascade will clean up any remaining refs)
+    const { error: deleteErr } = await supabase.from('leads').delete().eq('id', secondaryLeadId)
+    if (deleteErr) {
+      return { success: false, error: 'Merged but failed to remove duplicate: ' + deleteErr.message }
+    }
+
+    return { success: true, lead: updated }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to merge leads' }
+  }
+}
+
+// ============================================================================
+// LEAD CUSTOM FIELDS FUNCTIONS
+// ============================================================================
+
+export interface LeadCustomField {
+  id: string
+  user_id: string
+  space_id: string | null
+  field_name: string
+  field_type: 'text' | 'number' | 'date' | 'boolean' | 'select' | 'multiselect'
+  field_label: string
+  is_required: boolean
+  default_value: string | null
+  options: string[] | Record<string, unknown>[]
+  field_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchLeadCustomFields(spaceId?: string): Promise<{
+  success: boolean
+  fields?: LeadCustomField[]
+  error?: string
+}> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    let query = supabase
+      .from('lead_custom_fields')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('is_active', true)
+      .order('field_order', { ascending: true })
+
+    const targetSpaceId = spaceId || currentUser.companyId
+    if (targetSpaceId) {
+      query = query.or(`space_id.eq.${targetSpaceId},space_id.is.null`)
+    } else {
+      query = query.is('space_id', null)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, fields: (data || []) as LeadCustomField[] }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to fetch custom fields' }
+  }
+}
+
+export async function createLeadCustomField(fieldData: {
+  space_id?: string
+  field_name: string
+  field_type: LeadCustomField['field_type']
+  field_label: string
+  is_required?: boolean
+  default_value?: string
+  options?: string[] | Record<string, unknown>[]
+  field_order?: number
+}): Promise<{ success: boolean; field?: LeadCustomField; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_custom_fields')
+      .insert({
+        user_id: currentUser.id,
+        space_id: fieldData.space_id || currentUser.companyId || null,
+        field_name: fieldData.field_name.replace(/\s+/g, '_').toLowerCase(),
+        field_type: fieldData.field_type,
+        field_label: fieldData.field_label,
+        is_required: fieldData.is_required || false,
+        default_value: fieldData.default_value || null,
+        options: fieldData.options || [],
+        field_order: fieldData.field_order ?? 0,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, field: data as LeadCustomField }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to create custom field' }
+  }
+}
+
+export async function updateLeadCustomField(
+  fieldId: string,
+  updates: Partial<Pick<LeadCustomField, 'field_label' | 'field_type' | 'is_required' | 'default_value' | 'options' | 'field_order' | 'is_active'>>
+): Promise<{ success: boolean; field?: LeadCustomField; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { data, error } = await supabase
+      .from('lead_custom_fields')
+      .update(updates)
+      .eq('id', fieldId)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, field: data as LeadCustomField }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to update custom field' }
+  }
+}
+
+export async function deleteLeadCustomField(fieldId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!supabase) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+
+    const currentUser = getCurrentUser()
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    await setAppContext()
+
+    const { error } = await supabase
+      .from('lead_custom_fields')
+      .delete()
+      .eq('id', fieldId)
+      .eq('user_id', currentUser.id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to delete custom field' }
+  }
+}
+
 // ============================================================================
 // LEAD STAGES FUNCTIONS
 // ============================================================================
@@ -10844,8 +11241,8 @@ export async function deleteLeadScoringRule(ruleId: string): Promise<{ success: 
 // LEAD INTEGRATIONS FUNCTIONS
 // ============================================================================
 
-// Fetch lead integrations
-export async function fetchLeadIntegrations(spaceId?: string): Promise<{ success: boolean; integrations?: any[]; error?: string }> {
+// Fetch lead integrations - user-based (each user has their own connections)
+export async function fetchLeadIntegrations(options?: { spaceId?: string; userOnly?: boolean }): Promise<{ success: boolean; integrations?: any[]; error?: string }> {
   try {
     if (!supabase) {
       return { success: false, error: 'Supabase not configured' }
@@ -10864,10 +11261,11 @@ export async function fetchLeadIntegrations(spaceId?: string): Promise<{ success
       .eq('user_id', currentUser.id)
       .order('created_at', { ascending: false })
 
-    if (spaceId) {
-      query = query.eq('space_id', spaceId)
-    } else if (currentUser.companyId) {
-      query = query.eq('space_id', currentUser.companyId)
+    // When userOnly=true, fetch user's personal integrations (space_id is null)
+    if (options?.userOnly) {
+      query = query.is('space_id', null)
+    } else if (options?.spaceId || currentUser.companyId) {
+      query = query.eq('space_id', options?.spaceId || currentUser.companyId)
     }
 
     const { data, error } = await query
@@ -10882,7 +11280,7 @@ export async function fetchLeadIntegrations(spaceId?: string): Promise<{ success
   }
 }
 
-// Update or create a lead integration
+// Update or create a lead integration - user-based
 export async function upsertLeadIntegration(integrationData: {
   space_id?: string
   integration_type: string
@@ -10890,6 +11288,7 @@ export async function upsertLeadIntegration(integrationData: {
   is_active: boolean
   credentials?: Record<string, any>
   integration_settings?: Record<string, any>
+  userOnly?: boolean
 }): Promise<{ success: boolean; integration?: any; error?: string }> {
   try {
     if (!supabase) {
@@ -10903,7 +11302,7 @@ export async function upsertLeadIntegration(integrationData: {
 
     await setAppContext()
 
-    // Check if integration exists
+    // Check if integration exists - for user-only integrations, match by user_id and type only
     let query = supabase
       .from('lead_integrations')
       .select('id')
@@ -10911,15 +11310,17 @@ export async function upsertLeadIntegration(integrationData: {
       .eq('integration_type', integrationData.integration_type)
       .eq('integration_name', integrationData.integration_name)
 
-    if (integrationData.space_id || currentUser.companyId) {
+    if (!integrationData.userOnly && (integrationData.space_id || currentUser.companyId)) {
       query = query.eq('space_id', integrationData.space_id || currentUser.companyId)
+    } else if (integrationData.userOnly) {
+      query = query.is('space_id', null)
     }
 
     const { data: existing } = await query.single()
 
     const integrationPayload = {
       user_id: currentUser.id,
-      space_id: integrationData.space_id || currentUser.companyId || null,
+      space_id: integrationData.userOnly ? null : (integrationData.space_id || currentUser.companyId || null),
       integration_type: integrationData.integration_type,
       integration_name: integrationData.integration_name,
       is_active: integrationData.is_active,

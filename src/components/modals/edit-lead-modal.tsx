@@ -13,7 +13,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select'
-import { updateLead, fetchLeadStages, fetchReferralClients, type Lead, type LeadStage, type ReferralClient } from '@/lib/database-functions'
+import { updateLead, fetchLeadStages, fetchReferralClients, fetchLeadCustomFields, type Lead, type LeadStage, type ReferralClient, type LeadCustomField } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
 import { toastSuccess, toastError } from '@/lib/toast'
 
@@ -56,6 +56,8 @@ export default function EditLeadModal({
   const [isLoading, setIsLoading] = useState(false)
   const [stages, setStages] = useState<LeadStage[]>([])
   const [referrals, setReferrals] = useState<ReferralClient[]>([])
+  const [customFields, setCustomFields] = useState<LeadCustomField[]>([])
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | number | boolean>>({})
   const sources = defaultSources
 
   const companyId = session?.user?.company_id
@@ -73,6 +75,14 @@ export default function EditLeadModal({
       setReferralId(lead.referral_id || 'none')
       setScore(lead.score || 0)
       setNotes(lead.notes || '')
+      const cf = (lead.custom_fields as Record<string, unknown>) || {}
+      const vals: Record<string, string | number | boolean> = {}
+      Object.entries(cf).forEach(([k, v]) => {
+        if (k !== 'source_type' && v !== null && v !== undefined) {
+          vals[k] = v as string | number | boolean
+        }
+      })
+      setCustomFieldValues(vals)
     }
   }, [isOpen, lead])
 
@@ -89,6 +99,11 @@ export default function EditLeadModal({
         const referralsResult = await fetchReferralClients(companyId)
         if (referralsResult.success && referralsResult.referrals) {
           setReferrals(referralsResult.referrals.filter(r => r.is_active))
+        }
+
+        const customFieldsResult = await fetchLeadCustomFields(companyId)
+        if (customFieldsResult.success && customFieldsResult.fields) {
+          setCustomFields(customFieldsResult.fields)
         }
       } catch (error: any) {
         console.error('Error loading data:', error)
@@ -107,11 +122,9 @@ export default function EditLeadModal({
     setIsLoading(true)
 
     try {
-      const customFields = { ...(lead.custom_fields as any || {}) }
-      if (sourceId && sourceId !== 'none') {
-        customFields.source_type = sourceId
-      } else {
-        delete customFields.source_type
+      const customFieldsPayload: Record<string, unknown> = {
+        ...(sourceId && sourceId !== 'none' ? { source_type: sourceId } : {}),
+        ...customFieldValues,
       }
 
       const result = await updateLead(lead.id, {
@@ -122,7 +135,7 @@ export default function EditLeadModal({
         job_title: jobTitle.trim() || undefined,
         stage_id: stageId || undefined,
         referral_id: referralId && referralId !== 'none' ? referralId : undefined,
-        custom_fields: customFields,
+        custom_fields: customFieldsPayload,
         score: score || 0,
         notes: notes.trim() || undefined,
       })
@@ -266,6 +279,90 @@ export default function EditLeadModal({
               </Select>
             </div>
           </div>
+
+          {customFields.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium">Custom Fields</h4>
+              <div className="grid grid-cols-2 gap-4">
+                {customFields.map((field) => (
+                  <div key={field.id} className="space-y-2">
+                    <Label htmlFor={`cf-${field.field_name}`}>
+                      {field.field_label}
+                      {field.is_required && <span className="text-destructive"> *</span>}
+                    </Label>
+                    {field.field_type === 'text' && (
+                      <Input
+                        id={`cf-${field.field_name}`}
+                        value={(customFieldValues[field.field_name] as string) || ''}
+                        onChange={(e) =>
+                          setCustomFieldValues((prev) => ({ ...prev, [field.field_name]: e.target.value }))
+                        }
+                        placeholder={field.field_label}
+                      />
+                    )}
+                    {field.field_type === 'number' && (
+                      <Input
+                        id={`cf-${field.field_name}`}
+                        type="number"
+                        value={(customFieldValues[field.field_name] as number) ?? ''}
+                        onChange={(e) =>
+                          setCustomFieldValues((prev) => ({
+                            ...prev,
+                            [field.field_name]: parseFloat(e.target.value) || 0,
+                          }))
+                        }
+                      />
+                    )}
+                    {field.field_type === 'date' && (
+                      <Input
+                        id={`cf-${field.field_name}`}
+                        type="date"
+                        value={(customFieldValues[field.field_name] as string) || ''}
+                        onChange={(e) =>
+                          setCustomFieldValues((prev) => ({ ...prev, [field.field_name]: e.target.value }))
+                        }
+                      />
+                    )}
+                    {field.field_type === 'boolean' && (
+                      <Select
+                        value={(customFieldValues[field.field_name] as boolean)?.toString() || 'false'}
+                        onValueChange={(v) =>
+                          setCustomFieldValues((prev) => ({ ...prev, [field.field_name]: v === 'true' }))
+                        }
+                      >
+                        <SelectTrigger id={`cf-${field.field_name}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="false">No</SelectItem>
+                          <SelectItem value="true">Yes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {(field.field_type === 'select' || field.field_type === 'multiselect') && (
+                      <Select
+                        value={(customFieldValues[field.field_name] as string) || ''}
+                        onValueChange={(v) =>
+                          setCustomFieldValues((prev) => ({ ...prev, [field.field_name]: v }))
+                        }
+                      >
+                        <SelectTrigger id={`cf-${field.field_name}`}>
+                          <SelectValue placeholder={`Select ${field.field_label}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(field.options as string[] || []).map((opt) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
