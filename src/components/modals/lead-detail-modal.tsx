@@ -404,23 +404,23 @@ export default function LeadDetailModal({
                     Enriched Data
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    {(lead.enriched_data as Record<string, unknown>).position && (
+                    {(lead.enriched_data as Record<string, unknown>)?.position ? (
                       <div>
                         <div className="text-muted-foreground">Position</div>
-                        <div className="font-medium">{(lead.enriched_data as Record<string, unknown>).position as string}</div>
+                        <div className="font-medium">{String((lead.enriched_data as Record<string, unknown>).position)}</div>
                       </div>
-                    )}
-                    {(lead.enriched_data as Record<string, unknown>).company && (
+                    ) : null}
+                    {(lead.enriched_data as Record<string, unknown>)?.company ? (
                       <div>
                         <div className="text-muted-foreground">Company</div>
-                        <div className="font-medium">{(lead.enriched_data as Record<string, unknown>).company as string}</div>
+                        <div className="font-medium">{String((lead.enriched_data as Record<string, unknown>).company)}</div>
                       </div>
-                    )}
-                    {(lead.social_profiles as Record<string, unknown>)?.linkedin && (
+                    ) : null}
+                    {(lead.social_profiles as Record<string, unknown>)?.linkedin ? (
                       <div>
                         <div className="text-muted-foreground">LinkedIn</div>
                         <a
-                          href={(lead.social_profiles as Record<string, unknown>).linkedin as string}
+                          href={String((lead.social_profiles as Record<string, unknown>).linkedin)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-medium text-primary hover:underline"
@@ -428,7 +428,7 @@ export default function LeadDetailModal({
                           View profile
                         </a>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </>
