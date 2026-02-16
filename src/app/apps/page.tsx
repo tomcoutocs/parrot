@@ -4,14 +4,11 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useSession, useAuth } from '@/components/providers/session-provider'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { 
   Briefcase, 
   Users, 
   FileText, 
   DollarSign, 
-  Settings, 
   HelpCircle,
   ArrowRight,
   Loader2,
@@ -36,7 +33,7 @@ import { supabase } from '@/lib/supabase'
 import UserSettingsTab from '@/components/tabs/user-settings-tab'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { SupportTicketModal } from '@/components/modals/support-ticket-modal'
-import { hasSystemAdminPrivileges, hasAdminPrivileges, isInternalUser, canAccessApp } from '@/lib/role-helpers'
+import { hasSystemAdminPrivileges, hasAdminPrivileges, canAccessApp } from '@/lib/role-helpers'
 import { toastError } from '@/lib/toast'
 
 export default function AppsPage() {
@@ -111,31 +108,28 @@ export default function AppsPage() {
       name: 'Lead Generation',
       description: 'Manage and track your leads, campaigns, and conversions',
       icon: Users,
-      color: 'text-blue-400 dark:text-blue-500',
-      bgColor: 'bg-blue-50/50 dark:bg-blue-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(59,130,246,0.12)] dark:hover:shadow-[0_4px_12px_rgba(59,130,246,0.18)]',
+      color: 'text-blue-400 dark:text-blue-400',
+      glassGlow: '59,130,246',
       available: true,
-      adminOnly: true, // Only admins can access this app
+      adminOnly: true,
     },
     {
       id: 'crm',
       name: 'Customer Relation Management',
       description: 'Build stronger relationships with your customers',
       icon: Briefcase,
-      color: 'text-emerald-400 dark:text-emerald-500',
-      bgColor: 'bg-emerald-50/50 dark:bg-emerald-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(16,185,129,0.12)] dark:hover:shadow-[0_4px_12px_rgba(16,185,129,0.18)]',
+      color: 'text-emerald-400 dark:text-emerald-400',
+      glassGlow: '16,185,129',
       available: true,
-      adminOnly: true, // Only admins can access this app
+      adminOnly: true,
     },
     {
       id: 'client-portal',
       name: 'Client Portal',
       description: 'Access your projects, tasks, documents, and more',
       icon: FileText,
-      color: 'text-violet-400 dark:text-violet-500',
-      bgColor: 'bg-violet-50/50 dark:bg-violet-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(139,92,246,0.12)] dark:hover:shadow-[0_4px_12px_rgba(139,92,246,0.18)]',
+      color: 'text-violet-400 dark:text-violet-400',
+      glassGlow: '139,92,246',
       available: true,
     },
     {
@@ -143,55 +137,50 @@ export default function AppsPage() {
       name: 'Invoicing & Billing',
       description: 'Create invoices, track payments, and manage billing',
       icon: DollarSign,
-      color: 'text-amber-400 dark:text-amber-500',
-      bgColor: 'bg-amber-50/50 dark:bg-amber-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(245,158,11,0.12)] dark:hover:shadow-[0_4px_12px_rgba(245,158,11,0.18)]',
+      color: 'text-amber-400 dark:text-amber-400',
+      glassGlow: '245,158,11',
       available: true,
-      adminOnly: true, // Only admins can access this app
+      adminOnly: true,
     },
     {
       id: 'user-management',
       name: 'User Management',
       description: 'Manage users, roles, permissions, and access controls',
       icon: UserCog,
-      color: 'text-indigo-400 dark:text-indigo-500',
-      bgColor: 'bg-indigo-50/50 dark:bg-indigo-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(99,102,241,0.12)] dark:hover:shadow-[0_4px_12px_rgba(99,102,241,0.18)]',
+      color: 'text-indigo-400 dark:text-indigo-400',
+      glassGlow: '99,102,241',
       available: true,
-      adminOnly: true, // Only admins can access this app
+      adminOnly: true,
     },
     {
       id: 'analytics',
       name: 'Analytics',
       description: 'View insights, reports, and data visualizations',
       icon: BarChart3,
-      color: 'text-rose-400 dark:text-rose-500',
-      bgColor: 'bg-rose-50/50 dark:bg-rose-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(244,63,94,0.12)] dark:hover:shadow-[0_4px_12px_rgba(244,63,94,0.18)]',
+      color: 'text-rose-400 dark:text-rose-400',
+      glassGlow: '244,63,94',
       available: true,
-      adminOnly: true, // Only admins can access this app
+      adminOnly: true,
     },
     {
       id: 'automations',
       name: 'Automations',
       description: 'Build custom automation workflows and pipelines',
       icon: Zap,
-      color: 'text-purple-400 dark:text-purple-500',
-      bgColor: 'bg-purple-50/50 dark:bg-purple-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(168,85,247,0.12)] dark:hover:shadow-[0_4px_12px_rgba(168,85,247,0.18)]',
+      color: 'text-purple-400 dark:text-purple-400',
+      glassGlow: '168,85,247',
       available: true,
-      adminOnly: true, // Only admins can access this app
+      adminOnly: true,
     },
     {
       id: 'platform-customization',
       name: 'Platform Customization',
       description: 'Customize branding, themes, and white-label settings for your space',
       icon: Palette,
-      color: 'text-fuchsia-400 dark:text-fuchsia-500',
-      bgColor: 'bg-fuchsia-50/50 dark:bg-fuchsia-950/30',
-      hoverShadow: 'hover:shadow-[0_4px_12px_rgba(240,171,252,0.12)] dark:hover:shadow-[0_4px_12px_rgba(240,171,252,0.18)]',
+      color: 'text-fuchsia-400 dark:text-fuchsia-400',
+      glassGlow: '240,171,252',
       available: true,
-      adminOnly: true, // Only admins can access this app
+      adminOnly: true,
     },
   ]
 
@@ -271,8 +260,11 @@ export default function AppsPage() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading your apps...</p>
+        </div>
       </div>
     )
   }
@@ -282,9 +274,9 @@ export default function AppsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="min-h-screen bg-background">
+      {/* Header — matches page background for seamless look */}
+      <header className="sticky top-0 z-50 bg-background">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -358,63 +350,93 @@ export default function AppsPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold tracking-tight mb-2">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground/95">
               Welcome back, {session?.user?.name || 'User'}!
             </h2>
+            <p className="text-muted-foreground mt-1 text-sm">Choose an app to get started</p>
           </div>
 
-          {/* App Grid */}
+          {/* App Grid — Liquid glass cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {apps.map((app) => {
               const Icon = app.icon
               return (
-                <Card
+                <div
                   key={app.id}
-                  className={`flex flex-col h-full cursor-pointer transition-all duration-300 border-border/50 hover:scale-[1.01] ${
-                    app.available
-                      ? `${app.hoverShadow}`
-                      : 'opacity-60 cursor-not-allowed'
-                  }`}
+                  className={`
+                    group flex flex-col h-full cursor-pointer transition-all duration-300 ease-out
+                    rounded-2xl
+                    border border-gray-200/80 dark:border-white/10
+                    bg-white/60 dark:bg-white/[0.06] backdrop-blur-xl backdrop-saturate-150
+                    supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-white/[0.08]
+                    shadow-[0_1px_2px_rgba(0,0,0,0.05),0_4px_12px_rgba(0,0,0,0.08)]
+                    dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset,0_2px_12px_rgba(0,0,0,0.3)]
+                    hover:scale-[1.02] hover:border-gray-300 dark:hover:border-white/15
+                    hover:shadow-[0_4px_6px_rgba(0,0,0,0.05),0_12px_24px_rgba(0,0,0,0.1)]
+                    dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.1)_inset,0_8px_32px_rgba(0,0,0,0.4)]
+                    ${!app.available ? 'opacity-60 cursor-not-allowed hover:scale-100' : ''}
+                  `}
                   onClick={() => app.available && handleAppClick(app.id)}
+                  onMouseEnter={(e) => {
+                    if (app.available) {
+                      const g = (app as { glassGlow?: string }).glassGlow || '120,120,120'
+                      const isDark = document.documentElement.classList.contains('dark')
+                      const intensity = isDark ? 0.2 : 0.14
+                      const baseShadow = isDark
+                        ? '0 0 0 1px rgba(255,255,255,0.1) inset, 0 8px 32px rgba(0,0,0,0.4)'
+                        : '0 4px 6px rgba(0,0,0,0.05), 0 12px 24px rgba(0,0,0,0.1)'
+                      e.currentTarget.style.boxShadow = `${baseShadow}, 0 0 24px rgba(${g},${intensity})`
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = ''
+                  }}
                 >
-                  <CardHeader className="flex-shrink-0">
-                    <div className="flex items-start justify-between">
-                      <div className={`p-3 rounded-lg transition-colors duration-300 ${app.bgColor}`}>
-                        <Icon className={`w-8 h-8 ${app.color}`} />
+                  <div className="flex flex-col flex-1 gap-5 p-5">
+                    <div className="flex items-center justify-between gap-3 flex-shrink-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div
+                          className={`flex-shrink-0 p-2.5 rounded-xl bg-white/50 dark:bg-white/10 backdrop-blur-sm border border-white/20 dark:border-white/10 transition-colors duration-300 ${!app.available ? '' : 'group-hover:bg-white/60 dark:group-hover:bg-white/15'}`}
+                        >
+                          <Icon className={`w-7 h-7 ${app.color}`} />
+                        </div>
+                        <h3 className="text-lg font-semibold leading-tight break-words">{app.name}</h3>
                       </div>
                       {!app.available && (
-                        <span className="text-xs font-medium px-2 py-1 rounded bg-muted/50 text-muted-foreground">
+                        <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-md bg-white/30 dark:bg-white/10 text-muted-foreground backdrop-blur-sm">
                           Coming Soon
                         </span>
                       )}
                     </div>
-                    <CardTitle className="mt-4">{app.name}</CardTitle>
-                    <CardDescription>{app.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="mt-auto flex-shrink-0">
-                    <Button
-                      variant={app.available ? 'default' : 'outline'}
-                      className="w-full gap-2"
-                      disabled={!app.available}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (app.available) {
-                          handleAppClick(app.id)
-                        }
-                      }}
-                    >
-                      {app.available ? (
-                        <>
-                          Open App
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      ) : (
-                        'Coming Soon'
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
+                    <p className="text-sm text-muted-foreground leading-snug flex-1 break-words min-h-0">{app.description}</p>
+                    <div className="mt-auto flex-shrink-0">
+                      <div
+                        className={`
+                          flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl
+                          text-sm font-medium transition-all duration-300
+                          ${app.available
+                            ? 'bg-white/60 dark:bg-white/10 hover:bg-white/80 dark:hover:bg-white/15 border border-white/30 dark:border-white/10'
+                            : 'bg-white/30 dark:bg-white/5 border border-white/20 dark:border-white/5'
+                          }
+                        `}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (app.available) handleAppClick(app.id)
+                        }}
+                      >
+                        {app.available ? (
+                          <>
+                            Open App
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                        ) : (
+                          'Coming Soon'
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )
             })}
           </div>

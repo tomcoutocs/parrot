@@ -114,12 +114,12 @@ export function InvoicingDashboard() {
     }
   }
 
-  const statCards = [
+  const statCards: Array<{ title: string; value: string; description: string; trend: 'up' | 'down' | 'neutral'; icon: typeof DollarSign; color: string }> = [
     {
       title: 'Total Revenue',
       value: `$${(stats.totalRevenue / 1000).toFixed(0)}K`,
-      description: '+18% from last month',
-      trend: 'up' as const,
+      description: 'All paid invoices',
+      trend: 'neutral',
       icon: DollarSign,
       color: 'text-emerald-600',
     },
@@ -127,7 +127,7 @@ export function InvoicingDashboard() {
       title: 'Outstanding',
       value: `$${(stats.outstandingInvoices / 1000).toFixed(0)}K`,
       description: 'Invoices pending payment',
-      trend: 'neutral' as const,
+      trend: 'neutral',
       icon: Clock,
       color: 'text-amber-600',
     },
@@ -135,15 +135,15 @@ export function InvoicingDashboard() {
       title: 'Overdue',
       value: `$${(stats.overdueAmount / 1000).toFixed(0)}K`,
       description: 'Requires attention',
-      trend: 'down' as const,
+      trend: 'down',
       icon: AlertCircle,
       color: 'text-red-600',
     },
     {
       title: 'Paid This Month',
       value: `$${(stats.paidThisMonth / 1000).toFixed(0)}K`,
-      description: '+12% from last month',
-      trend: 'up' as const,
+      description: 'Received this month',
+      trend: 'neutral',
       icon: CheckCircle,
       color: 'text-blue-600',
     },

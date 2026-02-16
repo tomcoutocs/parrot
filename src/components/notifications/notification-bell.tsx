@@ -284,6 +284,8 @@ export function NotificationBell({ className }: NotificationBellProps) {
           variant="ghost"
           size="icon"
           className={cn("relative", className)}
+          aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'View notifications'}
+          title={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (

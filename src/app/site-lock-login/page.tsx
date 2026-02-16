@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle, Loader2 } from 'lucide-react'
 
 export default function SiteLockLogin() {
   const [username, setUsername] = useState('')
@@ -45,7 +48,7 @@ export default function SiteLockLogin() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <div className="w-full max-w-md">
-        <div className="bg-card border border-border rounded-lg shadow-lg p-8 space-y-6">
+        <div className="bg-card border border-border rounded-xl shadow-lg p-8 space-y-6">
           <div className="text-center space-y-3">
             <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded-md p-4 mb-2">
               <p className="font-semibold text-base">
@@ -59,10 +62,14 @@ export default function SiteLockLogin() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <Alert variant="destructive" className="gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
-              <label htmlFor="username" className="text-sm font-medium">
-                Username
-              </label>
+              <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
                 type="text"
@@ -76,9 +83,7 @@ export default function SiteLockLogin() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -90,18 +95,20 @@ export default function SiteLockLogin() {
               />
             </div>
 
-            {error && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-md p-3">
-                {error}
-              </div>
-            )}
-
             <Button
               type="submit"
               className="w-full"
+              size="lg"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                'Sign In'
+              )}
             </Button>
           </form>
         </div>

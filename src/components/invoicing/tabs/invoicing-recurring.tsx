@@ -23,7 +23,8 @@ import {
   MoreVertical,
   CheckCircle,
   Loader2,
-  XCircle
+  XCircle,
+  AlertCircle
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -33,12 +34,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toastSuccess, toastError } from '@/lib/toast'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+
+const isTableNotFoundError = (err: string) =>
+  err?.toLowerCase().includes('does not exist') ||
+  err?.toLowerCase().includes('relation') ||
+  err?.toLowerCase().includes('404') ||
+  err?.toLowerCase().includes('not found')
 
 export function InvoicingRecurring() {
   const { data: session } = useSession()
   const [searchTerm, setSearchTerm] = useState('')
   const [recurring, setRecurring] = useState<RecurringInvoice[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const spaceId = session?.user?.company_id || null
 
@@ -48,13 +57,19 @@ export function InvoicingRecurring() {
 
   const loadRecurring = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const result = await getRecurringInvoices(spaceId || undefined)
       if (result.success && result.data) {
         setRecurring(result.data)
+      } else if (!result.success && result.error) {
+        setLoadError(result.error)
+        setRecurring([])
       }
     } catch (error) {
       console.error('Error loading recurring invoices:', error)
+      setLoadError('Failed to load recurring invoices. Please try again.')
+      setRecurring([])
     } finally {
       setLoading(false)
     }
@@ -198,12 +213,32 @@ export function InvoicingRecurring() {
           <CardTitle>Recurring Invoices ({filteredRecurring.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin" />
+          {loadError ? (
+            <div className="space-y-3">
+              <Alert variant="destructive" className="gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <AlertDescription>
+                  {isTableNotFoundError(loadError) ? (
+                    'Recurring invoices are not yet set up for your workspace. Contact your administrator to run the invoicing database migration.'
+                  ) : (
+                    loadError
+                  )}
+                </AlertDescription>
+              </Alert>
+              <Button variant="outline" size="sm" onClick={loadRecurring}>
+                Try Again
+              </Button>
+            </div>
+          ) : loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : filteredRecurring.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No recurring invoices found</div>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Repeat className="w-12 h-12 text-muted-foreground/50 mb-4" />
+              <p className="text-muted-foreground font-medium">No recurring invoices yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Create recurring invoice templates to automate your billing.</p>
+            </div>
           ) : (
             <div className="space-y-4">
               {filteredRecurring.map((item) => (

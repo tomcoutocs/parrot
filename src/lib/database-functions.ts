@@ -6751,13 +6751,25 @@ export async function getPendingInvitations(companyId?: string): Promise<{ succe
   }
 }
 
-export async function resendInvitation(invitationId: string): Promise<{ success: boolean; data?: UserInvitation; error?: string }> {
+export async function resendInvitation(
+  invitationId: string,
+  requestUser?: { id: string; role: string; companyId?: string }
+): Promise<{ success: boolean; data?: UserInvitation; error?: string }> {
   if (!supabase) {
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    await setAppContext()
+    // When called from API routes, pass requestUser since getCurrentUser() returns null server-side
+    if (requestUser) {
+      await supabase.rpc('set_user_context', {
+        user_id: requestUser.id,
+        user_role: requestUser.role,
+        company_id: requestUser.companyId || null
+      })
+    } else {
+      await setAppContext()
+    }
     
     // Get the invitation
     const { data: invitation, error: fetchError } = await supabase

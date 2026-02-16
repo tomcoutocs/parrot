@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Loader2, Mail, Lock, CheckCircle2 } from 'lucide-react'
+import { Loader2, Mail, Lock, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -172,7 +172,8 @@ export default function SignInPage() {
               </div>
 
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
@@ -207,13 +208,13 @@ export default function SignInPage() {
             </DialogHeader>
             {resetSuccess ? (
               <div className="space-y-4">
-                <Alert className="border-green-500 bg-green-50">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <AlertDescription className="text-green-800">
+                <Alert className="border-green-500/50 bg-green-50 dark:bg-green-950/30 dark:border-green-500/30">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+                  <AlertDescription className="text-green-800 dark:text-green-200">
                     Password reset link has been sent to your email. Please check your inbox and follow the instructions to reset your password.
                   </AlertDescription>
                 </Alert>
-                <Button onClick={handleCloseResetModal} className="w-full">
+                <Button onClick={handleCloseResetModal} className="w-full" size="lg">
                   Close
                 </Button>
               </div>
@@ -238,7 +239,8 @@ export default function SignInPage() {
                 </div>
 
                 {resetError && (
-                  <Alert variant="destructive">
+                  <Alert variant="destructive" className="gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
                     <AlertDescription>{resetError}</AlertDescription>
                   </Alert>
                 )}

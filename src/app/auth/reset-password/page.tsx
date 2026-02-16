@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, CheckCircle2 } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 
 function ResetPasswordContent() {
   const router = useRouter()
@@ -101,9 +101,11 @@ function ResetPasswordContent() {
     }
   }
 
+  const pageWrapper = "min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-background via-background to-muted/20"
+
   if (validatingToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8" style={{ backgroundColor: 'rgba(17, 55, 62, 0.1)' }}>
+      <div className={pageWrapper}>
         <Card className="max-w-md w-full">
           <CardContent className="pt-6">
             <div className="flex items-center justify-center">
@@ -120,12 +122,12 @@ function ResetPasswordContent() {
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8" style={{ backgroundColor: 'rgba(17, 55, 62, 0.1)' }}>
+      <div className={pageWrapper}>
         <Card className="max-w-md w-full">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center space-y-4">
-              <CheckCircle2 className="h-16 w-16 text-green-500" />
-              <h2 className="text-2xl font-bold">Password Reset Successful!</h2>
+              <CheckCircle2 className="h-16 w-16 text-green-500 dark:text-green-400" />
+              <h2 className="text-2xl font-bold tracking-tight">Password Reset Successful!</h2>
               <p className="text-sm text-muted-foreground">
                 Your password has been updated. Redirecting to sign in...
               </p>
@@ -137,32 +139,34 @@ function ResetPasswordContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8" style={{ backgroundColor: 'rgba(17, 55, 62, 0.1)' }}>
-      <div className="max-w-md w-full space-y-1">
-        <div className="text-center">
+    <div className={pageWrapper}>
+      <div className="max-w-md w-full space-y-8">
+        <div className="text-center space-y-4">
           <Image
             src="/parrot-grad-main.png"
             alt="Parrot Logo"
-            width={256}
-            height={256}
-            className="mx-auto h-64 w-64 object-contain"
+            width={200}
+            height={200}
+            className="mx-auto h-32 w-32 object-contain"
           />
-          <h2 className="mt-0 text-2xl font-extrabold text-gray-900">
-            Reset Your Password
-          </h2>
-          <p className="mt-0 text-sm text-gray-600">
-            Enter your new password below
-          </p>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-bold tracking-tight">
+              Reset Your Password
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Enter your new password below
+            </p>
+          </div>
         </div>
 
-        <Card className="parrot-card-dark p-6">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-gray-900">New Password</CardTitle>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl">New Password</CardTitle>
             <CardDescription>
-              Choose a strong password for your account
+              Choose a strong password for your account (min. 8 characters)
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="password">New Password</Label>
@@ -195,14 +199,16 @@ function ResetPasswordContent() {
               </div>
 
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
               <Button 
                 type="submit" 
-                className="w-full parrot-button-primary" 
+                className="w-full" 
+                size="lg"
                 disabled={isLoading || !token}
               >
                 {isLoading ? (
@@ -234,7 +240,7 @@ function ResetPasswordContent() {
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8" style={{ backgroundColor: 'rgba(17, 55, 62, 0.1)' }}>
+      <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-background via-background to-muted/20">
         <Card className="max-w-md w-full">
           <CardContent className="pt-6">
             <div className="flex items-center justify-center">

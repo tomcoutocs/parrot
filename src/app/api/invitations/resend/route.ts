@@ -8,16 +8,36 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = getCurrentUser()
+    const body = await request.json()
+    const { invitation_id, company_name, inviter_name, user_id, user_email } = body
+
+    // API routes run server-side and can't access localStorage - accept user from request
+    let currentUser = getCurrentUser()
+    if (!currentUser && user_id && user_email && supabase) {
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('id, email, full_name, role, company_id')
+        .eq('id', user_id)
+        .eq('email', user_email)
+        .eq('is_active', true)
+        .single()
+      if (!error && user) {
+        currentUser = {
+          id: user.id,
+          email: user.email,
+          name: user.full_name,
+          role: user.role,
+          companyId: user.company_id,
+        }
+      }
+    }
+
     if (!currentUser) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized - please sign in again' },
         { status: 401 }
       )
     }
-
-    const body = await request.json()
-    const { invitation_id, company_name, inviter_name } = body
 
     if (!invitation_id) {
       return NextResponse.json(
@@ -26,8 +46,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Resend the invitation (updates token and expiry)
-    const result = await resendInvitation(invitation_id)
+    // Resend the invitation (updates token and expiry) - pass user for RLS context in API route
+    const result = await resendInvitation(invitation_id, {
+      id: currentUser.id,
+      role: currentUser.role,
+      companyId: currentUser.companyId
+    })
 
     if (!result.success || !result.data) {
       return NextResponse.json(
@@ -43,11 +67,11 @@ export async function POST(request: NextRequest) {
     if (!inviter_name && currentUser.id && supabase) {
       const { data: inviter } = await supabase
         .from('users')
-        .select('name')
+        .select('full_name')
         .eq('id', currentUser.id)
         .single()
-      if (inviter?.name) {
-        inviterName = inviter.name
+      if (inviter?.full_name) {
+        inviterName = inviter.full_name
       }
     }
 

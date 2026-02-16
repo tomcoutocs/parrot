@@ -381,7 +381,9 @@ export function UserManagementInvitations() {
                             body: JSON.stringify({
                               invitation_id: invitation.id,
                               company_name: companies.find(c => c.id === invitation.space_id)?.name,
-                              inviter_name: session?.user?.name
+                              inviter_name: session?.user?.name,
+                              user_id: session?.user?.id,
+                              user_email: session?.user?.email,
                             })
                           })
 

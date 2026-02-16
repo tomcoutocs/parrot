@@ -648,7 +648,9 @@ export function ModernUsersTab({ activeSpace }: ModernUsersTabProps) {
         body: JSON.stringify({
           invitation_id: invitationId,
           company_name: companies.find(c => c.id === activeSpace)?.name || 'Company',
-          inviter_name: session?.user?.name || 'Administrator'
+          inviter_name: session?.user?.name || 'Administrator',
+          user_id: session?.user?.id,
+          user_email: session?.user?.email,
         }),
       })
 
