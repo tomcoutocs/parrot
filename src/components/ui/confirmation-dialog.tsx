@@ -59,8 +59,8 @@ export function ConfirmationDialog({
         }
       default:
         return {
-          icon: <Save className="h-6 w-6 text-blue-600" />,
-          confirmButton: 'parrot-button-primary',
+          icon: <Save className="h-6 w-6 text-primary" />,
+          confirmButton: '',
           alertVariant: 'default' as const
         }
     }

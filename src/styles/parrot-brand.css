@@ -54,36 +54,42 @@ body:has([data-radix-select-content][data-state="open"])::before {
 
 /* Using theme colors from globals.css */
 
-/* Enhanced Card Styling */
+/* Enhanced Card Styling - frosted glass to match Apps dashboard cards */
 .parrot-card-enhanced {
-  background: oklch(var(--color-card)) !important;
-  border: 1px solid oklch(from var(--border) l c h / 0.5);
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
   box-shadow: 
-    0 0.5px 1.5px 0 rgba(0, 0, 0, 0.05),
-    0 0.5px 1px 0 rgba(0, 0, 0, 0.03);
-  transition: border-color 0.05s ease, box-shadow 0.05s ease;
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   position: relative;
   overflow: hidden;
 }
 
-/* Ensure bg-card utility also uses the updated card color */
+.dark .parrot-card-enhanced,
+html.dark .parrot-card-enhanced {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* bg-card utility - frosted glass fallback for non-Card elements */
 .bg-card {
-  background-color: oklch(var(--color-card)) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
-/* Direct selector for cards to ensure they use card color, not background */
-[data-slot="card"] {
-  background-color: oklch(var(--color-card)) !important;
+.dark .bg-card,
+html.dark .bg-card {
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* More specific card selectors */
-[data-slot="card"].bg-card {
-  background-color: oklch(var(--color-card)) !important;
-}
-
-[data-slot="card"].parrot-card-enhanced {
-  background-color: oklch(var(--color-card)) !important;
-}
+/* Cards use frosted glass styling from Card component - no override needed */
 
 /* Ensure main element specifically uses background color */
 main.flex-1.overflow-auto,
@@ -104,11 +110,7 @@ html.dark main,
   color: var(--color-foreground) !important;
 }
 
-.dark [data-slot="card"],
-.dark .bg-card,
-.dark .parrot-card-enhanced {
-  background-color: oklch(0.1800 0.0036 106.6427) !important;
-}
+/* Dark mode cards use frosted glass from Card component */
 
 /* Light mode contrast */
 html:not(.dark) main.flex-1.overflow-auto,
@@ -121,11 +123,7 @@ html:not(.dark) main,
   color: var(--color-foreground) !important;
 }
 
-:root:not(.dark) [data-slot="card"],
-:root:not(.dark) .bg-card,
-:root:not(.dark) .parrot-card-enhanced {
-  background-color: oklch(var(--color-card)) !important;
-}
+/* Light mode cards use frosted glass from Card component */
 
 .parrot-card-enhanced::before {
   content: '';
@@ -141,9 +139,17 @@ html:not(.dark) main,
 
 .parrot-card-enhanced:hover {
   box-shadow: 
-    0 5px 12.5px -3px rgba(0, 0, 0, 0.05),
-    0 2px 3px -2px rgba(0, 0, 0, 0.025);
-  border-color: oklch(from var(--primary) l c h / 0.3);
+    0 4px 6px rgba(0, 0, 0, 0.05),
+    0 12px 24px rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.dark .parrot-card-enhanced:hover,
+html.dark .parrot-card-enhanced:hover {
+  box-shadow: 
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 8px 32px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .parrot-card-enhanced:hover::before {
@@ -330,12 +336,12 @@ html.dark .parrot-page-bg,
 
 .dark .kanban-add-button:hover {
   background: rgba(71, 85, 105, 0.5);
-  border-color: rgba(254, 78, 3, 0.5);
+  border-color: oklch(from var(--color-primary) l c h / 0.5);
 }
 
 /* Dark mode task card text improvements */
 .dark .parrot-task-card-header {
-  background: linear-gradient(135deg, rgba(254, 78, 3, 0.05) 0%, rgba(47, 79, 79, 0.05) 100%);
+  background: linear-gradient(135deg, oklch(from var(--color-primary) l c h / 0.08) 0%, oklch(from var(--color-primary) l c h / 0.04) 100%);
   border-bottom: 1px solid rgba(71, 85, 105, 0.3);
 }
 
@@ -644,7 +650,7 @@ html.dark .parrot-page-bg,
 
 /* Dark mode focus states */
 .dark .focus\:ring-blue-500:focus {
-  --tw-ring-color: rgba(254, 78, 3, 0.5) !important;
+  --tw-ring-color: oklch(from var(--color-primary) l c h / 0.5) !important;
 }
 
 /* Dark mode shadow colors */
@@ -685,7 +691,7 @@ html.dark .parrot-page-bg,
 }
 
 .dark .documents-list-row.selected {
-  background: rgba(254, 78, 3, 0.1);
+  background: oklch(from var(--color-primary) l c h / 0.15);
 }
 
 .dark .documents-grid-card {
@@ -695,7 +701,7 @@ html.dark .parrot-page-bg,
 
 .dark .documents-grid-card:hover {
   background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(254, 78, 3, 0.3);
+  border-color: oklch(from var(--color-primary) l c h / 0.4);
 }
 
 .dark .documents-favorite-highlight {

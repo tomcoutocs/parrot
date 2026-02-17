@@ -8,10 +8,10 @@ import { Loader2 } from 'lucide-react'
 import { fetchLeads, fetchLeadStages, type Lead, type LeadStage } from '@/lib/database-functions'
 import { useSession } from '@/components/providers/session-provider'
 
-// Stage color mapping
+// Stage color mapping - "New" uses accent for subtle brand touch
 const getStageColor = (stageName: string): string => {
   const name = stageName.toLowerCase()
-  if (name.includes('new') || name.includes('lead')) return 'bg-blue-500'
+  if (name.includes('new') || name.includes('lead')) return 'bg-primary'
   if (name.includes('contacted') || name.includes('reach')) return 'bg-yellow-500'
   if (name.includes('qualified') || name.includes('interest')) return 'bg-purple-500'
   if (name.includes('proposal') || name.includes('quote') || name.includes('negotiation')) return 'bg-gray-500'
@@ -24,7 +24,7 @@ const getStageColor = (stageName: string): string => {
 
 // Default important stages that should always be shown
 const DEFAULT_IMPORTANT_STAGES = [
-  { name: 'New', order: 0, color: 'bg-blue-500' },
+  { name: 'New', order: 0, color: 'bg-primary' },
   { name: 'Contacted', order: 1, color: 'bg-yellow-500' },
   { name: 'Qualified', order: 2, color: 'bg-purple-500' },
   { name: 'Closed Won', order: 3, color: 'bg-green-500' },

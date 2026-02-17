@@ -76,7 +76,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </p>
               
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button onClick={this.handleRetry} className="parrot-button-primary">
+                <Button onClick={this.handleRetry} variant="default">
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Try Again
                 </Button>

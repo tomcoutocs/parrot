@@ -227,7 +227,7 @@ export default function DashboardLandingTab({ onNavigateToTab, currentSpaceId }:
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-        <Button onClick={loadDashboardData} variant="outline" className="parrot-button-primary">
+        <Button onClick={loadDashboardData} variant="default">
           <RefreshCw className="h-4 w-4 mr-2" />
           Retry
         </Button>
@@ -267,7 +267,7 @@ export default function DashboardLandingTab({ onNavigateToTab, currentSpaceId }:
             </p>
           )}
         </div>
-        <Button onClick={loadDashboardData} variant="outline" className="parrot-button-primary" disabled={saving}>
+        <Button onClick={loadDashboardData} variant="default" disabled={saving}>
           <RefreshCw className={`h-4 w-4 mr-2 ${saving ? 'animate-spin' : ''}`} />
           Refresh
         </Button>

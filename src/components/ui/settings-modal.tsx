@@ -162,7 +162,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button className="parrot-button-primary" onClick={onClose}>
+            <Button variant="default" onClick={onClose}>
               Save Changes
             </Button>
           </div>

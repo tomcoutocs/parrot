@@ -53,20 +53,20 @@ export default function EmptyState({
     <Card className="parrot-card-enhanced border-2 border-dashed border-gray-200 dark:border-gray-700">
       <CardContent className={`text-center ${sizeClasses[variant]}`}>
         {/* Enhanced Icon with Animation */}
-        <div className={`mx-auto ${iconContainerSizes[variant]} bg-gradient-to-br from-orange-50 via-teal-50 to-blue-50 dark:from-orange-950/20 dark:via-teal-950/20 dark:to-blue-950/20 rounded-full flex items-center justify-center mb-6 relative group`}>
-          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-orange-200/50 to-teal-200/50 dark:from-orange-800/30 dark:to-teal-800/30 animate-pulse opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <Icon className={`${iconSizes[variant]} text-gray-500 dark:text-gray-400 relative z-10 transition-transform duration-300 group-hover:scale-110`} />
+        <div className={`mx-auto ${iconContainerSizes[variant]} bg-primary/10 rounded-full flex items-center justify-center mb-6 relative group`}>
+          <div className="absolute inset-0 rounded-full bg-primary/20 animate-pulse opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <Icon className={`${iconSizes[variant]} text-muted-foreground group-hover:text-primary relative z-10 transition-all duration-300 group-hover:scale-110`} />
           {illustration === 'sparkles' && (
             <>
-          <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-orange-400 animate-pulse" />
-              <Sparkles className="absolute -bottom-1 -left-1 h-3 w-3 text-teal-400 animate-pulse delay-300" />
+          <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-primary animate-pulse" />
+              <Sparkles className="absolute -bottom-1 -left-1 h-3 w-3 text-primary/80 animate-pulse delay-300" />
             </>
           )}
           {illustration === 'rocket' && (
-            <Rocket className="absolute -top-2 -right-2 h-5 w-5 text-orange-400 animate-bounce" />
+            <Rocket className="absolute -top-2 -right-2 h-5 w-5 text-primary animate-bounce" />
           )}
           {illustration === 'help' && (
-            <HelpCircle className="absolute -bottom-2 -left-2 h-5 w-5 text-blue-400 animate-pulse" />
+            <HelpCircle className="absolute -bottom-2 -left-2 h-5 w-5 text-primary animate-pulse" />
           )}
         </div>
 
@@ -78,9 +78,9 @@ export default function EmptyState({
 
         {/* Onboarding Hint */}
         {onboardingHint && (
-          <div className="mb-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-teal-50 dark:from-blue-950/30 dark:to-teal-950/30 rounded-lg border border-blue-200/50 dark:border-blue-800/30">
-            <HelpCircle className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-            <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">{onboardingHint}</p>
+          <div className="mb-4 inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-lg border border-primary/20">
+            <HelpCircle className="h-4 w-4 text-primary" />
+            <p className="text-sm text-foreground font-medium">{onboardingHint}</p>
           </div>
         )}
 
@@ -90,7 +90,8 @@ export default function EmptyState({
             {actionLabel && onAction && (
               <Button 
                 onClick={onAction} 
-                className="parrot-button-primary min-w-[140px] group/btn"
+                variant="default"
+                className="min-w-[140px] group/btn"
                 size="default"
               >
                 <span className="flex items-center gap-2">
@@ -121,8 +122,8 @@ export default function EmptyState({
             </div>
             <ul className="text-left max-w-md mx-auto space-y-2">
               {tips.map((tip, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <span className="text-orange-500 dark:text-orange-400 mt-1">•</span>
+                <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <span className="text-primary mt-1">•</span>
                   <span>{tip}</span>
                 </li>
               ))}

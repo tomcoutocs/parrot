@@ -231,7 +231,7 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
                 onClick={() => onTabChange(item.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
                   isActive
-                    ? 'bg-muted text-foreground font-medium'
+                    ? 'bg-muted text-foreground font-medium border-l-2 border-l-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
@@ -244,8 +244,8 @@ export function CRMLayout({ activeTab, onTabChange }: CRMLayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 relative z-0 overflow-y-auto">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-0 overflow-y-auto">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-[60vh]">
           {renderContent()}
         </div>
       </div>

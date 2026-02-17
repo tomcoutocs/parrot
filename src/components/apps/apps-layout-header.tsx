@@ -51,16 +51,8 @@ export function AppsLayoutHeader({
           <h1 className="text-xl font-bold hidden sm:inline">Parrot Platform</h1>
         </button>
         <div className="h-6 w-px bg-border hidden sm:block" />
-        <button
-          onClick={() => router.push('/apps')}
-          className="flex items-center gap-2 px-4 py-3.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors min-h-[44px]"
-        >
-          <Grid3x3 className="w-4 h-4" />
-          <span>Apps</span>
-        </button>
-        <div className="h-6 w-px bg-border" />
         <div className="flex items-center gap-2">
-          {PageIcon && <PageIcon className="w-4 h-4 text-muted-foreground" />}
+          {PageIcon && <PageIcon className="w-4 h-4 text-primary" />}
           <h2 className="text-lg font-medium">{pageTitle}</h2>
         </div>
       </div>
